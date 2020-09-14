@@ -55,7 +55,7 @@ void CpuANISymmetryFunctions::computeSymmetryFunctions(const float* positions, c
 
     // Determine whether we have a rectangular or triclinic periodic box.
     
-    bool triclinic = false;
+    triclinic = false;
     if (periodic)
         for (int i = 0 ; i < 3; i++)
             for (int j = 0; j < 3; j++)
@@ -97,10 +97,6 @@ void CpuANISymmetryFunctions::computeSymmetryFunctions(const float* positions, c
     }
 }
 
-void CpuANISymmetryFunctions::backprop(const float* radialDeriv, const float* angularDeriv, float* positionDeriv) {
-
-}
-
 template <bool PERIODIC, bool TRICLINIC>
 void CpuANISymmetryFunctions::computeRadialFunctions(float* radial) {
     // Loop over all pairs of atoms using an O(N^2) algorithms.  This is efficient for the small molecules
@@ -126,11 +122,12 @@ void CpuANISymmetryFunctions::computeRadialFunctions(float* radial) {
 
                 // Compute the symmetry functions.
 
+                float r = sqrtf(r2);
+                float cutoff = cutoffFunction(r, radialCutoff);
                 for (int i = 0; i < radialFunctions.size(); i++) {
                     const RadialFunction& fn = radialFunctions[i];
-                    float r = sqrtf(r2);
                     float shifted = r-fn.rs;
-                    float value = cutoffFunction(r, radialCutoff) * expf(-fn.eta*shifted*shifted);
+                    float value = cutoff * expf(-fn.eta*shifted*shifted);
                     radial[atom1*c2 + atomSpecies[atom2]*c1 + i] += value;
                     radial[atom2*c2 + atomSpecies[atom1]*c1 + i] += value;
                 }
@@ -182,6 +179,158 @@ void CpuANISymmetryFunctions::computeAngularFunctions(float* angular) {
     }
 }
 
+void CpuANISymmetryFunctions::backprop(const float* radialDeriv, const float* angularDeriv, float* positionDeriv) {
+    // Clear the output array.
+
+    memset(positionDeriv, 0, numAtoms*3*sizeof(float));
+
+    // Backpropagate through the symmetry functions.
+
+    if (periodic) {
+        if (triclinic) {
+            backpropRadialFunctions<true, true>(radialDeriv, positionDeriv);
+            backpropAngularFunctions<true, true>(angularDeriv, positionDeriv);
+        }
+        else {
+            backpropRadialFunctions<true, false>(radialDeriv, positionDeriv);
+            backpropAngularFunctions<true, false>(angularDeriv, positionDeriv);
+        }
+    }
+    else {
+        backpropRadialFunctions<false, false>(radialDeriv, positionDeriv);
+        backpropAngularFunctions<false, false>(angularDeriv, positionDeriv);
+    }
+}
+
+template <bool PERIODIC, bool TRICLINIC>
+void CpuANISymmetryFunctions::backpropRadialFunctions(const float* radialDeriv, float* positionDeriv) {
+    int c1 = radialFunctions.size();
+    int c2 = numSpecies*c1;
+    float radialCutoff2 = radialCutoff*radialCutoff;
+    for (int atom1 = 0; atom1 < numAtoms; atom1++) {
+        for (int atom2 = atom1+1; atom2 < numAtoms; atom2++) {
+            float delta[3];
+            float r2;
+            computeDisplacement<PERIODIC, TRICLINIC>(&positions[3*atom1], &positions[3*atom2], delta, r2);
+            if (r2 < radialCutoff2) {
+
+                // Compute the derivatives of the symmetry functions.
+
+                float r = sqrtf(r2);
+                float rInv = 1/r;
+                float cutoff = cutoffFunction(r, radialCutoff);
+                float dCdR = cutoffDeriv(r, radialCutoff);
+                for (int i = 0; i < radialFunctions.size(); i++) {
+                    const RadialFunction& fn = radialFunctions[i];
+                    float shifted = r-fn.rs;
+                    float expTerm = expf(-fn.eta*shifted*shifted);
+                    float dVdR = dCdR*expTerm - cutoff*2*fn.eta*shifted*expTerm;
+                    float dEdV = radialDeriv[atom1*c2 + atomSpecies[atom2]*c1 + i] + radialDeriv[atom2*c2 + atomSpecies[atom1]*c1 + i];
+                    float scale = 0.25 * dEdV * dVdR * rInv;
+                    for (int j = 0; j < 3; j++) {
+                        float dVdX = scale * delta[j];
+                        positionDeriv[3*atom1+j] -= dVdX;
+                        positionDeriv[3*atom2+j] += dVdX;
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <bool PERIODIC, bool TRICLINIC>
+void CpuANISymmetryFunctions::backpropAngularFunctions(const float* angularDeriv, float* positionDeriv) {
+    // Loop over pairs of atoms.
+
+    int c1 = angularFunctions.size();
+    int c2 = numSpecies*(numSpecies+1)*c1/2;
+    for (int atom1 = 0; atom1 < numAtoms; atom1++) {
+        for (int i = 0; i < neighbors[atom1].size(); i++) {
+            int atom2 = neighbors[atom1][i];
+            float delta_12[3];
+            float r2_12;
+            computeDisplacement<PERIODIC, TRICLINIC>(&positions[3*atom1], &positions[3*atom2], delta_12, r2_12);
+            float r_12 = sqrtf(r2_12);
+            float rInv_12 = 1/r_12;
+            float cutoff_12 = cutoffFunction(r_12, angularCutoff);
+            float dC12dR = cutoffDeriv(r_12, angularCutoff);
+
+            // Loop over third atoms to compute angles.
+
+            for (int j = i+1; j < neighbors[atom1].size(); j++) {
+                int atom3 = neighbors[atom1][j];
+                float delta_13[3];
+                float r2_13;
+                computeDisplacement<PERIODIC, TRICLINIC>(&positions[3*atom1], &positions[3*atom3], delta_13, r2_13);
+                float r_13 = sqrtf(r2_13);
+                float rInv_13 = 1/r_13;
+                float cutoff_13 = cutoffFunction(r_13, angularCutoff);
+                float dC13dR = cutoffDeriv(r_13, angularCutoff);
+                float r_mean = 0.5f*(r_12+r_13);
+                float theta = computeAngle(delta_12, delta_13, r_12, r_13);
+                float cross[3], forceDir2[3], forceDir3[3];
+                computeCross(delta_12, delta_13, cross);
+                float rInv_cross = 1/max(sqrt(cross[0]*cross[0] + cross[1]*cross[1] + cross[2]*cross[2]), 1e-6f);
+                computeCross(delta_12, cross, forceDir2);
+                computeCross(cross, delta_13, forceDir3);
+                int index = angularIndex[atomSpecies[atom2]][atomSpecies[atom3]];
+
+                // Compute the derivatives of the symmetry functions.
+
+                for (int m = 0; m < angularFunctions.size(); m++) {
+                    const AngularFunction& fn = angularFunctions[m];
+                    float cosTerm = powf(1 + cosf(theta - fn.thetas), fn.zeta);
+                    float shifted = r_mean-fn.rs;
+                    float expTerm = expf(-fn.eta*shifted*shifted);
+                    float dExpdR = -fn.eta*shifted*expTerm;
+                    float dEdV = angularDeriv[atom1*c2 + index*c1 + m];
+                    float zetaScale = powf(2, 1-fn.zeta);
+
+                    // Derivatives based on the distance between atom1 and atom2.
+
+                    {
+                        float dVdR = dC12dR*cutoff_13*cosTerm*expTerm + cutoff_12*cutoff_13*cosTerm*dExpdR;
+                        float scale = zetaScale * dEdV * dVdR * rInv_12;
+                        for (int k = 0; k < 3; k++) {
+                            float dVdX = scale * delta_12[k];
+                            positionDeriv[3*atom1+k] -= dVdX;
+                            positionDeriv[3*atom2+k] += dVdX;
+                        }
+                    }
+
+                    // Derivatives based on the distance between atom1 and atom3.
+
+                    {
+                        float dVdR = cutoff_12*dC13dR*cosTerm*expTerm + cutoff_12*cutoff_13*cosTerm*dExpdR;
+                        float scale = zetaScale * dEdV * dVdR * rInv_13;
+                        for (int k = 0; k < 3; k++) {
+                            float dVdX = scale * delta_13[k];
+                            positionDeriv[3*atom1+k] -= dVdX;
+                            positionDeriv[3*atom3+k] += dVdX;
+                        }
+                    }
+
+                    // Derivatives based on the angle.
+
+                    {
+                        float dCosdA = -fn.zeta * powf(1+cosf(theta-fn.thetas), fn.zeta-1) * sinf(theta-fn.thetas);
+                        float dVdA = cutoff_12*cutoff_13*dCosdA*expTerm;
+                        float scale2 = zetaScale * dEdV * dVdA * rInv_cross * rInv_12;
+                        float scale3 = zetaScale * dEdV * dVdA * rInv_cross * rInv_13;
+                        for (int k = 0; k < 3; k++) {
+                            float dVdX2 = scale2 * forceDir2[k];
+                            float dVdX3 = scale3 * forceDir3[k];
+                            positionDeriv[3*atom2+k] += dVdX2;
+                            positionDeriv[3*atom3+k] += dVdX3;
+                            positionDeriv[3*atom1+k] -= dVdX2 + dVdX3;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 template <bool PERIODIC, bool TRICLINIC>
 void CpuANISymmetryFunctions::computeDisplacement(const float* pos1, const float* pos2, float* delta, float& r2) {
     delta[0] = pos2[0]-pos1[0];
@@ -212,6 +361,10 @@ float CpuANISymmetryFunctions::cutoffFunction(float r, float rc) {
     return 0.5f * cosf(M_PI*r/rc) + 0.5f;
 }
 
+float CpuANISymmetryFunctions::cutoffDeriv(float r, float rc) {
+    return -(0.5f*M_PI/rc) * sinf(M_PI*r/rc);
+}
+
 float CpuANISymmetryFunctions::computeAngle(const float* vec1, const float* vec2, float r1, float r2) {
     float dotProduct = vec1[0]*vec2[0] + vec1[1]*vec2[1] + vec1[2]*vec2[2];
     float cosine = dotProduct/(r1*r2);
@@ -219,14 +372,19 @@ float CpuANISymmetryFunctions::computeAngle(const float* vec1, const float* vec2
     if (cosine > 0.99f || cosine < -0.99f) {
         // We're close to the singularity in acos(), so take the cross product and use asin() instead.
 
-        float cx = vec1[1]*vec2[2]-vec1[2]*vec2[1];
-        float cy = vec1[2]*vec2[0]-vec1[0]*vec2[2];
-        float cz = vec1[0]*vec2[1]-vec1[1]*vec2[0];
-        angle = asinf(sqrtf(cx*cx+cy*cy+cz*cz)/(r1*r2));
+        float c[3];
+        computeCross(vec1, vec2, c);
+        angle = asinf(sqrtf(c[0]*c[0]+c[1]*c[1]+c[2]*c[2])/(r1*r2));
         if (cosine < 0)
             angle = M_PI-angle;
     }
     else
        angle = acosf(cosine);
     return angle;
+}
+
+void CpuANISymmetryFunctions::computeCross(const float* vec1, const float* vec2, float* c) {
+    c[0] = vec1[1]*vec2[2]-vec1[2]*vec2[1];
+    c[1] = vec1[2]*vec2[0]-vec1[0]*vec2[2];
+    c[2] = vec1[0]*vec2[1]-vec1[1]*vec2[0];
 }

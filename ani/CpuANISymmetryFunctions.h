@@ -82,6 +82,16 @@ private:
     template <bool PERIODIC, bool TRICLINIC>
     void computeAngularFunctions(float* angular);
     /**
+     * Backpropagate through the radial symmetry functions to compute the derivatives with respect to positions.
+     */
+    template <bool PERIODIC, bool TRICLINIC>
+    void backpropRadialFunctions(const float* radialDeriv, float* positionDeriv);
+    /**
+     * Backpropagate through the angular symmetry functions to compute the derivatives with respect to positions.
+     */
+    template <bool PERIODIC, bool TRICLINIC>
+    void backpropAngularFunctions(const float* angularDeriv, float* positionDeriv);
+    /**
      * Compute the displacement between two positions.
      *
      * @param pos1     the first position
@@ -100,6 +110,14 @@ private:
      */
     float cutoffFunction(float r, float rc);
     /**
+     * Compute the derivative of the cutoff function.  The implementation assumes the caller has already
+     * verified that r <= rc.
+     *
+     * @param r     the distance at which it is being evaluated
+     * @param rc    the cutoff distance
+     */
+    float cutoffDeriv(float r, float rc);
+    /**
      * Compute the angle between two vectors.
      *
      * @param vec1    the first vector
@@ -108,11 +126,20 @@ private:
      * @param r2      the length of the second vector
      */
     float computeAngle(const float* vec1, const float* vec2, float r1, float r2);
+    /**
+     * Compute the cross product of two vectors.
+     *
+     * @param vec1    the first vector
+     * @param vec2    the second vector
+     * @param c       the cross product is stored into this
+     */
+    void computeCross(const float* vec1, const float* vec2, float* c);
     std::vector<std::vector<int> > neighbors;
     std::vector<std::vector<int> > angularIndex;
     std::vector<float> positions;
     float periodicBoxVectors[3][3];
     float invBoxSize[3];
+    bool triclinic;
 };
 
 #endif
