@@ -52,11 +52,15 @@ public:
      *                            between 0 and numSpecies-1
      * @param radialFunctions     the radial symmetry functions to compute
      * @param angularFunctions    the angular symmetry functions to compute
+     * @param torchani            if false, perform calculations as described in the original publication (https://doi.org/10.1039/C6SC05720A).
+     *                            If true, perform them as implemented in TorchANI (https://github.com/aiqm/torchani).  They differ in two ways.
+     *                            First, TorchANI divides the radial symmetry functions by 4.  Second, when computing angles it multiplies the
+     *                            dot product by 0.95.  This leads to large errors in angles, especially ones that are close to 0 or pi.
      */
     ANISymmetryFunctions(int numAtoms, int numSpecies, float radialCutoff, float angularCutoff, bool periodic, const std::vector<int>& atomSpecies,
-            const std::vector<RadialFunction>& radialFunctions, const std::vector<AngularFunction>& angularFunctions) :
+            const std::vector<RadialFunction>& radialFunctions, const std::vector<AngularFunction>& angularFunctions, bool torchani) :
                numAtoms(numAtoms), numSpecies(numSpecies), radialCutoff(radialCutoff), angularCutoff(angularCutoff),
-               periodic(periodic), atomSpecies(atomSpecies), radialFunctions(radialFunctions), angularFunctions(angularFunctions) {
+               periodic(periodic), atomSpecies(atomSpecies), radialFunctions(radialFunctions), angularFunctions(angularFunctions), torchani(torchani) {
     }
     /**
      * Compute the symmetry functions.
@@ -87,55 +91,61 @@ public:
     /**
      * Get the number of atoms in the system.
      */
-    int getNumAtoms() {
+    int getNumAtoms() const {
         return numAtoms;
     }
     /**
      * Get the number of species of atoms.
      */
-    int getNumSpecies() {
+    int getNumSpecies() const {
         return numSpecies;
     }
     /**
      * Get the cutoff distance for radial symmetry functions.
      */
-    float getRadialCutoff() {
+    float getRadialCutoff() const {
         return radialCutoff;
     }
     /**
      * Get the cutoff distance for angular symmetry functions.
      */
-    float getAngularCutoff() {
+    float getAngularCutoff() const {
         return angularCutoff;
     }
     /**
      * Get whether to apply periodic boundary conditions.
      */
-    bool getPeriodic() {
+    bool getPeriodic() const {
         return periodic;
+    }
+    /**
+     * Get whether calculations are done as described in the publication or as implemented in TorchANI.
+     */
+    bool getTorchANI() const {
+        return torchani;
     }
     /**
      * Get the species of each atom, represented as an integer between 0 and numSpecies-1.
      */
-    const std::vector<int>& getAtomSpecies() {
+    const std::vector<int>& getAtomSpecies() const {
         return atomSpecies;
     }
     /**
      * Get the radial symmetry functions to compute.
      */
-    const std::vector<RadialFunction>& getRadialFunctions() {
+    const std::vector<RadialFunction>& getRadialFunctions() const {
         return radialFunctions;
     }
     /**
      * Get the angular symmetry functions to compute.
      */
-    const std::vector<AngularFunction>& getAngularFunctions() {
+    const std::vector<AngularFunction>& getAngularFunctions() const {
         return angularFunctions;
     }
 protected:
     const int numAtoms, numSpecies;
     const float radialCutoff, angularCutoff;
-    const bool periodic;
+    const bool periodic, torchani;
     const std::vector<int> atomSpecies;
     const std::vector<RadialFunction> radialFunctions;
     const std::vector<AngularFunction> angularFunctions;

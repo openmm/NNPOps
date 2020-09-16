@@ -28,8 +28,8 @@
 using namespace std;
 
 CpuANISymmetryFunctions::CpuANISymmetryFunctions(int numAtoms, int numSpecies, float radialCutoff, float angularCutoff, bool periodic, const std::vector<int>& atomSpecies,
-        const std::vector<RadialFunction>& radialFunctions, const std::vector<AngularFunction>& angularFunctions) :
-           ANISymmetryFunctions(numAtoms, numSpecies, radialCutoff, angularCutoff, periodic, atomSpecies, radialFunctions, angularFunctions) {
+        const std::vector<RadialFunction>& radialFunctions, const std::vector<AngularFunction>& angularFunctions, bool torchani) :
+           ANISymmetryFunctions(numAtoms, numSpecies, radialCutoff, angularCutoff, periodic, atomSpecies, radialFunctions, angularFunctions, torchani) {
     positions.resize(3*numAtoms);
     neighbors.resize(numAtoms);
 
@@ -72,23 +72,34 @@ void CpuANISymmetryFunctions::computeSymmetryFunctions(const float* positions, c
     if (periodic) {
         if (triclinic) {
             computeRadialFunctions<true, true>(radial);
-            computeAngularFunctions<true, true>(angular);
+            if (torchani)
+                computeAngularFunctions<true, true, true>(angular);
+            else
+                computeAngularFunctions<true, true, false>(angular);
         }
         else {
             computeRadialFunctions<true, false>(radial);
-            computeAngularFunctions<true, false>(angular);
+            if (torchani)
+                computeAngularFunctions<true, false, true>(angular);
+            else
+                computeAngularFunctions<true, false, false>(angular);
         }
     }
     else {
         computeRadialFunctions<false, false>(radial);
-        computeAngularFunctions<false, false>(angular);
+        if (torchani)
+            computeAngularFunctions<false, false, true>(angular);
+        else
+            computeAngularFunctions<false, false, false>(angular);
     }
 
     // Apply the overall scale factors to the symmetry functions.
 
-    int numRadial = numAtoms*numSpecies*radialFunctions.size();
-    for (int i = 0; i < numRadial; i++)
-        radial[i] *= 0.25f;
+    if (torchani) {
+        int numRadial = numAtoms*numSpecies*radialFunctions.size();
+        for (int i = 0; i < numRadial; i++)
+            radial[i] *= 0.25f;
+    }
     int numAngular = numAtoms*numSpecies*(numSpecies+1)*angularFunctions.size()/2;
     for (int i = 0; i < angularFunctions.size(); i++) {
         float scale = powf(2, 1-angularFunctions[i].zeta);
@@ -136,7 +147,7 @@ void CpuANISymmetryFunctions::computeRadialFunctions(float* radial) {
     }
 }
 
-template <bool PERIODIC, bool TRICLINIC>
+template <bool PERIODIC, bool TRICLINIC, bool TORCHANI>
 void CpuANISymmetryFunctions::computeAngularFunctions(float* angular) {
     // Loop over pairs of atoms.
 
@@ -161,7 +172,7 @@ void CpuANISymmetryFunctions::computeAngularFunctions(float* angular) {
                 float r_13 = sqrtf(r2_13);
                 float cutoff_13 = cutoffFunction(r_13, angularCutoff);
                 float r_mean = 0.5f*(r_12+r_13);
-                float theta = computeAngle(delta_12, delta_13, r_12, r_13);
+                float theta = computeAngle<TORCHANI>(delta_12, delta_13, r_12, r_13);
                 int index = angularIndex[atomSpecies[atom2]][atomSpecies[atom3]];
 
                 // Compute the symmetry functions.
@@ -189,16 +200,25 @@ void CpuANISymmetryFunctions::backprop(const float* radialDeriv, const float* an
     if (periodic) {
         if (triclinic) {
             backpropRadialFunctions<true, true>(radialDeriv, positionDeriv);
-            backpropAngularFunctions<true, true>(angularDeriv, positionDeriv);
+            if (torchani)
+                backpropAngularFunctions<true, true, true>(angularDeriv, positionDeriv);
+            else
+                backpropAngularFunctions<true, true, false>(angularDeriv, positionDeriv);
         }
         else {
             backpropRadialFunctions<true, false>(radialDeriv, positionDeriv);
-            backpropAngularFunctions<true, false>(angularDeriv, positionDeriv);
+            if (torchani)
+                backpropAngularFunctions<true, false, true>(angularDeriv, positionDeriv);
+            else
+                backpropAngularFunctions<true, false, false>(angularDeriv, positionDeriv);
         }
     }
     else {
         backpropRadialFunctions<false, false>(radialDeriv, positionDeriv);
-        backpropAngularFunctions<false, false>(angularDeriv, positionDeriv);
+        if (torchani)
+            backpropAngularFunctions<false, false, true>(angularDeriv, positionDeriv);
+        else
+            backpropAngularFunctions<false, false, false>(angularDeriv, positionDeriv);
     }
 }
 
@@ -207,6 +227,7 @@ void CpuANISymmetryFunctions::backpropRadialFunctions(const float* radialDeriv, 
     int c1 = radialFunctions.size();
     int c2 = numSpecies*c1;
     float radialCutoff2 = radialCutoff*radialCutoff;
+    float globalScale = (torchani ? 0.25f : 1.0f);
     for (int atom1 = 0; atom1 < numAtoms; atom1++) {
         for (int atom2 = atom1+1; atom2 < numAtoms; atom2++) {
             float delta[3];
@@ -226,7 +247,7 @@ void CpuANISymmetryFunctions::backpropRadialFunctions(const float* radialDeriv, 
                     float expTerm = expf(-fn.eta*shifted*shifted);
                     float dVdR = dCdR*expTerm - cutoff*2*fn.eta*shifted*expTerm;
                     float dEdV = radialDeriv[atom1*c2 + atomSpecies[atom2]*c1 + i] + radialDeriv[atom2*c2 + atomSpecies[atom1]*c1 + i];
-                    float scale = 0.25 * dEdV * dVdR * rInv;
+                    float scale = globalScale * dEdV * dVdR * rInv;
                     for (int j = 0; j < 3; j++) {
                         float dVdX = scale * delta[j];
                         positionDeriv[3*atom1+j] -= dVdX;
@@ -238,7 +259,7 @@ void CpuANISymmetryFunctions::backpropRadialFunctions(const float* radialDeriv, 
     }
 }
 
-template <bool PERIODIC, bool TRICLINIC>
+template <bool PERIODIC, bool TRICLINIC, bool TORCHANI>
 void CpuANISymmetryFunctions::backpropAngularFunctions(const float* angularDeriv, float* positionDeriv) {
     // Loop over pairs of atoms.
 
@@ -267,12 +288,9 @@ void CpuANISymmetryFunctions::backpropAngularFunctions(const float* angularDeriv
                 float cutoff_13 = cutoffFunction(r_13, angularCutoff);
                 float dC13dR = cutoffDeriv(r_13, angularCutoff);
                 float r_mean = 0.5f*(r_12+r_13);
-                float theta = computeAngle(delta_12, delta_13, r_12, r_13);
-                float cross[3], forceDir2[3], forceDir3[3];
-                computeCross(delta_12, delta_13, cross);
-                float rInv_cross = 1/max(sqrt(cross[0]*cross[0] + cross[1]*cross[1] + cross[2]*cross[2]), 1e-6f);
-                computeCross(delta_12, cross, forceDir2);
-                computeCross(cross, delta_13, forceDir3);
+                float theta = computeAngle<TORCHANI>(delta_12, delta_13, r_12, r_13);
+                float grad2[3], grad3[3];
+                computeAngleGradients<TORCHANI>(delta_12, delta_13, r_12, r_13, grad2, grad3);
                 int index = angularIndex[atomSpecies[atom2]][atomSpecies[atom3]];
 
                 // Compute the derivatives of the symmetry functions.
@@ -315,11 +333,11 @@ void CpuANISymmetryFunctions::backpropAngularFunctions(const float* angularDeriv
                     {
                         float dCosdA = -fn.zeta * powf(1+cosf(theta-fn.thetas), fn.zeta-1) * sinf(theta-fn.thetas);
                         float dVdA = cutoff_12*cutoff_13*dCosdA*expTerm;
-                        float scale2 = zetaScale * dEdV * dVdA * rInv_cross * rInv_12;
-                        float scale3 = zetaScale * dEdV * dVdA * rInv_cross * rInv_13;
+                        float scale2 = zetaScale * dEdV * dVdA;
+                        float scale3 = zetaScale * dEdV * dVdA;
                         for (int k = 0; k < 3; k++) {
-                            float dVdX2 = scale2 * forceDir2[k];
-                            float dVdX3 = scale3 * forceDir3[k];
+                            float dVdX2 = scale2*grad2[k];
+                            float dVdX3 = scale3*grad3[k];
                             positionDeriv[3*atom2+k] += dVdX2;
                             positionDeriv[3*atom3+k] += dVdX3;
                             positionDeriv[3*atom1+k] -= dVdX2 + dVdX3;
@@ -365,11 +383,14 @@ float CpuANISymmetryFunctions::cutoffDeriv(float r, float rc) {
     return -(0.5f*M_PI/rc) * sinf(M_PI*r/rc);
 }
 
+template <bool TORCHANI>
 float CpuANISymmetryFunctions::computeAngle(const float* vec1, const float* vec2, float r1, float r2) {
-    float dotProduct = vec1[0]*vec2[0] + vec1[1]*vec2[1] + vec1[2]*vec2[2];
-    float cosine = dotProduct/(r1*r2);
+    float dot = vec1[0]*vec2[0] + vec1[1]*vec2[1] + vec1[2]*vec2[2];
+    if (TORCHANI)
+        dot *= 0.95f;
+    float cosine = dot/(r1*r2);
     float angle;
-    if (cosine > 0.99f || cosine < -0.99f) {
+    if (!TORCHANI && (cosine > 0.99f || cosine < -0.99f)) {
         // We're close to the singularity in acos(), so take the cross product and use asin() instead.
 
         float c[3];
@@ -381,6 +402,31 @@ float CpuANISymmetryFunctions::computeAngle(const float* vec1, const float* vec2
     else
        angle = acosf(cosine);
     return angle;
+}
+
+template <bool TORCHANI>
+void CpuANISymmetryFunctions::computeAngleGradients(const float* vec1, const float* vec2, float r1, float r2, float* grad1, float* grad2) {
+    float dot = vec1[0]*vec2[0] + vec1[1]*vec2[1] + vec1[2]*vec2[2];
+    float rInv1 = 1/r1;
+    float rInv2 = 1/r2;
+    float rInvProd = rInv1*rInv2;
+    float rInv1_2 = rInv1*rInv1;
+    float rInv2_2 = rInv2*rInv2;
+    float dAngledDot;
+    if (TORCHANI) {
+        float scaledDot = 0.95f*dot*rInvProd;
+        dAngledDot = -0.95f/sqrt(1-scaledDot*scaledDot);
+    }
+    else {
+        float scaledDot = dot*rInvProd;
+        dAngledDot = -1/sqrt(1-scaledDot*scaledDot);
+    }
+    grad1[0] = dAngledDot * rInvProd * (vec2[0] - dot*rInv1_2*vec1[0]);
+    grad1[1] = dAngledDot * rInvProd * (vec2[1] - dot*rInv1_2*vec1[1]);
+    grad1[2] = dAngledDot * rInvProd * (vec2[2] - dot*rInv1_2*vec1[2]);
+    grad2[0] = dAngledDot * rInvProd * (vec1[0] - dot*rInv2_2*vec2[0]);
+    grad2[1] = dAngledDot * rInvProd * (vec1[1] - dot*rInv2_2*vec2[1]);
+    grad2[2] = dAngledDot * rInvProd * (vec1[2] - dot*rInv2_2*vec2[2]);
 }
 
 void CpuANISymmetryFunctions::computeCross(const float* vec1, const float* vec2, float* c) {

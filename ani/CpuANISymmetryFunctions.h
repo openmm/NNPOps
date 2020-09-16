@@ -40,9 +40,13 @@ public:
      *                            between 0 and numSpecies-1
      * @param radialFunctions     the radial symmetry functions to compute
      * @param angularFunctions    the angular symmetry functions to compute
+     * @param torchani            if false, perform calculations as described in the original publication (https://doi.org/10.1039/C6SC05720A).
+     *                            If true, perform them as implemented in TorchANI (https://github.com/aiqm/torchani).  They differ in two ways.
+     *                            First, TorchANI divides the radial symmetry functions by 4.  Second, when computing angles it multiplies the
+     *                            dot product by 0.95.  This leads to large errors in angles, especially ones that are close to 0 or pi.
      */
     CpuANISymmetryFunctions(int numAtoms, int numSpecies, float radialCutoff, float angularCutoff, bool periodic, const std::vector<int>& atomSpecies,
-            const std::vector<RadialFunction>& radialFunctions, const std::vector<AngularFunction>& angularFunctions);
+            const std::vector<RadialFunction>& radialFunctions, const std::vector<AngularFunction>& angularFunctions, bool torchani);
     /**
      * Compute the symmetry functions.
      *
@@ -79,7 +83,7 @@ private:
     /**
      * Compute the values of the angular symmetry functions.  This must be called after computeRadialFunctions.
      */
-    template <bool PERIODIC, bool TRICLINIC>
+    template <bool PERIODIC, bool TRICLINIC, bool TORCHANI>
     void computeAngularFunctions(float* angular);
     /**
      * Backpropagate through the radial symmetry functions to compute the derivatives with respect to positions.
@@ -89,7 +93,7 @@ private:
     /**
      * Backpropagate through the angular symmetry functions to compute the derivatives with respect to positions.
      */
-    template <bool PERIODIC, bool TRICLINIC>
+    template <bool PERIODIC, bool TRICLINIC, bool TORCHANI>
     void backpropAngularFunctions(const float* angularDeriv, float* positionDeriv);
     /**
      * Compute the displacement between two positions.
@@ -125,7 +129,20 @@ private:
      * @param r1      the length of the first vector
      * @param r2      the length of the second vector
      */
+    template <bool TORCHANI>
     float computeAngle(const float* vec1, const float* vec2, float r1, float r2);
+    /**
+     * Compute the gradients of the angle between two vectors with respect to the vectors.
+     *
+     * @param vec1    the first vector
+     * @param vec2    the second vector
+     * @param r1      the length of the first vector
+     * @param r2      the length of the second vector
+     * @param grad1   the gradient with respect to the first vector is stored into this
+     * @param grad2   the gradient with respect to the second vector is stored into this
+    */
+    template <bool TORCHANI>
+    void computeAngleGradients(const float* vec1, const float* vec2, float r1, float r2, float* grad1, float* grad2);
     /**
      * Compute the cross product of two vectors.
      *
