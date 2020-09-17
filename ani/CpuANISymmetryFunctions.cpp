@@ -47,11 +47,12 @@ void CpuANISymmetryFunctions::computeSymmetryFunctions(const float* positions, c
     // Record the positions and periodic box vectors.
 
     memcpy(this->positions.data(), positions, 3*numAtoms*sizeof(float));
-    if (periodic)
+    if (periodic) {
         memcpy(this->periodicBoxVectors, periodicBoxVectors, 9*sizeof(float));
-    invBoxSize[0] = 1/this->periodicBoxVectors[0][0];
-    invBoxSize[1] = 1/this->periodicBoxVectors[1][1];
-    invBoxSize[2] = 1/this->periodicBoxVectors[2][2];
+        invBoxSize[0] = 1/this->periodicBoxVectors[0][0];
+        invBoxSize[1] = 1/this->periodicBoxVectors[1][1];
+        invBoxSize[2] = 1/this->periodicBoxVectors[2][2];
+    }
 
     // Determine whether we have a rectangular or triclinic periodic box.
     
@@ -118,18 +119,20 @@ void CpuANISymmetryFunctions::computeRadialFunctions(float* radial) {
     int c2 = numSpecies*c1;
     float radialCutoff2 = radialCutoff*radialCutoff;
     float angularCutoff2 = angularCutoff*angularCutoff;
-    for (int atom1 = 0; atom1 < numAtoms; atom1++) {
+    for (int atom1 = 0; atom1 < numAtoms; atom1++)
         neighbors[atom1].clear();
+    for (int atom1 = 0; atom1 < numAtoms; atom1++) {
         for (int atom2 = atom1+1; atom2 < numAtoms; atom2++) {
             float delta[3];
             float r2;
             computeDisplacement<PERIODIC, TRICLINIC>(&positions[3*atom1], &positions[3*atom2], delta, r2);
             if (r2 < radialCutoff2) {
-                // While we're at it, build the neighbor list for angular functions.  The neighbor list for atom1
-                // only includes atoms with index > atom1, and lists them in order.
+                // While we're at it, build the neighbor list for angular functions.
 
-                if (r2 < angularCutoff2)
+                if (r2 < angularCutoff2) {
                     neighbors[atom1].push_back(atom2);
+                    neighbors[atom2].push_back(atom1);
+                }
 
                 // Compute the symmetry functions.
 
