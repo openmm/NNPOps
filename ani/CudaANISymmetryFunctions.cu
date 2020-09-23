@@ -33,6 +33,8 @@ using namespace std;
         throw runtime_error(string("Encountered error ")+cudaGetErrorName(result)+" at "+__FILE__+":"+to_string(__LINE__));\
     }
 
+const float Pi = (float) M_PI;
+
 CudaANISymmetryFunctions::CudaANISymmetryFunctions(int numAtoms, int numSpecies, float radialCutoff, float angularCutoff, bool periodic, const std::vector<int>& atomSpecies,
         const std::vector<RadialFunction>& radialFunctions, const std::vector<AngularFunction>& angularFunctions, bool torchani) :
            ANISymmetryFunctions(numAtoms, numSpecies, radialCutoff, angularCutoff, periodic, atomSpecies, radialFunctions, angularFunctions, torchani),
@@ -58,6 +60,13 @@ CudaANISymmetryFunctions::CudaANISymmetryFunctions(int numAtoms, int numSpecies,
     for (int i = 0; i < numSpecies; i++)
         for (int j = i; j < numSpecies; j++)
             angularIndex[i*numSpecies+j] = angularIndex[j*numSpecies+i] = index++;
+
+    // Set an upper limit on how many thread blocks we try to launch based on the size of the GPU.
+
+    int device, numMultiprocessors;
+    CHECK_RESULT(cudaGetDevice(&device));
+    CHECK_RESULT(cudaDeviceGetAttribute(&numMultiprocessors, cudaDevAttrMultiProcessorCount, device));
+    maxBlocks = numMultiprocessors*4;
 }
 
 CudaANISymmetryFunctions::~CudaANISymmetryFunctions() {
@@ -82,7 +91,7 @@ CudaANISymmetryFunctions::~CudaANISymmetryFunctions() {
 }
 
 template <bool PERIODIC, bool TRICLINIC>
-__device__ void computeDisplacement(const float3 pos1, const float3 pos2, float3& delta, float& r2, const float* periodicBoxVectors, float3 invBoxSize) {
+__device__ void computeDisplacement(float3 pos1, float3 pos2, float3& delta, float& r2, const float* periodicBoxVectors, float3 invBoxSize) {
     delta.x = pos2.x-pos1.x;
     delta.y = pos2.y-pos1.y;
     delta.z = pos2.z-pos1.z;
@@ -108,11 +117,31 @@ __device__ void computeDisplacement(const float3 pos1, const float3 pos2, float3
 }
 
 __device__ float cutoffFunction(float r, float rc) {
-    return 0.5f * cosf(M_PI*r/rc) + 0.5f;
+    return 0.5f * cosf(Pi*r/rc) + 0.5f;
 }
 
 __device__ float cutoffDeriv(float r, float rc) {
-    return -(0.5f*M_PI/rc) * sinf(M_PI*r/rc);
+    return -(0.5f*Pi/rc) * sinf(Pi*r/rc);
+}
+
+template <bool TORCHANI>
+__device__ float computeAngle(float3 vec1, float3 vec2, float r1, float r2) {
+    float dot = vec1.x*vec2.x + vec1.y*vec2.y + vec1.z*vec2.z;
+    if (TORCHANI)
+        dot *= 0.95f;
+    float cosine = dot/(r1*r2);
+    float angle;
+    if (!TORCHANI && (cosine > 0.99f || cosine < -0.99f)) {
+        // We're close to the singularity in acos(), so take the cross product and use asin() instead.
+
+        float3 c = make_float3(vec1.y*vec2.z-vec1.z*vec2.y, vec1.z*vec2.x-vec1.x*vec2.z, vec1.x*vec2.y-vec1.y*vec2.x);
+        angle = asinf(sqrtf(c.x*c.x+c.y*c.y+c.z*c.z)/(r1*r2));
+        if (cosine < 0)
+            angle = Pi-angle;
+    }
+    else
+       angle = acosf(cosine);
+    return angle;
 }
 
 template <bool PERIODIC, bool TRICLINIC>
@@ -135,6 +164,9 @@ __global__ void computeRadialFunctions(int numAtoms, int numSpecies, int numRadi
     for (int atom1 = warp; atom1 < numAtoms; atom1 += numWarps) {
         int numNeighbors = 0;
         float3 pos1 = positions[atom1];
+
+        // The threads in the warp loop over second atoms.
+
         for (int atom2 = indexInWarp; atom2 < numAtoms; atom2 += 32) {
             float3 pos2 = positions[atom2];
             float3 delta;
@@ -162,8 +194,61 @@ __global__ void computeRadialFunctions(int numAtoms, int numSpecies, int numRadi
                 neighbors[atom1*numAtoms + index] = atom2;
             }
             numNeighbors += __popc(neighborFlags);
-            if (indexInWarp == 0)
-                neighborCount[atom1] = numNeighbors;
+        }
+        if (indexInWarp == 0)
+            neighborCount[atom1] = numNeighbors;
+    }
+}
+
+template <bool PERIODIC, bool TRICLINIC, bool TORCHANI>
+__global__ void computeAngularFunctions(int numAtoms, int numSpecies, int numAngular, float angularCutoff, float* angular,
+            int* neighbors, int* neighborCount, const float3* positions, const float* periodicBoxVectors,
+            const AngularFunction* angularFunctions, const int* atomSpecies, const int* angularIndex) {
+    const int warp = (blockIdx.x*blockDim.x+threadIdx.x)/32;
+    const int indexInWarp = threadIdx.x%32;
+    const int numWarps = (gridDim.x*blockDim.x)/32;
+    const float3 invBoxSize = (PERIODIC ? make_float3(1/periodicBoxVectors[0], 1/periodicBoxVectors[4], 1/periodicBoxVectors[8]) : make_float3(0, 0, 0));
+    const int c1 = numAngular;
+    const int c2 = numSpecies*(numSpecies+1)*c1/2;
+
+    // Each warp loops over atoms.
+
+    for (int atom1 = warp; atom1 < numAtoms; atom1 += numWarps) {
+        float3 pos1 = positions[atom1];
+        int numNeighbors = neighborCount[atom1];
+
+        // The threads in the warp loop over pairs of atoms from the neighbor list.
+
+        int numPairs = numNeighbors*(numNeighbors-1)/2;
+        for (int pair = indexInWarp; pair < numPairs; pair += 32) {
+            int i = (int) floorf(numNeighbors-0.5f-sqrtf((numNeighbors-0.5f)*(numNeighbors-0.5f)-2*pair));
+            int j = pair - i*numNeighbors + (i+1)*(i+2)/2;
+            int atom2 = neighbors[atom1*numAtoms + i];
+            int atom3 = neighbors[atom1*numAtoms + j];
+            float3 pos2 = positions[atom2];
+            float3 pos3 = positions[atom3];
+            float3 delta_12, delta_13;
+            float r2_12, r2_13;
+            computeDisplacement<PERIODIC, TRICLINIC>(pos1, pos2, delta_12, r2_12, periodicBoxVectors, invBoxSize);
+            computeDisplacement<PERIODIC, TRICLINIC>(pos1, pos3, delta_13, r2_13, periodicBoxVectors, invBoxSize);
+            float r_12 = sqrtf(r2_12);
+            float r_13 = sqrtf(r2_13);
+            float cutoff_12 = cutoffFunction(r_12, angularCutoff);
+            float cutoff_13 = cutoffFunction(r_13, angularCutoff);
+            float r_mean = 0.5f*(r_12+r_13);
+            float theta = computeAngle<TORCHANI>(delta_12, delta_13, r_12, r_13);
+            int index = angularIndex[atomSpecies[atom2]*numSpecies + atomSpecies[atom3]];
+
+            // Compute the symmetry functions.
+
+            for (int m = 0; m < numAngular; m++) {
+                const AngularFunction fn = angularFunctions[m];
+                float cosTerm = powf(1 + cosf(theta - fn.thetas), fn.zeta);
+                float shifted = r_mean-fn.rs;
+                float expTerm = expf(-fn.eta*shifted*shifted);
+                float value = cutoff_12 * cutoff_13 * cosTerm * expTerm;
+                atomicAdd(&angular[atom1*c2 + index*c1 + m], value);
+            }
         }
     }
 }
@@ -175,12 +260,11 @@ __global__ void scaleSymmetryFunctions(int numAtoms, int numSpecies, int numRadi
         for (int i = blockIdx.x*blockDim.x+threadIdx.x; i < numRadialValues; i += gridDim.x*blockDim.x)
             radial[i] *= 0.25f;
     }
-//    int numAngularValues = numAtoms*numSpecies*(numSpecies+1)*angularFunctions.size()/2;
-//    for (int i = 0; i < angularFunctions.size(); i++) {
-//        float scale = powf(2, 1-angularFunctions[i].zeta);
-//        for (int j = i; j < numAngularValues; j += angularFunctions.size())
-//            angular[j] *= scale;
-//    }
+    int numAngularValues = numAtoms*numSpecies*(numSpecies+1)*numAngular/2;
+    for (int i = blockIdx.x*blockDim.x+threadIdx.x; i < numAngularValues; i += gridDim.x*blockDim.x) {
+        float scale = powf(2, 1-angularFunctions[i%numAngular].zeta);
+        angular[i] *= scale;
+    }
 }
 
 void CudaANISymmetryFunctions::computeSymmetryFunctions(const float* positions, const float* periodicBoxVectors, float* radial, float* angular) {
@@ -207,48 +291,37 @@ void CudaANISymmetryFunctions::computeSymmetryFunctions(const float* positions, 
     // Compute the symmetry functions.
 
     int blockSize = 128;
-    int numBlocks = (int) ceil(numAtoms/4.0);
+    int numBlocks = min(maxBlocks, (int) ceil(numAtoms/4.0));
     int numRadial = radialFunctions.size();
     int numAngular = angularFunctions.size();
     if (periodic) {
         if (triclinic) {
-            computeRadialFunctions<true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialValues, neighbors, neighborCount, (float3*) this->positions, periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
-//            if (torchani)
-//                computeAngularFunctions<true, true, true>(angular);
-//            else
-//                computeAngularFunctions<true, true, false>(angular);
+            computeRadialFunctions<true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
+            if (torchani)
+                computeAngularFunctions<true, true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+            else
+                computeAngularFunctions<true, true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
         }
         else {
-            computeRadialFunctions<true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialValues, neighbors, neighborCount, (float3*) this->positions, periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
-//            if (torchani)
-//                computeAngularFunctions<true, false, true>(angular);
-//            else
-//                computeAngularFunctions<true, false, false>(angular);
+            computeRadialFunctions<true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
+            if (torchani)
+                computeAngularFunctions<true, false, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+            else
+                computeAngularFunctions<true, false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
         }
     }
     else {
-        computeRadialFunctions<false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialValues, neighbors, neighborCount, (float3*) this->positions, periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
-//        if (torchani)
-//            computeAngularFunctions<false, false, true>(angular);
-//        else
-//            computeAngularFunctions<false, false, false>(angular);
+        computeRadialFunctions<false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
+        if (torchani)
+            computeAngularFunctions<false, false, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+        else
+            computeAngularFunctions<false, false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
     }
     //CHECK_RESULT(cudaDeviceSynchronize());
 
     // Apply the overall scale factors to the symmetry functions.
-/*
-    if (torchani) {
-        int numRadial = numAtoms*numSpecies*radialFunctions.size();
-        for (int i = 0; i < numRadial; i++)
-            radial[i] *= 0.25f;
-    }
-    int numAngular = numAtoms*numSpecies*(numSpecies+1)*angularFunctions.size()/2;
-    for (int i = 0; i < angularFunctions.size(); i++) {
-        float scale = powf(2, 1-angularFunctions[i].zeta);
-        for (int j = i; j < numAngular; j += angularFunctions.size())
-            angular[j] *= scale;
-    }*/
-    scaleSymmetryFunctions<<<(int) ceil(numAtoms/128.0), 128>>>(numAtoms, numSpecies, numRadial, numAngular, torchani, radialValues, angularValues, angularFunctionArray);
+
+    scaleSymmetryFunctions<<<maxBlocks, 128>>>(numAtoms, numSpecies, numRadial, numAngular, torchani, radialValues, angularValues, angularFunctionArray);
     //CHECK_RESULT(cudaDeviceSynchronize());
 
     // Copy the final values to the destination memory.
@@ -256,50 +329,6 @@ void CudaANISymmetryFunctions::computeSymmetryFunctions(const float* positions, 
     CHECK_RESULT(cudaMemcpyAsync(radial, radialValues, numAtoms*numSpecies*radialFunctions.size()*sizeof(float), cudaMemcpyDefault));
     CHECK_RESULT(cudaMemcpyAsync(angular, angularValues, numAtoms*(numSpecies*(numSpecies+1))*angularFunctions.size()*sizeof(float)/2, cudaMemcpyDefault));
 }
-/*
-template <bool PERIODIC, bool TRICLINIC, bool TORCHANI>
-void CudaANISymmetryFunctions::computeAngularFunctions(float* angular) {
-    // Loop over pairs of atoms.
-
-    int c1 = angularFunctions.size();
-    int c2 = numSpecies*(numSpecies+1)*c1/2;
-    for (int atom1 = 0; atom1 < numAtoms; atom1++) {
-        for (int i = 0; i < neighbors[atom1].size(); i++) {
-            int atom2 = neighbors[atom1][i];
-            float delta_12[3];
-            float r2_12;
-            computeDisplacement<PERIODIC, TRICLINIC>(&positions[3*atom1], &positions[3*atom2], delta_12, r2_12);
-            float r_12 = sqrtf(r2_12);
-            float cutoff_12 = cutoffFunction(r_12, angularCutoff);
-
-            // Loop over third atoms to compute angles.
-            
-            for (int j = i+1; j < neighbors[atom1].size(); j++) {
-                int atom3 = neighbors[atom1][j];
-                float delta_13[3];
-                float r2_13;
-                computeDisplacement<PERIODIC, TRICLINIC>(&positions[3*atom1], &positions[3*atom3], delta_13, r2_13);
-                float r_13 = sqrtf(r2_13);
-                float cutoff_13 = cutoffFunction(r_13, angularCutoff);
-                float r_mean = 0.5f*(r_12+r_13);
-                float theta = computeAngle<TORCHANI>(delta_12, delta_13, r_12, r_13);
-                int index = angularIndex[atomSpecies[atom2]][atomSpecies[atom3]];
-
-                // Compute the symmetry functions.
-
-                for (int m = 0; m < angularFunctions.size(); m++) {
-                    const AngularFunction& fn = angularFunctions[m];
-                    float cosTerm = powf(1 + cosf(theta - fn.thetas), fn.zeta);
-                    float shifted = r_mean-fn.rs;
-                    float expTerm = expf(-fn.eta*shifted*shifted);
-                    float value = cutoff_12 * cutoff_13 * cosTerm * expTerm;
-                    angular[atom1*c2 + index*c1 + m] += value;
-                }
-            }
-        }
-    }
-}
-*/
 
 void CudaANISymmetryFunctions::backprop(const float* radialDeriv, const float* angularDeriv, float* positionDeriv) {
 /*
@@ -460,27 +489,6 @@ void CudaANISymmetryFunctions::backpropAngularFunctions(const float* angularDeri
             }
         }
     }
-}
-
-template <bool TORCHANI>
-float CudaANISymmetryFunctions::computeAngle(const float* vec1, const float* vec2, float r1, float r2) {
-    float dot = vec1[0]*vec2[0] + vec1[1]*vec2[1] + vec1[2]*vec2[2];
-    if (TORCHANI)
-        dot *= 0.95f;
-    float cosine = dot/(r1*r2);
-    float angle;
-    if (!TORCHANI && (cosine > 0.99f || cosine < -0.99f)) {
-        // We're close to the singularity in acos(), so take the cross product and use asin() instead.
-
-        float c[3];
-        computeCross(vec1, vec2, c);
-        angle = asinf(sqrtf(c[0]*c[0]+c[1]*c[1]+c[2]*c[2])/(r1*r2));
-        if (cosine < 0)
-            angle = M_PI-angle;
-    }
-    else
-       angle = acosf(cosine);
-    return angle;
 }
 
 template <bool TORCHANI>

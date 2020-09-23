@@ -90,6 +90,7 @@ private:
     float* radialValues;
     float* angularValues;
     bool triclinic;
+    int maxBlocks;
 };
 
 #endif
