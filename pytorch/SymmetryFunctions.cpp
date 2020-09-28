@@ -65,6 +65,17 @@ public:
         return {radial, angular};
     };
 
+    torch::Tensor backward(const torch::autograd::tensor_list& grads) {
+
+        const auto radialGrad = grads[0].clone();
+        const auto angularGrad = grads[1].clone();
+        auto positionsGrad = torch::empty({numAtoms, 3}, torch::kFloat);
+
+        symFunc->backprop(radialGrad.data_ptr<float>(), angularGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
+
+        return positionsGrad;
+    }
+
 private:
     int numAtoms;
     int numSpecies;
@@ -86,25 +97,19 @@ public:
                                                 const std::vector<double>& Zeta,
                                                 const std::vector<double>& ShfA,
                                                 const std::vector<double>& ShfZ,
-                                                const std::vector<int64_t>& atomSpecies_,
-                                                const torch::Tensor& positions_) {
+                                                const std::vector<int64_t>& atomSpecies,
+                                                const torch::Tensor& positions) {
 
-        const auto symFunc = torch::make_custom_class<CustomCpuANISymmetryFunctions>(numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies_);
+        const auto symFunc = torch::make_custom_class<CustomCpuANISymmetryFunctions>(numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies);
         ctx->saved_data["symFunc"] = symFunc;
 
-        return symFunc.toCustomClass<CustomCpuANISymmetryFunctions>()->forward(positions_);
+        return symFunc.toCustomClass<CustomCpuANISymmetryFunctions>()->forward(positions);
     };
 
-    static torch::autograd::tensor_list backward(torch::autograd::AutogradContext *ctx, torch::autograd::tensor_list grads) {
-
-        const auto& radialGrad = grads[0];
-        const auto& angularGrad = grads[1];
+    static torch::autograd::tensor_list backward(torch::autograd::AutogradContext *ctx, const torch::autograd::tensor_list& grads) {
 
         const auto symFunc = ctx->saved_data["symFunc"].toCustomClass<CustomCpuANISymmetryFunctions>();
-
-        // compute the gradients
-
-        torch::Tensor positionsGrad = torch::Tensor();
+        torch::Tensor positionsGrad = symFunc->backward(grads);
 
         return { torch::Tensor(), // numSpecies
                  torch::Tensor(), // Rcr
@@ -146,6 +151,7 @@ TORCH_LIBRARY(NNPOps, m) {
                          const std::vector<double>&,     // ShfA
                          const std::vector<double>&,     // ShfZ
                          const std::vector<int64_t>&>()) // atomSpecies
-        .def("forward", &CustomCpuANISymmetryFunctions::forward);
+        .def("forward", &CustomCpuANISymmetryFunctions::forward)
+        .def("backward", &CustomCpuANISymmetryFunctions::backward);
     m.def("ANISymmetryFunction", ANISymmetryFunction);
 }
