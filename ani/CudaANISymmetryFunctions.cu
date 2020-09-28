@@ -375,6 +375,7 @@ __global__ void backpropRadialFunctions(int numAtoms, int numSpecies, int numRad
 
     for (int atom1 = warp; atom1 < numAtoms; atom1 += numWarps) {
         float3 pos1 = positions[atom1];
+        float3 posDeriv1 = make_float3(0, 0, 0);
 
         // The threads in the warp loop over second atoms.
 
@@ -392,7 +393,6 @@ __global__ void backpropRadialFunctions(int numAtoms, int numSpecies, int numRad
             float cutoff = cutoffFunction(r, radialCutoff);
             float dCdR = cutoffDeriv(r, radialCutoff);
             for (int i = 0; i < numRadial; i++) {
-                float3 dVdX;
                 if (include) {
                     const RadialFunction fn = radialFunctions[i];
                     float shifted = r-fn.rs;
@@ -400,21 +400,21 @@ __global__ void backpropRadialFunctions(int numAtoms, int numSpecies, int numRad
                     float dVdR = dCdR*expTerm - cutoff*2*fn.eta*shifted*expTerm;
                     float dEdV = radialDeriv[atom1*c2 + atomSpecies[atom2]*c1 + i] + radialDeriv[atom2*c2 + atomSpecies[atom1]*c1 + i];
                     float scale = globalScale * dEdV * dVdR * rInv;
-                    dVdX = make_float3(scale*delta.x, scale*delta.y, scale*delta.z);
-                }
-                else
-                    dVdX = make_float3(0, 0, 0);
-                for (int offset = 16; offset > 0; offset /= 2) {
-                    dVdX.x += __shfl_down_sync(0xFFFFFFFF, dVdX.x, offset);
-                    dVdX.y += __shfl_down_sync(0xFFFFFFFF, dVdX.y, offset);
-                    dVdX.z += __shfl_down_sync(0xFFFFFFFF, dVdX.z, offset);
-                }
-                if (indexInWarp == 0) {
-                    positionDeriv[3*atom1] -= dVdX.x;
-                    positionDeriv[3*atom1+1] -= dVdX.y;
-                    positionDeriv[3*atom1+2] -= dVdX.z;
+                    posDeriv1.x += scale*delta.x;
+                    posDeriv1.y += scale*delta.y;
+                    posDeriv1.z += scale*delta.z;
                 }
             }
+        }
+        for (int offset = 16; offset > 0; offset /= 2) {
+            posDeriv1.x += __shfl_down_sync(0xFFFFFFFF, posDeriv1.x, offset);
+            posDeriv1.y += __shfl_down_sync(0xFFFFFFFF, posDeriv1.y, offset);
+            posDeriv1.z += __shfl_down_sync(0xFFFFFFFF, posDeriv1.z, offset);
+        }
+        if (indexInWarp == 0) {
+            positionDeriv[3*atom1] -= posDeriv1.x;
+            positionDeriv[3*atom1+1] -= posDeriv1.y;
+            positionDeriv[3*atom1+2] -= posDeriv1.z;
         }
     }
 }
