@@ -166,7 +166,7 @@ void CpuANISymmetryFunctions::computeAngularFunctions(float* angular) {
             float cutoff_12 = cutoffFunction(r_12, angularCutoff);
 
             // Loop over third atoms to compute angles.
-            
+
             for (int j = i+1; j < neighbors[atom1].size(); j++) {
                 int atom3 = neighbors[atom1][j];
                 float delta_13[3];
@@ -418,11 +418,11 @@ void CpuANISymmetryFunctions::computeAngleGradients(const float* vec1, const flo
     float dAngledDot;
     if (TORCHANI) {
         float scaledDot = 0.95f*dot*rInvProd;
-        dAngledDot = -0.95f/sqrt(1-scaledDot*scaledDot);
+        dAngledDot = -0.95f/sqrtf(1-scaledDot*scaledDot);
     }
     else {
         float scaledDot = dot*rInvProd;
-        dAngledDot = -1/sqrt(1-scaledDot*scaledDot);
+        dAngledDot = -1/sqrtf(1-scaledDot*scaledDot);
     }
     grad1[0] = dAngledDot * rInvProd * (vec2[0] - dot*rInv1_2*vec1[0]);
     grad1[1] = dAngledDot * rInvProd * (vec2[1] - dot*rInv1_2*vec1[1]);
