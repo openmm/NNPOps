@@ -384,16 +384,15 @@ __global__ void backpropRadialFunctions(int numAtoms, int numSpecies, int numRad
             float3 delta;
             float r2;
             computeDisplacement<PERIODIC, TRICLINIC>(pos1, pos2, delta, r2, periodicBoxVectors, invBoxSize);
-            bool include = (r2 < radialCutoff2 && atom1 != atom2);
 
             // Compute the derivatives of the symmetry functions.
 
-            float r = sqrtf(r2);
-            float rInv = 1/r;
-            float cutoff = cutoffFunction(r, radialCutoff);
-            float dCdR = cutoffDeriv(r, radialCutoff);
-            for (int i = 0; i < numRadial; i++) {
-                if (include) {
+            if (r2 < radialCutoff2 && atom1 != atom2) {
+                float r = sqrtf(r2);
+                float rInv = 1/r;
+                float cutoff = cutoffFunction(r, radialCutoff);
+                float dCdR = cutoffDeriv(r, radialCutoff);
+                for (int i = 0; i < numRadial; i++) {
                     const RadialFunction fn = radialFunctions[i];
                     float shifted = r-fn.rs;
                     float expTerm = expf(-fn.eta*shifted*shifted);
