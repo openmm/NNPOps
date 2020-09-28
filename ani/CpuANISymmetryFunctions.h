@@ -68,7 +68,7 @@ public:
      *
      * @param radialDeriv      an array of shape [numAtoms][numSpecies][radialFunctions.size()] containing the derivative
      *                         of E with respect to each radial symmetry function
-     * @param angularDeriv     an array of shape [numSpecies*(numSpecies+1)/2][angularFunctions.size()] containing the derivative
+     * @param angularDeriv     an array of shape [numAtoms][numSpecies*(numSpecies+1)/2][angularFunctions.size()] containing the derivative
      *                         of E with respect to each angular symmetry function
      * @param positionDeriv    an array of shape [numAtoms][3] to store the derivative of E with respect to the atom positions into
      */

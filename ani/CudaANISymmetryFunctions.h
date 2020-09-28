@@ -1,5 +1,5 @@
-#ifndef ANI_SYMMETRY_FUCTIONS
-#define ANI_SYMMETRY_FUCTIONS
+#ifndef CUDA_ANI_SYMMETRY_FUCTIONS
+#define CUDA_ANI_SYMMETRY_FUCTIONS
 
 /**
  * Copyright (c) 2020 Stanford University and the Authors
@@ -24,24 +24,12 @@
  * SOFTWARE.
  */
 
-#include <vector>
+#include "ANISymmetryFunctions.h"
 
-struct RadialFunction {
-    float eta;
-    float rs;
-};
-
-struct AngularFunction {
-    float eta;
-    float rs;
-    float zeta;
-    float thetas;
-};
-
-class ANISymmetryFunctions {
+class CudaANISymmetryFunctions : public ANISymmetryFunctions {
 public:
     /**
-     * Construct on object for computing ANI symmetry functions.
+     * Construct on object for computing ANI symmetry functions on a GPU.
      *
      * @param numAtoms            the number of atoms in the system
      * @param numSpecies          the number of species of atoms
@@ -57,13 +45,14 @@ public:
      *                            First, TorchANI divides the radial symmetry functions by 4.  Second, when computing angles it multiplies the
      *                            dot product by 0.95.  This leads to large errors in angles, especially ones that are close to 0 or pi.
      */
-    ANISymmetryFunctions(int numAtoms, int numSpecies, float radialCutoff, float angularCutoff, bool periodic, const std::vector<int>& atomSpecies,
-            const std::vector<RadialFunction>& radialFunctions, const std::vector<AngularFunction>& angularFunctions, bool torchani) :
-               numAtoms(numAtoms), numSpecies(numSpecies), radialCutoff(radialCutoff), angularCutoff(angularCutoff),
-               periodic(periodic), atomSpecies(atomSpecies), radialFunctions(radialFunctions), angularFunctions(angularFunctions), torchani(torchani) {
-    }
+    CudaANISymmetryFunctions(int numAtoms, int numSpecies, float radialCutoff, float angularCutoff, bool periodic, const std::vector<int>& atomSpecies,
+            const std::vector<RadialFunction>& radialFunctions, const std::vector<AngularFunction>& angularFunctions, bool torchani);
     /**
-     * Compute the symmetry functions.
+     * Release memory when the object is destroyed.
+     */
+    ~CudaANISymmetryFunctions();
+    /**
+     * Compute the symmetry functions.  All of the pointers passed to this method may refer to either host or device memory.
      *
      * @param positions           an array of shape [numAtoms][3] containing the positions of each atom
      * @param periodicBoxVectors  an array of shape [3][3] containing the periodic box vectors.  If periodic boundary conditions are
@@ -73,10 +62,11 @@ public:
      * @param angular             an array of shape [numAtoms][numSpecies*(numSpecies+1)/2][angularFunctions.size()] to store the
      *                            angular symmetry function values into
      */
-    virtual void computeSymmetryFunctions(const float* positions, const float* periodicBoxVectors, float* radial, float* angular) = 0;
+    void computeSymmetryFunctions(const float* positions, const float* periodicBoxVectors, float* radial, float* angular);
     /**
      * Given the derivatives of some function E (typically energy) with respect to the symmetry functions, backpropagate them
-     * to find the derivates of E with respect to the atom positions.
+     * to find the derivates of E with respect to the atom positions.  All of the pointers passed to this method may refer to
+     * either host or device memory.
      *
      * This must be called after computeSymmetryFunctions().  It uses the atom positions and box vectors that were specified in the most
      * recent call to that function.
@@ -87,68 +77,21 @@ public:
      *                         of E with respect to each angular symmetry function
      * @param positionDeriv    an array of shape [numAtoms][3] to store the derivative of E with respect to the atom positions into
      */
-    virtual void backprop(const float* radialDeriv, const float* angularDeriv, float* positionDeriv) = 0;
-    /**
-     * Get the number of atoms in the system.
-     */
-    int getNumAtoms() const {
-        return numAtoms;
-    }
-    /**
-     * Get the number of species of atoms.
-     */
-    int getNumSpecies() const {
-        return numSpecies;
-    }
-    /**
-     * Get the cutoff distance for radial symmetry functions.
-     */
-    float getRadialCutoff() const {
-        return radialCutoff;
-    }
-    /**
-     * Get the cutoff distance for angular symmetry functions.
-     */
-    float getAngularCutoff() const {
-        return angularCutoff;
-    }
-    /**
-     * Get whether to apply periodic boundary conditions.
-     */
-    bool getPeriodic() const {
-        return periodic;
-    }
-    /**
-     * Get whether calculations are done as described in the publication or as implemented in TorchANI.
-     */
-    bool getTorchANI() const {
-        return torchani;
-    }
-    /**
-     * Get the species of each atom, represented as an integer between 0 and numSpecies-1.
-     */
-    const std::vector<int>& getAtomSpecies() const {
-        return atomSpecies;
-    }
-    /**
-     * Get the radial symmetry functions to compute.
-     */
-    const std::vector<RadialFunction>& getRadialFunctions() const {
-        return radialFunctions;
-    }
-    /**
-     * Get the angular symmetry functions to compute.
-     */
-    const std::vector<AngularFunction>& getAngularFunctions() const {
-        return angularFunctions;
-    }
-protected:
-    const int numAtoms, numSpecies;
-    const float radialCutoff, angularCutoff;
-    const bool periodic, torchani;
-    const std::vector<int> atomSpecies;
-    const std::vector<RadialFunction> radialFunctions;
-    const std::vector<AngularFunction> angularFunctions;
+    void backprop(const float* radialDeriv, const float* angularDeriv, float* positionDeriv);
+private:
+    int* neighbors;
+    int* neighborCount;
+    int* angularIndex;
+    int* atomSpeciesArray;
+    float* positions;
+    float* periodicBoxVectors;
+    RadialFunction* radialFunctionArray;
+    AngularFunction* angularFunctionArray;
+    float* radialValues;
+    float* angularValues;
+    float* positionDerivValues;
+    bool triclinic;
+    int maxBlocks;
 };
 
 #endif
