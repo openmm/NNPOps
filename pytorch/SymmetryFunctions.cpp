@@ -24,18 +24,18 @@
 #include <torch/script.h>
 #include "CpuANISymmetryFunctions.h"
 
-class CustomCpuANISymmetryFunctions : public torch::CustomClassHolder {
+class CustomANISymmetryFunctions : public torch::CustomClassHolder {
 public:
-    CustomCpuANISymmetryFunctions(int64_t numSpecies_,
-                                  double Rcr,
-                                  double Rca,
-                                  const std::vector<double>& EtaR,
-                                  const std::vector<double>& ShfR,
-                                  const std::vector<double>& EtaA,
-                                  const std::vector<double>& Zeta,
-                                  const std::vector<double>& ShfA,
-                                  const std::vector<double>& ShfZ,
-                                  const std::vector<int64_t>& atomSpecies_) : torch::CustomClassHolder() {
+    CustomANISymmetryFunctions(int64_t numSpecies_,
+                               double Rcr,
+                               double Rca,
+                               const std::vector<double>& EtaR,
+                               const std::vector<double>& ShfR,
+                               const std::vector<double>& EtaA,
+                               const std::vector<double>& Zeta,
+                               const std::vector<double>& ShfA,
+                               const std::vector<double>& ShfZ,
+                               const std::vector<int64_t>& atomSpecies_) : torch::CustomClassHolder() {
 
         numAtoms = atomSpecies_.size();
         numSpecies = numSpecies_;
@@ -81,7 +81,7 @@ private:
     int numSpecies;
     std::vector<RadialFunction> radialFunctions;
     std::vector<AngularFunction> angularFunctions;
-    std::shared_ptr<CpuANISymmetryFunctions> symFunc;
+    std::shared_ptr<ANISymmetryFunctions> symFunc;
 };
 
 class GradANISymmetryFunction : public torch::autograd::Function<GradANISymmetryFunction> {
@@ -100,15 +100,15 @@ public:
                                                 const std::vector<int64_t>& atomSpecies,
                                                 const torch::Tensor& positions) {
 
-        const auto symFunc = torch::make_custom_class<CustomCpuANISymmetryFunctions>(numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies);
+        const auto symFunc = torch::intrusive_ptr<CustomANISymmetryFunctions>::make(numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies);
         ctx->saved_data["symFunc"] = symFunc;
 
-        return symFunc.toCustomClass<CustomCpuANISymmetryFunctions>()->forward(positions);
+        return symFunc->forward(positions);
     };
 
     static torch::autograd::tensor_list backward(torch::autograd::AutogradContext *ctx, const torch::autograd::tensor_list& grads) {
 
-        const auto symFunc = ctx->saved_data["symFunc"].toCustomClass<CustomCpuANISymmetryFunctions>();
+        const auto symFunc = ctx->saved_data["symFunc"].toCustomClass<CustomANISymmetryFunctions>();
         torch::Tensor positionsGrad = symFunc->backward(grads);
 
         return { torch::Tensor(), // numSpecies
@@ -140,7 +140,7 @@ static torch::autograd::tensor_list ANISymmetryFunction(int64_t numSpecies,
 }
 
 TORCH_LIBRARY(NNPOps, m) {
-    m.class_<CustomCpuANISymmetryFunctions>("CustomCpuANISymmetryFunctions")
+    m.class_<CustomANISymmetryFunctions>("CustomANISymmetryFunctions")
         .def(torch::init<int64_t,                        // numSpecies
                          double,                         // Rcr
                          double,                         // Rca
@@ -151,7 +151,7 @@ TORCH_LIBRARY(NNPOps, m) {
                          const std::vector<double>&,     // ShfA
                          const std::vector<double>&,     // ShfZ
                          const std::vector<int64_t>&>()) // atomSpecies
-        .def("forward", &CustomCpuANISymmetryFunctions::forward)
-        .def("backward", &CustomCpuANISymmetryFunctions::backward);
+        .def("forward", &CustomANISymmetryFunctions::forward)
+        .def("backward", &CustomANISymmetryFunctions::backward);
     m.def("ANISymmetryFunction", ANISymmetryFunction);
 }
