@@ -23,6 +23,7 @@
 
 #include <torch/script.h>
 #include "CpuANISymmetryFunctions.h"
+#include "CudaANISymmetryFunctions.h"
 
 class CustomANISymmetryFunctions : public torch::CustomClassHolder {
 public:
@@ -35,8 +36,10 @@ public:
                                const std::vector<double>& Zeta,
                                const std::vector<double>& ShfA,
                                const std::vector<double>& ShfZ,
-                               const std::vector<int64_t>& atomSpecies_) : torch::CustomClassHolder() {
+                               const std::vector<int64_t>& atomSpecies_,
+                               const torch::Tensor& positions) : torch::CustomClassHolder() {
 
+        tensorOptions = positions.device();; // Data type of float by default
         numAtoms = atomSpecies_.size();
         numSpecies = numSpecies_;
         const std::vector<int> atomSpecies(atomSpecies_.begin(), atomSpecies_.end());
@@ -51,14 +54,17 @@ public:
                     for (const float thetas: ShfZ)
                         angularFunctions.push_back({eta, rs, zeta, thetas});
 
-        symFunc = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
+        if (tensorOptions.device().is_cpu())
+            symFunc = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
+        if (tensorOptions.device().is_cuda())
+            symFunc = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
     };
 
     torch::autograd::tensor_list forward(const torch::Tensor& positions_) {
 
-        const auto positions = positions_.toType(torch::kFloat);
-        auto radial  = torch::empty({numAtoms, numSpecies * (int)radialFunctions.size()}, torch::kFloat);
-        auto angular = torch::empty({numAtoms, numSpecies * (numSpecies + 1) / 2 * (int)angularFunctions.size()}, torch::kFloat);
+        const auto positions = positions_.to(tensorOptions);
+        auto radial  = torch::empty({numAtoms, numSpecies * (int)radialFunctions.size()}, tensorOptions);
+        auto angular = torch::empty({numAtoms, numSpecies * (numSpecies + 1) / 2 * (int)angularFunctions.size()}, tensorOptions);
 
         symFunc->computeSymmetryFunctions(positions.data_ptr<float>(), nullptr, radial.data_ptr<float>(), angular.data_ptr<float>());
 
@@ -69,7 +75,7 @@ public:
 
         const auto radialGrad = grads[0].clone();
         const auto angularGrad = grads[1].clone();
-        auto positionsGrad = torch::empty({numAtoms, 3}, torch::kFloat);
+        auto positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
 
         symFunc->backprop(radialGrad.data_ptr<float>(), angularGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
 
@@ -77,6 +83,7 @@ public:
     }
 
 private:
+    torch::TensorOptions tensorOptions;
     int numAtoms;
     int numSpecies;
     std::vector<RadialFunction> radialFunctions;
@@ -100,7 +107,7 @@ public:
                                                 const std::vector<int64_t>& atomSpecies,
                                                 const torch::Tensor& positions) {
 
-        const auto symFunc = torch::intrusive_ptr<CustomANISymmetryFunctions>::make(numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies);
+        const auto symFunc = torch::intrusive_ptr<CustomANISymmetryFunctions>::make(numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies, positions);
         ctx->saved_data["symFunc"] = symFunc;
 
         return symFunc->forward(positions);
@@ -150,7 +157,8 @@ TORCH_LIBRARY(NNPOps, m) {
                          const std::vector<double>&,     // Zeta
                          const std::vector<double>&,     // ShfA
                          const std::vector<double>&,     // ShfZ
-                         const std::vector<int64_t>&>()) // atomSpecies
+                         const std::vector<int64_t>&,    // atomSpecies
+                         const torch::Tensor&>())        // positions
         .def("forward", &CustomANISymmetryFunctions::forward)
         .def("backward", &CustomANISymmetryFunctions::backward);
     m.def("ANISymmetryFunction", ANISymmetryFunction);
