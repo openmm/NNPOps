@@ -40,14 +40,16 @@ public:
                                const torch::Tensor& positions) : torch::CustomClassHolder() {
 
         tensorOptions = positions.device();; // Data type of float by default
-        numAtoms = atomSpecies_.size();
-        numSpecies = numSpecies_;
+        int numAtoms = atomSpecies_.size();
+        int numSpecies = numSpecies_;
         const std::vector<int> atomSpecies(atomSpecies_.begin(), atomSpecies_.end());
 
+        std::vector<RadialFunction> radialFunctions;
         for (const float eta: EtaR)
             for (const float rs: ShfR)
                 radialFunctions.push_back({eta, rs});
 
+        std::vector<AngularFunction> angularFunctions;
         for (const float eta: EtaA)
             for (const float zeta: Zeta)
                 for (const float rs: ShfA)
@@ -58,14 +60,15 @@ public:
             symFunc = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
         if (tensorOptions.device().is_cuda())
             symFunc = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
+
+        radial  = torch::empty({numAtoms, numSpecies * (int)radialFunctions.size()}, tensorOptions);
+        angular = torch::empty({numAtoms, numSpecies * (numSpecies + 1) / 2 * (int)angularFunctions.size()}, tensorOptions);
+        positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
     };
 
     torch::autograd::tensor_list forward(const torch::Tensor& positions_) {
 
-        const auto positions = positions_.to(tensorOptions);
-        auto radial  = torch::empty({numAtoms, numSpecies * (int)radialFunctions.size()}, tensorOptions);
-        auto angular = torch::empty({numAtoms, numSpecies * (numSpecies + 1) / 2 * (int)angularFunctions.size()}, tensorOptions);
-
+        const torch::Tensor positions = positions_.to(tensorOptions);
         symFunc->computeSymmetryFunctions(positions.data_ptr<float>(), nullptr, radial.data_ptr<float>(), angular.data_ptr<float>());
 
         return {radial, angular};
@@ -73,9 +76,8 @@ public:
 
     torch::Tensor backward(const torch::autograd::tensor_list& grads) {
 
-        const auto radialGrad = grads[0].clone();
-        const auto angularGrad = grads[1].clone();
-        auto positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
+        const torch::Tensor radialGrad = grads[0].clone();
+        const torch::Tensor angularGrad = grads[1].clone();
 
         symFunc->backprop(radialGrad.data_ptr<float>(), angularGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
 
@@ -84,11 +86,10 @@ public:
 
 private:
     torch::TensorOptions tensorOptions;
-    int numAtoms;
-    int numSpecies;
-    std::vector<RadialFunction> radialFunctions;
-    std::vector<AngularFunction> angularFunctions;
     std::shared_ptr<ANISymmetryFunctions> symFunc;
+    torch::Tensor radial;
+    torch::Tensor angular;
+    torch::Tensor positionsGrad;
 };
 
 class GradANISymmetryFunction : public torch::autograd::Function<GradANISymmetryFunction> {
