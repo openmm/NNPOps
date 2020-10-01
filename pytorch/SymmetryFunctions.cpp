@@ -118,6 +118,7 @@ public:
 
         const auto symFunc = ctx->saved_data["symFunc"].toCustomClass<CustomANISymmetryFunctions>();
         torch::Tensor positionsGrad = symFunc->backward(grads);
+        ctx->saved_data.erase("symFunc");
 
         return { torch::Tensor(), // numSpecies
                  torch::Tensor(), // Rcr
