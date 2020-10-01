@@ -39,7 +39,7 @@ public:
                                const std::vector<int64_t>& atomSpecies_,
                                const torch::Tensor& positions) : torch::CustomClassHolder() {
 
-        tensorOptions = positions.device();; // Data type of float by default
+        tensorOptions = torch::TensorOptions().device(positions.device()); // Data type of float by default
         int numAtoms = atomSpecies_.size();
         int numSpecies = numSpecies_;
         const std::vector<int> atomSpecies(atomSpecies_.begin(), atomSpecies_.end());
@@ -66,10 +66,18 @@ public:
         positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
     };
 
-    torch::autograd::tensor_list forward(const torch::Tensor& positions_) {
+    torch::autograd::tensor_list forward(const torch::Tensor& positions_, const torch::optional<torch::Tensor>& periodicBoxVectors_) {
 
         const torch::Tensor positions = positions_.to(tensorOptions);
-        symFunc->computeSymmetryFunctions(positions.data_ptr<float>(), nullptr, radial.data_ptr<float>(), angular.data_ptr<float>());
+
+        torch::Tensor periodicBoxVectors;
+        float* periodicBoxVectorsPtr = nullptr;
+        if (periodicBoxVectors_) {
+            periodicBoxVectors = periodicBoxVectors_->to(tensorOptions);
+            float* periodicBoxVectorsPtr = periodicBoxVectors.data_ptr<float>();
+        }
+
+        symFunc->computeSymmetryFunctions(positions.data_ptr<float>(), periodicBoxVectorsPtr, radial.data_ptr<float>(), angular.data_ptr<float>());
 
         return {radial, angular};
     };
@@ -106,12 +114,14 @@ public:
                                                 const std::vector<double>& ShfA,
                                                 const std::vector<double>& ShfZ,
                                                 const std::vector<int64_t>& atomSpecies,
-                                                const torch::Tensor& positions) {
+                                                const torch::Tensor& positions,
+                                                const torch::optional<torch::Tensor>& periodicBoxVectors) {
 
-        const auto symFunc = torch::intrusive_ptr<CustomANISymmetryFunctions>::make(numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies, positions);
+        const auto symFunc = torch::intrusive_ptr<CustomANISymmetryFunctions>::make(
+            numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies, positions);
         ctx->saved_data["symFunc"] = symFunc;
 
-        return symFunc->forward(positions);
+        return symFunc->forward(positions, periodicBoxVectors);
     };
 
     static torch::autograd::tensor_list backward(torch::autograd::AutogradContext *ctx, const torch::autograd::tensor_list& grads) {
@@ -120,17 +130,18 @@ public:
         torch::Tensor positionsGrad = symFunc->backward(grads);
         ctx->saved_data.erase("symFunc");
 
-        return { torch::Tensor(), // numSpecies
-                 torch::Tensor(), // Rcr
-                 torch::Tensor(), // Rca
-                 torch::Tensor(), // EtaR
-                 torch::Tensor(), // ShfR
-                 torch::Tensor(), // EtaA
-                 torch::Tensor(), // Zeta
-                 torch::Tensor(), // ShfA
-                 torch::Tensor(), // ShfZ
-                 torch::Tensor(), // atomSpecies
-                 positionsGrad }; // positions
+        return { torch::Tensor(),  // numSpecies
+                 torch::Tensor(),  // Rcr
+                 torch::Tensor(),  // Rca
+                 torch::Tensor(),  // EtaR
+                 torch::Tensor(),  // ShfR
+                 torch::Tensor(),  // EtaA
+                 torch::Tensor(),  // Zeta
+                 torch::Tensor(),  // ShfA
+                 torch::Tensor(),  // ShfZ
+                 torch::Tensor(),  // atomSpecies
+                 positionsGrad,    // positions
+                 torch::Tensor()}; // periodicBoxVectors
     };
 };
 
@@ -144,8 +155,10 @@ static torch::autograd::tensor_list ANISymmetryFunction(int64_t numSpecies,
                                                         const std::vector<double>& ShfA,
                                                         const std::vector<double>& ShfZ,
                                                         const std::vector<int64_t>& atomSpecies,
-                                                        const torch::Tensor& positions) {
-    return GradANISymmetryFunction::apply(numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies, positions);
+                                                        const torch::Tensor& positions,
+                                                        const torch::optional<torch::Tensor>& periodicBoxVectors) {
+
+    return GradANISymmetryFunction::apply(numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies, positions, periodicBoxVectors);
 }
 
 TORCH_LIBRARY(NNPOps, m) {
