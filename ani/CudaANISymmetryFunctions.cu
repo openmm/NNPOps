@@ -233,23 +233,20 @@ template <bool PERIODIC, bool TRICLINIC, bool TORCHANI>
 __global__ void computeAngularFunctions(int numAtoms, int numSpecies, int numAngular, float angularCutoff, float* angular,
             int* neighbors, int* neighborCount, const float3* positions, const float* periodicBoxVectors,
             const AngularFunction* angularFunctions, const int* atomSpecies, const int* angularIndex) {
-    const int warp = (blockIdx.x*blockDim.x+threadIdx.x)/32;
-    const int indexInWarp = threadIdx.x%32;
-    const int numWarps = (gridDim.x*blockDim.x)/32;
     const float3 invBoxSize = (PERIODIC ? make_float3(1/periodicBoxVectors[0], 1/periodicBoxVectors[4], 1/periodicBoxVectors[8]) : make_float3(0, 0, 0));
     const int c1 = numAngular;
     const int c2 = numSpecies*(numSpecies+1)*c1/2;
 
-    // Each warp loops over atoms.
+    // Each thread block loops over atoms.
 
-    for (int atom1 = warp; atom1 < numAtoms; atom1 += numWarps) {
+    for (int atom1 = blockIdx.x; atom1 < numAtoms; atom1 += gridDim.x) {
         float3 pos1 = positions[atom1];
         int numNeighbors = neighborCount[atom1];
 
-        // The threads in the warp loop over pairs of atoms from the neighbor list.
+        // The threads in the block loop over pairs of atoms from the neighbor list.
 
         int numPairs = numNeighbors*(numNeighbors-1)/2;
-        for (int pair = indexInWarp; pair < numPairs; pair += 32) {
+        for (int pair = threadIdx.x; pair < numPairs; pair += blockDim.x) {
             int i = (int) floorf(numNeighbors-0.5f-sqrtf((numNeighbors-0.5f)*(numNeighbors-0.5f)-2*pair));
             int j = pair - i*numNeighbors + (i+1)*(i+2)/2;
             int atom2 = neighbors[atom1*numAtoms + i];
@@ -297,11 +294,50 @@ __global__ void scaleSymmetryFunctions(int numAtoms, int numSpecies, int numRadi
 }
 
 void CudaANISymmetryFunctions::computeSymmetryFunctions(const float* positions, const float* periodicBoxVectors, float* radial, float* angular) {
+    // If the output arrays point to device memory, we can access them directly.
+    // Otherwise, we'll need to perform extra copies.
+
+    bool radialOnDevice, angularOnDevice;
+    float* radialPtr;
+    float* angularPtr;
+    cudaPointerAttributes attrib;
+    cudaError_t result = cudaPointerGetAttributes(&attrib, radial);
+    if (result != cudaSuccess || attrib.devicePointer == 0) {
+        radialOnDevice = false;
+        radialPtr = radialValues;
+    }
+    else {
+        radialOnDevice = true;
+        radialPtr = (float*) attrib.devicePointer;
+    }
+    result = cudaPointerGetAttributes(&attrib, angular);
+    if (result != cudaSuccess || attrib.devicePointer == 0) {
+        angularOnDevice = false;
+        angularPtr = angularValues;
+    }
+    else {
+        angularOnDevice = true;
+        angularPtr = (float*) attrib.devicePointer;
+    }
+
     // Record the positions and periodic box vectors.
 
     CHECK_RESULT(cudaMemcpyAsync(this->positions, positions, 3*numAtoms*sizeof(float), cudaMemcpyDefault));
-    if (periodic)
-        CHECK_RESULT(cudaMemcpyAsync(this->periodicBoxVectors, periodicBoxVectors, 9*sizeof(float), cudaMemcpyDefault));
+    float* hostBoxVectors;
+    if (periodic) {
+        // We'll need to access the box vectors on both host and device.  Figure out the most
+        // efficient way of doing that.
+
+        result = cudaPointerGetAttributes(&attrib, periodicBoxVectors);
+        if (result != cudaSuccess || attrib.hostPointer == 0) {
+            CHECK_RESULT(cudaMemcpy(this->periodicBoxVectors, periodicBoxVectors, 9*sizeof(float), cudaMemcpyDefault));
+            hostBoxVectors = this->periodicBoxVectors;
+        }
+        else {
+            CHECK_RESULT(cudaMemcpyAsync(this->periodicBoxVectors, periodicBoxVectors, 9*sizeof(float), cudaMemcpyDefault));
+            hostBoxVectors = (float*) attrib.hostPointer;
+        }
+    }
 
     // Determine whether we have a rectangular or triclinic periodic box.
     
@@ -309,52 +345,54 @@ void CudaANISymmetryFunctions::computeSymmetryFunctions(const float* positions, 
     if (periodic)
         for (int i = 0 ; i < 3; i++)
             for (int j = 0; j < 3; j++)
-                if (i != j && periodicBoxVectors[3*i+j] != 0)
+                if (i != j && hostBoxVectors[3*i+j] != 0)
                     triclinic = true;
 
     // Clear the output arrays.
 
-    CHECK_RESULT(cudaMemsetAsync(radialValues, 0, numAtoms*numSpecies*radialFunctions.size()*sizeof(float)));
-    CHECK_RESULT(cudaMemsetAsync(angularValues, 0, numAtoms*(numSpecies*(numSpecies+1)/2)*angularFunctions.size()*sizeof(float)));
+    CHECK_RESULT(cudaMemsetAsync(radialPtr, 0, numAtoms*numSpecies*radialFunctions.size()*sizeof(float)));
+    CHECK_RESULT(cudaMemsetAsync(angularPtr, 0, numAtoms*(numSpecies*(numSpecies+1)/2)*angularFunctions.size()*sizeof(float)));
 
     // Compute the symmetry functions.
 
-    int blockSize = 128;
-    int numBlocks = min(maxBlocks, (int) ceil(numAtoms/4.0));
+    int blockSize = 192;
+    int numBlocks = min(maxBlocks, numAtoms);
     int numRadial = radialFunctions.size();
     int numAngular = angularFunctions.size();
     if (periodic) {
         if (triclinic) {
-            computeRadialFunctions<true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
+            computeRadialFunctions<true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
             if (torchani)
-                computeAngularFunctions<true, true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                computeAngularFunctions<true, true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
             else
-                computeAngularFunctions<true, true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                computeAngularFunctions<true, true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
         }
         else {
-            computeRadialFunctions<true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
+            computeRadialFunctions<true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
             if (torchani)
-                computeAngularFunctions<true, false, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                computeAngularFunctions<true, false, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
             else
-                computeAngularFunctions<true, false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                computeAngularFunctions<true, false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
         }
     }
     else {
-        computeRadialFunctions<false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
+        computeRadialFunctions<false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
         if (torchani)
-            computeAngularFunctions<false, false, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+            computeAngularFunctions<false, false, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
         else
-            computeAngularFunctions<false, false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+            computeAngularFunctions<false, false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
     }
 
     // Apply the overall scale factors to the symmetry functions.
 
-    scaleSymmetryFunctions<<<maxBlocks, 128>>>(numAtoms, numSpecies, numRadial, numAngular, torchani, radialValues, angularValues, angularFunctionArray);
+    scaleSymmetryFunctions<<<maxBlocks, 128>>>(numAtoms, numSpecies, numRadial, numAngular, torchani, radialPtr, angularPtr, angularFunctionArray);
 
     // Copy the final values to the destination memory.
 
-    CHECK_RESULT(cudaMemcpyAsync(radial, radialValues, numAtoms*numSpecies*radialFunctions.size()*sizeof(float), cudaMemcpyDefault));
-    CHECK_RESULT(cudaMemcpyAsync(angular, angularValues, numAtoms*(numSpecies*(numSpecies+1))*angularFunctions.size()*sizeof(float)/2, cudaMemcpyDefault));
+    if (!radialOnDevice)
+        CHECK_RESULT(cudaMemcpyAsync(radial, radialValues, numAtoms*numSpecies*radialFunctions.size()*sizeof(float), cudaMemcpyDefault));
+    if (!angularOnDevice)
+        CHECK_RESULT(cudaMemcpyAsync(angular, angularValues, numAtoms*(numSpecies*(numSpecies+1))*angularFunctions.size()*sizeof(float)/2, cudaMemcpyDefault));
 }
 
 template <bool PERIODIC, bool TRICLINIC>
@@ -362,24 +400,21 @@ __global__ void backpropRadialFunctions(int numAtoms, int numSpecies, int numRad
             float radialCutoff, const float* radialDeriv, float* positionDeriv,
             const float3* positions, const float* periodicBoxVectors,
             const RadialFunction* radialFunctions, const int* atomSpecies, bool torchani) {
-    const int warp = (blockIdx.x*blockDim.x+threadIdx.x)/32;
-    const int indexInWarp = threadIdx.x%32;
-    const int numWarps = (gridDim.x*blockDim.x)/32;
     const float3 invBoxSize = (PERIODIC ? make_float3(1/periodicBoxVectors[0], 1/periodicBoxVectors[4], 1/periodicBoxVectors[8]) : make_float3(0, 0, 0));
     const int c1 = numRadial;
     const int c2 = numSpecies*c1;
     const float radialCutoff2 = radialCutoff*radialCutoff;
     const float globalScale = (torchani ? 0.25f : 1.0f);
 
-    // Each warp loops over atoms.
+    // Each thread block loops over atoms.
 
-    for (int atom1 = warp; atom1 < numAtoms; atom1 += numWarps) {
+    for (int atom1 = blockIdx.x; atom1 < numAtoms; atom1 += gridDim.x) {
         float3 pos1 = positions[atom1];
         float3 posDeriv1 = make_float3(0, 0, 0);
 
-        // The threads in the warp loop over second atoms.
+        // The threads in the block loop over second atoms.
 
-        for (int atom2 = indexInWarp; atom2 < numAtoms; atom2 += 32) {
+        for (int atom2 = atom1+1+threadIdx.x; atom2 < numAtoms; atom2 += blockDim.x) {
             float3 pos2 = positions[atom2];
             float3 delta;
             float r2;
@@ -387,11 +422,12 @@ __global__ void backpropRadialFunctions(int numAtoms, int numSpecies, int numRad
 
             // Compute the derivatives of the symmetry functions.
 
-            if (r2 < radialCutoff2 && atom1 != atom2) {
+            if (r2 < radialCutoff2) {
                 float r = sqrtf(r2);
                 float rInv = 1/r;
                 float cutoff = cutoffFunction(r, radialCutoff);
                 float dCdR = cutoffDeriv(r, radialCutoff);
+                float3 posDeriv2 = make_float3(0, 0, 0);
                 for (int i = 0; i < numRadial; i++) {
                     const RadialFunction fn = radialFunctions[i];
                     float shifted = r-fn.rs;
@@ -399,10 +435,16 @@ __global__ void backpropRadialFunctions(int numAtoms, int numSpecies, int numRad
                     float dVdR = dCdR*expTerm - cutoff*2*fn.eta*shifted*expTerm;
                     float dEdV = radialDeriv[atom1*c2 + atomSpecies[atom2]*c1 + i] + radialDeriv[atom2*c2 + atomSpecies[atom1]*c1 + i];
                     float scale = globalScale * dEdV * dVdR * rInv;
-                    posDeriv1.x += scale*delta.x;
-                    posDeriv1.y += scale*delta.y;
-                    posDeriv1.z += scale*delta.z;
+                    posDeriv1.x -= scale*delta.x;
+                    posDeriv1.y -= scale*delta.y;
+                    posDeriv1.z -= scale*delta.z;
+                    posDeriv2.x += scale*delta.x;
+                    posDeriv2.y += scale*delta.y;
+                    posDeriv2.z += scale*delta.z;
                 }
+                atomicAdd(&positionDeriv[3*atom2], posDeriv2.x);
+                atomicAdd(&positionDeriv[3*atom2+1], posDeriv2.y);
+                atomicAdd(&positionDeriv[3*atom2+2], posDeriv2.z);
             }
         }
         for (int offset = 16; offset > 0; offset /= 2) {
@@ -410,10 +452,10 @@ __global__ void backpropRadialFunctions(int numAtoms, int numSpecies, int numRad
             posDeriv1.y += __shfl_down_sync(0xFFFFFFFF, posDeriv1.y, offset);
             posDeriv1.z += __shfl_down_sync(0xFFFFFFFF, posDeriv1.z, offset);
         }
-        if (indexInWarp == 0) {
-            positionDeriv[3*atom1] -= posDeriv1.x;
-            positionDeriv[3*atom1+1] -= posDeriv1.y;
-            positionDeriv[3*atom1+2] -= posDeriv1.z;
+        if (threadIdx.x%32 == 0) {
+            atomicAdd(&positionDeriv[3*atom1], posDeriv1.x);
+            atomicAdd(&positionDeriv[3*atom1+1], posDeriv1.y);
+            atomicAdd(&positionDeriv[3*atom1+2], posDeriv1.z);
         }
     }
 }
@@ -423,24 +465,21 @@ __global__ void backpropAngularFunctions(int numAtoms, int numSpecies, int numAn
             const float* angularDeriv, float* positionDeriv, int* neighbors, int* neighborCount,
             const float3* positions, const float* periodicBoxVectors, const AngularFunction* angularFunctions,
             const int* atomSpecies, const int* angularIndex) {
-    const int warp = (blockIdx.x*blockDim.x+threadIdx.x)/32;
-    const int indexInWarp = threadIdx.x%32;
-    const int numWarps = (gridDim.x*blockDim.x)/32;
     const float3 invBoxSize = (PERIODIC ? make_float3(1/periodicBoxVectors[0], 1/periodicBoxVectors[4], 1/periodicBoxVectors[8]) : make_float3(0, 0, 0));
     const int c1 = numAngular;
     const int c2 = numSpecies*(numSpecies+1)*c1/2;
 
-    // Each warp loops over atoms.
+    // Each thread block loops over atoms.
 
-    for (int atom1 = warp; atom1 < numAtoms; atom1 += numWarps) {
+    for (int atom1 = blockIdx.x; atom1 < numAtoms; atom1 += gridDim.x) {
         float3 pos1 = positions[atom1];
         float3 posDeriv1 = make_float3(0, 0, 0);
         int numNeighbors = neighborCount[atom1];
 
-        // The threads in the warp loop over pairs of atoms from the neighbor list.
+        // The threads in the block loop over pairs of atoms from the neighbor list.
 
         int numPairs = numNeighbors*(numNeighbors-1)/2;
-        for (int pair = indexInWarp; pair < numPairs; pair += 32) {
+        for (int pair = threadIdx.x; pair < numPairs; pair += blockDim.x) {
             int i = (int) floorf(numNeighbors-0.5f-sqrtf((numNeighbors-0.5f)*(numNeighbors-0.5f)-2*pair));
             int j = pair - i*numNeighbors + (i+1)*(i+2)/2;
             int atom2 = neighbors[atom1*numAtoms + i];
@@ -538,7 +577,7 @@ __global__ void backpropAngularFunctions(int numAtoms, int numSpecies, int numAn
             posDeriv1.y += __shfl_down_sync(0xFFFFFFFF, posDeriv1.y, offset);
             posDeriv1.z += __shfl_down_sync(0xFFFFFFFF, posDeriv1.z, offset);
         }
-        if (indexInWarp == 0) {
+        if (threadIdx.x%32 == 0) {
             atomicAdd(&positionDeriv[3*atom1], posDeriv1.x);
             atomicAdd(&positionDeriv[3*atom1+1], posDeriv1.y);
             atomicAdd(&positionDeriv[3*atom1+2], posDeriv1.z);
@@ -547,44 +586,76 @@ __global__ void backpropAngularFunctions(int numAtoms, int numSpecies, int numAn
 }
 
 void CudaANISymmetryFunctions::backprop(const float* radialDeriv, const float* angularDeriv, float* positionDeriv) {
+    int numRadial = radialFunctions.size();
+    int numAngular = angularFunctions.size();
+
+    // If the input and output arrays point to device memory, we can access them directly.
+    // Otherwise, we'll need to perform extra copies.
+
+    bool posOnDevice;
+    const float* radialPtr;
+    const float* angularPtr;
+    float* posPtr;
+    cudaPointerAttributes attrib;
+    cudaError_t result = cudaPointerGetAttributes(&attrib, radialDeriv);
+    if (result != cudaSuccess || attrib.devicePointer == 0) {
+        CHECK_RESULT(cudaMemcpyAsync(radialValues, radialDeriv, numAtoms*numSpecies*numRadial*sizeof(float), cudaMemcpyDefault));
+        radialPtr = radialValues;
+    }
+    else
+        radialPtr = (float*) attrib.devicePointer;
+    result = cudaPointerGetAttributes(&attrib, angularDeriv);
+    if (result != cudaSuccess || attrib.devicePointer == 0) {
+        CHECK_RESULT(cudaMemcpyAsync(angularValues, angularDeriv, numAtoms*(numSpecies*(numSpecies+1))*numAngular*sizeof(float)/2, cudaMemcpyDefault));
+        angularPtr = angularValues;
+    }
+    else
+        angularPtr = (float*) attrib.devicePointer;
+    result = cudaPointerGetAttributes(&attrib, positionDeriv);
+    if (result != cudaSuccess || attrib.devicePointer == 0) {
+        posOnDevice = false;
+        posPtr = positionDerivValues;
+    }
+    else {
+        posOnDevice = true;
+        posPtr = (float*) attrib.devicePointer;
+    }
+
     // Clear the output array.
 
-    CHECK_RESULT(cudaMemcpyAsync(radialValues, radialDeriv, numAtoms*numSpecies*radialFunctions.size()*sizeof(float), cudaMemcpyDefault));
-    CHECK_RESULT(cudaMemcpyAsync(angularValues, angularDeriv, numAtoms*(numSpecies*(numSpecies+1))*angularFunctions.size()*sizeof(float)/2, cudaMemcpyDefault));
-    CHECK_RESULT(cudaMemsetAsync(positionDerivValues, 0, numAtoms*sizeof(float3)));
+    CHECK_RESULT(cudaMemsetAsync(posPtr, 0, numAtoms*sizeof(float3)));
 
     // Backpropagate through the symmetry functions.
 
-    int blockSize = 128;
-    int numBlocks = min(maxBlocks, (int) ceil(numAtoms/4.0));
-    int numRadial = radialFunctions.size();
-    int numAngular = angularFunctions.size();
+    int blockSize = 192;
+    int numBlocks = min(maxBlocks, numAtoms);
     if (periodic) {
         if (triclinic) {
-            backpropRadialFunctions<true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, radialValues, positionDerivValues, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray, torchani);
+            backpropRadialFunctions<true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, radialPtr, posPtr, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray, torchani);
             if (torchani)
-                backpropAngularFunctions<true, true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, positionDerivValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                backpropAngularFunctions<true, true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
             else
-                backpropAngularFunctions<true, true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, positionDerivValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                backpropAngularFunctions<true, true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
         }
         else {
-            backpropRadialFunctions<true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, radialValues, positionDerivValues, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray, torchani);
+            backpropRadialFunctions<true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, radialPtr, posPtr, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray, torchani);
             if (torchani)
-                backpropAngularFunctions<true, false, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, positionDerivValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                backpropAngularFunctions<true, false, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
             else
-                backpropAngularFunctions<true, false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, positionDerivValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                backpropAngularFunctions<true, false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
         }
     }
     else {
-        backpropRadialFunctions<false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, radialValues, positionDerivValues, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray, torchani);
+        backpropRadialFunctions<false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, radialPtr, posPtr, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray, torchani);
         if (torchani)
-            backpropAngularFunctions<false, false, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, positionDerivValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+            backpropAngularFunctions<false, false, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
         else
-            backpropAngularFunctions<false, false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularValues, positionDerivValues, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+            backpropAngularFunctions<false, false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
     }
 
     // Copy the final values to the destination memory.
 
-    CHECK_RESULT(cudaMemcpyAsync(positionDeriv, positionDerivValues, numAtoms*sizeof(float3), cudaMemcpyDefault));
+    if (!posOnDevice)
+        CHECK_RESULT(cudaMemcpyAsync(positionDeriv, positionDerivValues, numAtoms*sizeof(float3), cudaMemcpyDefault));
 }
 
