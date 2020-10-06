@@ -145,18 +145,18 @@ public:
     };
 };
 
-static torch::autograd::tensor_list ANISymmetryFunction(int64_t numSpecies,
-                                                        double Rcr,
-                                                        double Rca,
-                                                        const std::vector<double>& EtaR,
-                                                        const std::vector<double>& ShfR,
-                                                        const std::vector<double>& EtaA,
-                                                        const std::vector<double>& Zeta,
-                                                        const std::vector<double>& ShfA,
-                                                        const std::vector<double>& ShfZ,
-                                                        const std::vector<int64_t>& atomSpecies,
-                                                        const torch::Tensor& positions,
-                                                        const torch::optional<torch::Tensor>& periodicBoxVectors) {
+static torch::autograd::tensor_list ANISymmetryFunctionsOp(int64_t numSpecies,
+                                                           double Rcr,
+                                                           double Rca,
+                                                           const std::vector<double>& EtaR,
+                                                           const std::vector<double>& ShfR,
+                                                           const std::vector<double>& EtaA,
+                                                           const std::vector<double>& Zeta,
+                                                           const std::vector<double>& ShfA,
+                                                           const std::vector<double>& ShfZ,
+                                                           const std::vector<int64_t>& atomSpecies,
+                                                           const torch::Tensor& positions,
+                                                           const torch::optional<torch::Tensor>& periodicBoxVectors) {
 
     return GradANISymmetryFunction::apply(numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies, positions, periodicBoxVectors);
 }
@@ -176,5 +176,5 @@ TORCH_LIBRARY(NNPOps, m) {
                          const torch::Tensor&>())        // positions
         .def("forward", &CustomANISymmetryFunctions::forward)
         .def("backward", &CustomANISymmetryFunctions::backward);
-    m.def("ANISymmetryFunction", ANISymmetryFunction);
+    m.def("ANISymmetryFunctions", ANISymmetryFunctionsOp);
 }
