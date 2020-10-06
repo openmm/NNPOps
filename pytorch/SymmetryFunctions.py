@@ -31,35 +31,34 @@ torch.ops.load_library('libNNPOpsPyTorch.so')
 
 class ANISymmetryFunctions(torch.nn.Module):
 
-    def __init__(self, numSpecies: int,
-                              Rcr: float,
-                              Rca: float,
-                             EtaR: List[float],
-                             ShfR: List[float],
-                             EtaA: List[float],
-                             Zeta: List[float],
-                             ShfA: List[float],
-                             ShfZ: List[float]):
+    def __init__(self, symmFunc: torchani.AEVComputer):
 
         super().__init__()
 
-        self.numSpecies = numSpecies
-        self.Rcr = Rcr
-        self.Rca = Rca
-        self.EtaR = EtaR
-        self.ShfR = ShfR
-        self.EtaA = EtaA
-        self.Zeta = Zeta
-        self.ShfA = ShfA
-        self.ShfZ = ShfZ
+        self.numSpecies = symmFunc.num_species
+        self.Rcr = symmFunc.Rcr
+        self.Rca = symmFunc.Rca
+        self.EtaR = symmFunc.EtaR[:, 0].tolist()
+        self.ShfR = symmFunc.ShfR[0, :].tolist()
+        self.EtaA = symmFunc.EtaA[:, 0, 0, 0].tolist()
+        self.Zeta = symmFunc.Zeta[0, :, 0, 0].tolist()
+        self.ShfA = symmFunc.ShfA[0, 0, :, 0].tolist()
+        self.ShfZ = symmFunc.ShfZ[0, 0, 0, :].tolist()
 
     def forward(self, speciesAndPositions: Tuple[Tensor, Tensor],
                       cell: Optional[Tensor] = None,
                       pbc: Optional[Tensor] = None) -> SpeciesAEV:
 
         species, positions = speciesAndPositions
-        if cell and pbc.tolist() != [True, True, True]:
-            raise ValueError('Only fully periodic systems are supported, i.e. pbc = [True, True, True]')
+        if species.shape[0] != 1:
+            raise ValueError('Batched molecule computations is not supported')
+        if species.shape + (3,) != positions.shape:
+            raise ValueError('Inconsistent shapes of "species" and "positions"')
+        if cell:
+            if cell.shape != (3, 3):
+                raise ValueError('"cell" shape has to be [3, 3]')
+            if pbc.tolist() != [True, True, True]:
+                raise ValueError('Only fully periodic systems are supported, i.e. pbc = [True, True, True]')
 
         symFunc = torch.ops.NNPOps.ANISymmetryFunctions
         radial, angular = symFunc(self.numSpecies, self.Rcr, self.Rca, self.EtaR, self.ShfR,
@@ -68,17 +67,3 @@ class ANISymmetryFunctions(torch.nn.Module):
         features = torch.cat((radial, angular), dim=1).unsqueeze(0)
 
         return SpeciesAEV(species, features)
-
-def convertSymmetryFunctions(symmFunc: torchani.AEVComputer) -> ANISymmetryFunctions:
-
-    numSpecies = symmFunc.num_species
-    Rcr = symmFunc.Rcr
-    Rca = symmFunc.Rca
-    EtaR = symmFunc.EtaR[:, 0].tolist()
-    ShfR = symmFunc.ShfR[0, :].tolist()
-    EtaA = symmFunc.EtaA[:, 0, 0, 0].tolist()
-    Zeta = symmFunc.Zeta[0, :, 0, 0].tolist()
-    ShfA = symmFunc.ShfA[0, 0, :, 0].tolist()
-    ShfZ = symmFunc.ShfZ[0, 0, 0, :].tolist()
-
-    return ANISymmetryFunctions(numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ)
