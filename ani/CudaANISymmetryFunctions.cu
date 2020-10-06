@@ -76,6 +76,8 @@ CudaANISymmetryFunctions::~CudaANISymmetryFunctions() {
         cudaFree(positions);
     if (neighbors != 0)
         cudaFree(neighbors);
+    if (neighborCount != 0)
+        cudaFree(neighborCount);
     if (periodicBoxVectors != 0)
         cudaFree(periodicBoxVectors);
     if (angularIndex != 0)
