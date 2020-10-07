@@ -23,6 +23,7 @@
 
 import mdtraj
 import pytest
+import tempfile
 import torch
 import torchani
 
@@ -50,3 +51,34 @@ def test_compare_with_native(deviceString):
 
     assert torch.abs((energy - energy_ref)/energy_ref) < 1e-7
     assert torch.max(torch.abs((grad - grad_ref)/grad_ref)) < 6e-4
+
+@pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
+def test_model_serialization(deviceString):
+
+    import SymmetryFunctions
+
+    device = torch.device(deviceString)
+
+    mol = mdtraj.load('molecules/2iuz_ligand.mol2')
+    atomicNumbers = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
+    atomicPositions = torch.tensor(mol.xyz, dtype=torch.float32, requires_grad=True, device=device)
+
+    nnp_ref = torchani.models.ANI2x(periodic_table_index=True).to(device)
+    nnp_ref.aev_computer = SymmetryFunctions.TorchANISymmetryFunctions(nnp_ref.aev_computer)
+
+    energy_ref = nnp_ref((atomicNumbers, atomicPositions)).energies
+    energy_ref.backward()
+    grad_ref = atomicPositions.grad.clone()
+
+    with tempfile.NamedTemporaryFile() as fd:
+
+        torch.jit.script(nnp_ref).save(fd.name)
+        nnp = torch.jit.load(fd.name)
+
+        energy = nnp((atomicNumbers, atomicPositions)).energies
+        atomicPositions.grad.zero_()
+        energy.backward()
+        grad = atomicPositions.grad.clone()
+
+    assert torch.abs((energy - energy_ref)/energy_ref) < 1e-10
+    assert torch.max(torch.abs((grad - grad_ref)/grad_ref)) < 5e-5
