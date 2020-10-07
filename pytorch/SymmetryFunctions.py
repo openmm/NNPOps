@@ -45,6 +45,8 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         self.ShfA = symmFunc.ShfA[0, 0, :, 0].tolist()
         self.ShfZ = symmFunc.ShfZ[0, 0, 0, :].tolist()
 
+        self.triu_index = torch.tensor([0]) # A dummy variable to make TorchScript happy ;)
+
     def forward(self, speciesAndPositions: Tuple[Tensor, Tensor],
                       cell: Optional[Tensor] = None,
                       pbc: Optional[Tensor] = None) -> SpeciesAEV:
@@ -52,18 +54,23 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         species, positions = speciesAndPositions
         if species.shape[0] != 1:
             raise ValueError('Batched molecule computation is not supported')
+        species_: List[int] = species[0].tolist() # Explicit type casting for TorchScript
         if species.shape + (3,) != positions.shape:
             raise ValueError('Inconsistent shapes of "species" and "positions"')
-        if cell:
+        if cell is not None:
             if cell.shape != (3, 3):
                 raise ValueError('"cell" shape has to be [3, 3]')
-            if pbc.tolist() != [True, True, True]:
-                raise ValueError('Only fully periodic systems are supported, i.e. pbc = [True, True, True]')
+            if pbc is None:
+                raise ValueError('"pbc" has to be defined')
+            else:
+                pbc_: List[bool] = pbc.tolist() # Explicit type casting for TorchScript
+                if pbc_ != [True, True, True]:
+                    raise ValueError('Only fully periodic systems are supported, i.e. pbc = [True, True, True]')
 
         symFunc = torch.ops.NNPOps.ANISymmetryFunctions
         radial, angular = symFunc(self.numSpecies, self.Rcr, self.Rca, self.EtaR, self.ShfR,
                                   self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
-                                  species.tolist()[0], positions[0], cell)
+                                  species_, positions[0], cell)
         features = torch.cat((radial, angular), dim=1).unsqueeze(0)
 
         return SpeciesAEV(species, features)
