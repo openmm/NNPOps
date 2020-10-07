@@ -29,7 +29,7 @@ from torchani.aev import SpeciesAEV
 
 torch.ops.load_library('libNNPOpsPyTorch.so')
 
-class ANISymmetryFunctions(torch.nn.Module):
+class TorchANISymmetryFunctions(torch.nn.Module):
 
     def __init__(self, symmFunc: torchani.AEVComputer):
 
@@ -51,7 +51,7 @@ class ANISymmetryFunctions(torch.nn.Module):
 
         species, positions = speciesAndPositions
         if species.shape[0] != 1:
-            raise ValueError('Batched molecule computations is not supported')
+            raise ValueError('Batched molecule computation is not supported')
         if species.shape + (3,) != positions.shape:
             raise ValueError('Inconsistent shapes of "species" and "positions"')
         if cell:
