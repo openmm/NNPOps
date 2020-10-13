@@ -24,7 +24,7 @@ Also provided is a program for benchmarking the performance of the CUDA implemen
 Compile it with
 
 ```
-/usr/local/cuda/bin/nvcc --std=c++11 BenchmarkCudaANISymmetryFunctions.cu CudaANISymmetryFunctions.cu
+nvcc --std=c++11 BenchmarkCudaANISymmetryFunctions.cu CudaANISymmetryFunctions.cu
 ```
 
 When running it, provide two command line arguments: the path to a PDB file and

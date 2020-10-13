@@ -16,6 +16,6 @@ used in any context.
 in a generally efficient way, but no particular efforts have been made to tune them
 for optimum performance.
 
-5. This code is design for inference (running simulations), not training (creating
+5. This code is designed for inference (running simulations), not training (creating
 new potential functions).  It computes gradients with respect to particle positions,
 not model parameters.
