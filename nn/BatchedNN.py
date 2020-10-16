@@ -23,6 +23,10 @@ class TorchANIBatchedNNs(torch.nn.Module):
             self.register_parameter(f'layer{ilayer}_weights', weights)
             self.register_parameter(f'layer{ilayer}_biases', biases)
 
+        # Disable autograd for the parameters
+        for parameter in self.parameters():
+            parameter.requires_grad = False
+
     @staticmethod
     def batchLinearLayers(layers: List[List[nn.Linear]]) -> Tuple[nn.Parameter, nn.Parameter]:
 
