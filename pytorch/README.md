@@ -3,6 +3,10 @@
 ## Usage
 
 ```python
+import mdtraj
+import torch
+import torchani
+
 from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
 
 device = torch.device('cuda')
