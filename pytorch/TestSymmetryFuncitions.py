@@ -27,11 +27,11 @@ import tempfile
 import torch
 import torchani
 
+from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
+
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
 @pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
 def test_compare_with_native(deviceString, molFile):
-
-    import SymmetryFunctions
 
     device = torch.device(deviceString)
 
@@ -44,7 +44,7 @@ def test_compare_with_native(deviceString, molFile):
     energy_ref.backward()
     grad_ref = atomicPositions.grad.clone()
 
-    nnp.aev_computer = SymmetryFunctions.TorchANISymmetryFunctions(nnp.aev_computer)
+    nnp.aev_computer = TorchANISymmetryFunctions(nnp.aev_computer)
     energy = nnp((atomicNumbers, atomicPositions)).energies
     atomicPositions.grad.zero_()
     energy.backward()
@@ -60,8 +60,6 @@ def test_compare_with_native(deviceString, molFile):
 @pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
 def test_model_serialization(deviceString, molFile):
 
-    import SymmetryFunctions
-
     device = torch.device(deviceString)
 
     mol = mdtraj.load(f'molecules/{molFile}_ligand.mol2')
@@ -69,7 +67,7 @@ def test_model_serialization(deviceString, molFile):
     atomicPositions = torch.tensor(mol.xyz, dtype=torch.float32, requires_grad=True, device=device)
 
     nnp_ref = torchani.models.ANI2x(periodic_table_index=True).to(device)
-    nnp_ref.aev_computer = SymmetryFunctions.TorchANISymmetryFunctions(nnp_ref.aev_computer)
+    nnp_ref.aev_computer = TorchANISymmetryFunctions(nnp_ref.aev_computer)
 
     energy_ref = nnp_ref((atomicNumbers, atomicPositions)).energies
     energy_ref.backward()

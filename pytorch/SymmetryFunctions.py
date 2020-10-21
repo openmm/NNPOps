@@ -21,13 +21,14 @@
 # SOFTWARE.
 #
 
+import os.path
 from typing import List, Optional, Tuple
 import torch
 from torch import Tensor
 import torchani
 from torchani.aev import SpeciesAEV
 
-torch.ops.load_library('libNNPOpsPyTorch.so')
+torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 
 class TorchANISymmetryFunctions(torch.nn.Module):
 
