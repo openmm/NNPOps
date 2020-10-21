@@ -28,13 +28,14 @@ import torch
 import torchani
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
-def test_compare_with_native(deviceString):
+@pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
+def test_compare_with_native(deviceString, molFile):
 
     import SymmetryFunctions
 
     device = torch.device(deviceString)
 
-    mol = mdtraj.load('molecules/2iuz_ligand.mol2')
+    mol = mdtraj.load(f'molecules/{molFile}_ligand.mol2')
     atomicNumbers = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
     atomicPositions = torch.tensor(mol.xyz, dtype=torch.float32, requires_grad=True, device=device)
 
@@ -49,17 +50,21 @@ def test_compare_with_native(deviceString):
     energy.backward()
     grad = atomicPositions.grad.clone()
 
-    assert torch.abs((energy - energy_ref)/energy_ref) < 1e-7
-    assert torch.max(torch.abs((grad - grad_ref)/grad_ref)) < 6e-4
+    energy_error = torch.abs((energy - energy_ref)/energy_ref)
+    grad_error = torch.max(torch.abs((grad - grad_ref)/grad_ref))
+
+    assert energy_error < 5e-7
+    assert grad_error < 5e-3
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
-def test_model_serialization(deviceString):
+@pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
+def test_model_serialization(deviceString, molFile):
 
     import SymmetryFunctions
 
     device = torch.device(deviceString)
 
-    mol = mdtraj.load('molecules/2iuz_ligand.mol2')
+    mol = mdtraj.load(f'molecules/{molFile}_ligand.mol2')
     atomicNumbers = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
     atomicPositions = torch.tensor(mol.xyz, dtype=torch.float32, requires_grad=True, device=device)
 
@@ -80,5 +85,8 @@ def test_model_serialization(deviceString):
         energy.backward()
         grad = atomicPositions.grad.clone()
 
-    assert torch.abs((energy - energy_ref)/energy_ref) < 1e-10
-    assert torch.max(torch.abs((grad - grad_ref)/grad_ref)) < 5e-5
+    energy_error = torch.abs((energy - energy_ref)/energy_ref)
+    grad_error = torch.max(torch.abs((grad - grad_ref)/grad_ref))
+
+    assert energy_error < 5e-7
+    assert grad_error < 5e-3
