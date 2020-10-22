@@ -1,8 +1,10 @@
 # PyTorch wrapper for NNPOps
 
+*NNPOps* functionalities are available in *PyTorch* (https://pytorch.org/).
+
 ## Optimized TorchANI symmetry functions
 
-Optimized drop-in replacement for torchani.AEVComputer (https://aiqm.github.io/torchani/api.html?highlight=speciesaev#torchani.AEVComputer)
+Optimized drop-in replacement for `torchani.AEVComputer` (https://aiqm.github.io/torchani/api.html?highlight=speciesaev#torchani.AEVComputer)
 
 ### Example
 
