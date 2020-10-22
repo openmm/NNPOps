@@ -1,6 +1,10 @@
 # PyTorch wrapper for NNPOps
 
-## Usage
+## Optimized TorchANI symmetry functions
+
+Optimized drop-in replacement for torchani.AEVComputer (https://aiqm.github.io/torchani/api.html?highlight=speciesaev#torchani.AEVComputer)
+
+### Example
 
 ```python
 import mdtraj
