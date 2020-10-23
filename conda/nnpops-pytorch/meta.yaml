@@ -1,0 +1,53 @@
+{% set name = "nnpops-pytorch" %}
+{% set version = "0.0.0a0" %}
+{% set build = 0 %}
+
+package:
+  name: {{ name }}
+  version: {{ version }}
+
+source:
+  path: ../..
+
+build:
+  number: {{ build }}
+  rpaths:
+    - lib/
+    # Note: $PY_VER isn't expanded here
+    - lib/python3.6/site-packages/torch/lib/ # [py==36]
+    - lib/python3.7/site-packages/torch/lib/ # [py==37]
+    - lib/python3.8/site-packages/torch/lib/ # [py==38]
+    - lib/python3.9/site-packages/torch/lib/ # [py==39]
+  script:
+    - cmake $SRC_DIR/pytorch
+            -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
+            -DCMAKE_CUDA_HOST_COMPILER=$CXX
+            -DTorch_DIR=$PREFIX/lib/python$PY_VER/site-packages/torch/share/cmake/Torch
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_INSTALL_PREFIX=$PREFIX
+    - make install VERBOSE=1
+
+requirements:
+  build:
+    - {{ compiler('cxx') }}
+    - cmake
+    - make
+  host:
+    - python
+    - pytorch
+  run:
+    - python
+    - pytorch
+    - torchani
+
+test:
+  requires:
+    - conda-build
+    - mdtraj
+    - pytest
+  source_files:
+    - pytorch/molecules
+    - pytorch/TestSymmetryFunctions.py
+  commands:
+    - conda inspect linkages {{ name }}
+    - cd pytorch && pytest TestSymmetryFunctions.py
