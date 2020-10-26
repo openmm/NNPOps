@@ -39,7 +39,6 @@ requirements:
     - python
     - pytorch >=1.5
   run:
-    - python
     - pytorch >=1.5
     - torchani >=2.2
 
