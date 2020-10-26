@@ -53,3 +53,9 @@ test:
   commands:
     - conda inspect linkages {{ name }}
     - cd pytorch && pytest TestSymmetryFunctions.py
+
+about:
+  home: https://github.com/peastman/NNPOps
+  license: MIT
+  license_file: LICENSE
+  summary: Optimized operations for the neural network potentials
