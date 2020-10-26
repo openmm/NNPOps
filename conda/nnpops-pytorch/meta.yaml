@@ -29,8 +29,8 @@ build:
 
 requirements:
   build:
-    - {{ compiler('cxx') }}
     - cmake
+    - gxx_linux-64 <9 # CUDA 10.2 doesn't support GCC 9
     - make
   # Version specifications according to https://github.com/openmm/openmm-torch/issues/14
   host:
