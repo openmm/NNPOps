@@ -91,7 +91,7 @@ void CpuCFConvNeighbors::build(const float* positions, const float* periodicBoxV
 template <bool PERIODIC, bool TRICLINIC>
 void CpuCFConvNeighbors::findNeighbors(const float* positions, const float* periodicBoxVectors) {
     float invBoxSize[3];
-    if (periodic) {
+    if (getPeriodic()) {
         invBoxSize[0] = 1/periodicBoxVectors[0];
         invBoxSize[1] = 1/periodicBoxVectors[4];
         invBoxSize[2] = 1/periodicBoxVectors[8];
@@ -103,16 +103,13 @@ void CpuCFConvNeighbors::findNeighbors(const float* positions, const float* peri
 
     float cutoff2 = getCutoff()*getCutoff();
     for (int atom1 = 0; atom1 < getNumAtoms(); atom1++) {
-        for (int atom2 = atom1+1; atom2 < getNumAtoms*(); atom2++) {
+        for (int atom2 = atom1+1; atom2 < getNumAtoms(); atom2++) {
             float delta[3];
             float r2;
             computeDisplacement<PERIODIC, TRICLINIC>(&positions[3*atom1], &positions[3*atom2], delta, r2, periodicBoxVectors, invBoxSize);
             if (r2 < cutoff2) {
                 neighbors[atom1].push_back(atom2);
-                neighbors[atom2].push_back(atom1);
-                float r = sqrtf(r2);
-                neighborDistances[atom1].push_back(r);
-                neighborDistances[atom2].push_back(r);
+                neighborDistances[atom1].push_back(sqrtf(r2));
             }
         }
     }
@@ -138,14 +135,15 @@ void CpuCFConv::compute(const CFConvNeighbors& neighbors, const float* positions
     // Loop over pairs of atoms from the neighbor list.
 
     for (int atom1 = 0; atom1 < getNumAtoms(); atom1++) {
-        for (int atom2 : cpuNeighbors.getNeighbors()[atom1]) {
-            float r = cpuNeighbors.getNeighborDistances()[atom1][atom2];
+        for (int neighborIndex = 0; neighborIndex < cpuNeighbors.getNeighbors()[atom1].size(); neighborIndex++) {
+            int atom2 = cpuNeighbors.getNeighbors()[atom1][neighborIndex];
+            float r = cpuNeighbors.getNeighborDistances()[atom1][neighborIndex];
 
             // Compute the Gaussian basis functions.
 
             for (int i = 0; i < getNumGaussians(); i++) {
                 float x = (r-gaussianPos[i])/getGaussianWidth();
-                gaussian[i] = exp(-x*x);
+                gaussian[i] = exp(-0.5f*x*x);
             }
 
             // Apply the first dense layer.
@@ -159,9 +157,7 @@ void CpuCFConv::compute(const CFConvNeighbors& neighbors, const float* positions
 
             // Apply the second dense layer.
 
-            float cutoffScale = 1;
-            if (getCutoff())
-                cutoffScale = 0.5f * (cosf(r*M_PI/getCutoff()) + 1);
+            float cutoffScale = 0.5f * (cosf(r*M_PI/getCutoff()) + 1);
             for (int i = 0; i < getWidth(); i++) {
                 float sum = b2[i];
                 for (int j = 0; j < getWidth(); j++)
@@ -179,7 +175,8 @@ void CpuCFConv::compute(const CFConvNeighbors& neighbors, const float* positions
     }
 }
 
-// void CpuCFConv::backprop(const float* radialDeriv, const float* angularDeriv, float* positionDeriv) {
+void CpuCFConv::backprop(const CFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
+                 const float* outputDeriv, float* inputDeriv, float* positionDeriv, const float* w1, const float* b1, const float* w2, const float* b2) {
 //     // Clear the output array.
 
 //     memset(positionDeriv, 0, numAtoms*3*sizeof(float));
@@ -209,7 +206,7 @@ void CpuCFConv::compute(const CFConvNeighbors& neighbors, const float* positions
 //         else
 //             backpropAngularFunctions<false, false, false>(angularDeriv, positionDeriv);
 //     }
-// }
+}
 
 // template <bool PERIODIC, bool TRICLINIC>
 // void CpuCFConv::backpropRadialFunctions(const float* radialDeriv, float* positionDeriv) {

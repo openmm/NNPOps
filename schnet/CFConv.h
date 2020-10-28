@@ -58,7 +58,7 @@ private:
     int numAtoms;
     float cutoff;
     bool periodic;
-}
+};
 
 class CFConv {
 public:
