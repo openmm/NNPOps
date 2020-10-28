@@ -21,9 +21,16 @@
  * SOFTWARE.
  */
 
+#include <stdexcept>
+#include <cuda_runtime.h>
 #include <torch/script.h>
 #include "CpuANISymmetryFunctions.h"
 #include "CudaANISymmetryFunctions.h"
+
+#define CHECK_CUDA_RESULT(result) \
+    if (result != cudaSuccess) { \
+        throw std::runtime_error(std::string("Encountered error ")+cudaGetErrorName(result)+" at "+__FILE__+":"+std::to_string(__LINE__));\
+    }
 
 class CustomANISymmetryFunctions : public torch::CustomClassHolder {
 public:
@@ -56,10 +63,14 @@ public:
                     for (const float thetas: ShfZ)
                         angularFunctions.push_back({eta, rs, zeta, thetas});
 
-        if (tensorOptions.device().is_cpu())
+        const torch::Device& device = tensorOptions.device();
+        if (device.is_cpu())
             symFunc = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
-        if (tensorOptions.device().is_cuda())
+        if (device.is_cuda()) {
+            // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
+            CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
             symFunc = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
+        }
 
         radial  = torch::empty({numAtoms, numSpecies * (int)radialFunctions.size()}, tensorOptions);
         angular = torch::empty({numAtoms, numSpecies * (numSpecies + 1) / 2 * (int)angularFunctions.size()}, tensorOptions);
