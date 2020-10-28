@@ -37,7 +37,7 @@ requirements:
     - cudatoolkit 10.2.*
     - cudnn # A buid dependency for PyTorch
     - python
-    - pytorch >=1.5
+    - pytorch 1.6.*
   run:
     - pytorch >=1.5
     - torchani >=2.2
