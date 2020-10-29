@@ -39,14 +39,12 @@ def test_compare_with_native(deviceString, molFile):
     atomicNumbers = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
     atomicPositions = torch.tensor(mol.xyz, dtype=torch.float32, requires_grad=True, device=device)
 
-    elements = [atom.element.symbol for atom in mol.top.atoms]
-
     nnp = torchani.models.ANI2x(periodic_table_index=True).to(device)
     energy_ref = nnp((atomicNumbers, atomicPositions)).energies
     energy_ref.backward()
     grad_ref = atomicPositions.grad.clone()
 
-    nnp.neural_networks = TorchANIBatchedNNs(nnp.neural_networks, elements).to(device)
+    nnp.neural_networks = TorchANIBatchedNNs(nnp.species_converter, nnp.neural_networks, atomicNumbers).to(device)
     energy = nnp((atomicNumbers, atomicPositions)).energies
     atomicPositions.grad.zero_()
     energy.backward()
@@ -68,10 +66,8 @@ def test_model_serialization(deviceString, molFile):
     atomicNumbers = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
     atomicPositions = torch.tensor(mol.xyz, dtype=torch.float32, requires_grad=True, device=device)
 
-    elements = [atom.element.symbol for atom in mol.top.atoms]
-
     nnp_ref = torchani.models.ANI2x(periodic_table_index=True).to(device)
-    nnp_ref.neural_networks = TorchANIBatchedNNs(nnp_ref.neural_networks, elements).to(device)
+    nnp_ref.neural_networks = TorchANIBatchedNNs(nnp_ref.species_converter, nnp_ref.neural_networks, atomicNumbers).to(device)
 
     energy_ref = nnp_ref((atomicNumbers, atomicPositions)).energies
     energy_ref.backward()

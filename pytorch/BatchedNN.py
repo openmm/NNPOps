@@ -26,22 +26,28 @@ from torch import nn
 from torch import Tensor
 from torch.nn import functional as F
 import torchani
-from torchani.nn import ANIModel, Ensemble, SpeciesEnergies
+from torchani.nn import ANIModel, Ensemble, SpeciesConverter, SpeciesEnergies
 from typing import List, Optional, Tuple, Union
 
 
 class TorchANIBatchedNNs(torch.nn.Module):
 
-    def __init__(self, ensemble: Union[ANIModel, Ensemble], elementSymbols: List[str]):
+    def __init__(self, converter: SpeciesConverter, ensemble: Union[ANIModel, Ensemble], atomicNumbers: List[int]):
 
         super().__init__()
+
+        # Convert atomic numbers to a list of species
+        species_list = converter((torch.tensor(atomicNumbers), torch.empty(0))).species[0].tolist()
 
         # Handle the case when the ensemble is just one model
         ensemble = [ensemble] if type(ensemble) == ANIModel else ensemble
 
+        # Convert models to the list of linear layers
+        models = [list(model.values()) for model in ensemble]
+
         # Extract the weihts and biases of the linear layers
         for ilayer in [0, 2, 4, 6]:
-            layers = [[model[symbol][ilayer] for symbol in elementSymbols] for model in ensemble]
+            layers = [[model[species][ilayer] for species in species_list] for model in models]
             weights, biases = self.batchLinearLayers(layers)
             self.register_parameter(f'layer{ilayer}_weights', weights)
             self.register_parameter(f'layer{ilayer}_biases', biases)
