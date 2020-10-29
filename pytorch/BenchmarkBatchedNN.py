@@ -26,8 +26,8 @@ import time
 import torch
 import torchani
 
-from BatchedNN import TorchANIBatchedNNs
 # from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
+from BatchedNN import TorchANIBatchedNN
 
 device = torch.device('cuda')
 
@@ -63,7 +63,7 @@ print(f'  Duration: {delta} s')
 print(f'  Speed: {delta/N*1000} ms/it')
 
 # nnp.aev_computer = TorchANISymmetryFunctions(nnp.aev_computer).to(device)
-nnp.neural_networks = TorchANIBatchedNNs(nnp.species_converter, nnp.neural_networks, species).to(device)
+nnp.neural_networks = TorchANIBatchedNN(nnp.species_converter, nnp.neural_networks, species).to(device)
 print(nnp)
 
 # torch.jit.script(nnp).save('nnp.pt')

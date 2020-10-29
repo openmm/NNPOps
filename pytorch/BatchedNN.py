@@ -30,7 +30,7 @@ from torchani.nn import ANIModel, Ensemble, SpeciesConverter, SpeciesEnergies
 from typing import List, Optional, Tuple, Union
 
 
-class TorchANIBatchedNNs(torch.nn.Module):
+class TorchANIBatchedNN(torch.nn.Module):
 
     def __init__(self, converter: SpeciesConverter, ensemble: Union[ANIModel, Ensemble], atomicNumbers: List[int]):
 
