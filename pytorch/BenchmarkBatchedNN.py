@@ -66,7 +66,8 @@ print(f'  Speed: {delta/N*1000} ms/it')
 nnp.neural_networks = TorchANIBatchedNN(nnp.species_converter, nnp.neural_networks, species).to(device)
 print(nnp)
 
-# torch.jit.script(nnp).save('nnp.pt')
+# nnp = torch.jit.script(nnp)
+# nnp.save('nnp.pt')
 # npp = torch.jit.load('nnp.pt')
 
 energy = nnp((species, positions)).energies
@@ -74,7 +75,7 @@ positions.grad.zero_()
 energy.backward()
 grad = positions.grad.clone()
 
-N = 20000
+N = 10000
 start = time.time()
 for _ in range(N):
     energy = nnp((species, positions)).energies
