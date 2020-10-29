@@ -49,10 +49,10 @@ test:
     - pytest
   source_files:
     - pytorch/molecules
-    - pytorch/TestSymmetryFunctions.py
+    - pytorch/Test*.py
   commands:
     - conda inspect linkages {{ name }}
-    - cd pytorch && pytest TestSymmetryFunctions.py
+    - cd pytorch && pytest Test*.py
 
 about:
   home: https://github.com/peastman/NNPOps
