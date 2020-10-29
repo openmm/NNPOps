@@ -19,4 +19,4 @@ target_include_directories(${LIBRARY} PRIVATE ../ani)
 target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${PYTHON_LIBRARIES})
 
 install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
-install(FILES SymmetryFunctions.py DESTINATION ${Python_SITEARCH}/${NAME})
+install(FILES BatchedNN.py SymmetryFunctions.py DESTINATION ${Python_SITEARCH}/${NAME})
