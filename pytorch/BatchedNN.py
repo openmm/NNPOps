@@ -32,12 +32,12 @@ from typing import List, Optional, Tuple, Union
 
 class TorchANIBatchedNN(torch.nn.Module):
 
-    def __init__(self, converter: SpeciesConverter, ensemble: Union[ANIModel, Ensemble], atomicNumbers: List[int]):
+    def __init__(self, converter: SpeciesConverter, ensemble: Union[ANIModel, Ensemble], atomicNumbers: Tensor):
 
         super().__init__()
 
         # Convert atomic numbers to a list of species
-        species_list = converter((torch.tensor(atomicNumbers), torch.empty(0))).species[0].tolist()
+        species_list = converter((atomicNumbers, torch.empty(0))).species[0].tolist()
 
         # Handle the case when the ensemble is just one model
         ensemble = [ensemble] if type(ensemble) == ANIModel else ensemble
