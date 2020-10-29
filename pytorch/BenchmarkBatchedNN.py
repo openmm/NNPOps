@@ -27,7 +27,7 @@ import torch
 import torchani
 
 # from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
-from BatchedNN import TorchANIBatchedNN
+from NNPOps.BatchedNN import TorchANIBatchedNN
 
 device = torch.device('cuda')
 

@@ -27,7 +27,7 @@ import tempfile
 import torch
 import torchani
 
-from BatchedNN import TorchANIBatchedNN
+from NNPOps.BatchedNN import TorchANIBatchedNN
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
 @pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
