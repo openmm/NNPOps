@@ -89,17 +89,13 @@ class TorchANIBatchedNN(torch.nn.Module):
         # Reshape: [num_mols, num_atoms, num_features] --> [num_mols, num_atoms, 1, num_features, 1]
         vectors = aev.unsqueeze(-2).unsqueeze(-1)
 
-        # vectors = torch.matmul(self.layer0_weights, vectors) + self.layer0_biases # Linear 0
-        vectors = batchedLinear(vectors, self.layer0_weights, self.layer0_biases)
+        vectors = batchedLinear(vectors, self.layer0_weights, self.layer0_biases) # Linear 0
         vectors = F.celu(vectors, alpha=0.1)                                      # CELU   1
-        #vectors = torch.matmul(self.layer2_weights, vectors) + self.layer2_biases # Linear 2
-        vectors = batchedLinear(vectors, self.layer2_weights, self.layer2_biases)
+        vectors = batchedLinear(vectors, self.layer2_weights, self.layer2_biases) # Linear 2
         vectors = F.celu(vectors, alpha=0.1)                                      # CELU   3
-        #vectors = torch.matmul(self.layer4_weights, vectors) + self.layer4_biases # Linear 4
-        vectors = batchedLinear(vectors, self.layer4_weights, self.layer4_biases)
+        vectors = batchedLinear(vectors, self.layer4_weights, self.layer4_biases) # Linear 4
         vectors = F.celu(vectors, alpha=0.1)                                      # CELU   5
-        #vectors = torch.matmul(self.layer6_weights, vectors) + self.layer6_biases # Linear 6
-        vectors = batchedLinear(vectors, self.layer6_weights, self.layer6_biases)
+        vectors = batchedLinear(vectors, self.layer6_weights, self.layer6_biases) # Linear 6
 
         # Sum: [num_mols, num_atoms, num_models, 1, 1] --> [num_mols, num_models]
         # Mean: [num_mols, num_models] --> [num_mols]
