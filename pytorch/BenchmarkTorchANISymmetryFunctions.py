@@ -9,7 +9,7 @@ device = torch.device('cuda')
 
 mol = mdtraj.load('molecules/2iuz_ligand.mol2')
 species = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
-positions = torch.tensor(mol.xyz, dtype=torch.float32, requires_grad=True, device=device)
+positions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
 
 nnp = torchani.models.ANI2x(periodic_table_index=True, model_index=None).to(device)
 speciesPositions = nnp.species_converter((species, positions))
