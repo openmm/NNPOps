@@ -31,7 +31,7 @@ from torchani.nn import ANIModel, Ensemble, SpeciesConverter, SpeciesEnergies
 from typing import List, Optional, Tuple, Union
 
 torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
-batchedLinear = torch.ops.NNPOpsBatched.BatchedLinear
+batchedLinear = torch.ops.NNPOpsBatchedNN.BatchedLinear
 
 
 class TorchANIBatchedNN(torch.nn.Module):
