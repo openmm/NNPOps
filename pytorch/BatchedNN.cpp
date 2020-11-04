@@ -27,7 +27,7 @@ using Context = torch::autograd::AutogradContext;
 using Tensor = torch::Tensor;
 using tensor_list = torch::autograd::tensor_list;
 
-class BatchedLinerFunction : public torch::autograd::Function<BatchedLinerFunction> {
+class BatchedLinearFunction : public torch::autograd::Function<BatchedLinearFunction> {
 public:
     static Tensor forward(Context* ctx, const Tensor& vectors, const Tensor& weights, const Tensor& biases) {
         ctx->save_for_backward({weights});
@@ -42,9 +42,9 @@ public:
 };
 
 static Tensor BatchedLinear(const Tensor& vector, const Tensor& weights, const Tensor& biases) {
-    return BatchedLinerFunction::apply(vector, weights, biases);
+    return BatchedLinearFunction::apply(vector, weights, biases);
 }
 
-TORCH_LIBRARY(NNPOpsBatched, m) {
+TORCH_LIBRARY(NNPOpsBatchedNN, m) {
     m.def("BatchedLinear", BatchedLinear);
 }
