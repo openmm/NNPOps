@@ -20,7 +20,7 @@ device = torch.device('cuda')
 # Load a molecule
 molecule = mdtraj.load('molecule.mol2')
 species = torch.tensor([[atom.element.atomic_number for atom in molecule.top.atoms]], device=device)
-positions = torch.tensor(molecule.xyz, dtype=torch.float32, requires_grad=True, device=device)
+positions = torch.tensor(molecule.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
 
 # Construct ANI-2x and replace its native featurizer with NNPOps implementation
 nnp = torchani.models.ANI2x(periodic_table_index=True).to(device)
