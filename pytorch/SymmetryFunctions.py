@@ -29,6 +29,8 @@ import torchani
 from torchani.aev import SpeciesAEV
 
 torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
+torch.classes.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
+
 
 class TorchANISymmetryFunctions(torch.nn.Module):
     """Optimized TorchANI symmetry functions
@@ -113,10 +115,13 @@ class TorchANISymmetryFunctions(torch.nn.Module):
                 if pbc_ != [True, True, True]:
                     raise ValueError('Only fully periodic systems are supported, i.e. pbc = [True, True, True]')
 
+        SymClass = torch.classes.NNPOps.CustomANISymmetryFunctions
+        symInst = SymClass(self.numSpecies, self.Rcr, self.Rca, self.EtaR, self.ShfR,
+                           self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
+                           species_, positions[0])
+
         symFunc = torch.ops.NNPOps.ANISymmetryFunctions
-        radial, angular = symFunc(self.numSpecies, self.Rcr, self.Rca, self.EtaR, self.ShfR,
-                                  self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
-                                  species_, positions[0], cell)
+        radial, angular = symFunc(symInst, positions[0], cell)
         features = torch.cat((radial, angular), dim=1).unsqueeze(0)
 
         return SpeciesAEV(species, features)
