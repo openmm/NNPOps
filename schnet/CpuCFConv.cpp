@@ -122,7 +122,7 @@ CpuCFConv::CpuCFConv(int numAtoms, int width, int numGaussians, float cutoff, bo
 }
 
 void CpuCFConv::compute(const CFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                 float* input, float* output, const float* w1, const float* b1, const float* w2, const float* b2) {
+                 const float* input, float* output, const float* w1, const float* b1, const float* w2, const float* b2) {
     const CpuCFConvNeighbors& cpuNeighbors = dynamic_cast<const CpuCFConvNeighbors&>(neighbors);
     vector<float> gaussian(getNumGaussians());
     vector<float> y1(getWidth());
@@ -157,7 +157,7 @@ void CpuCFConv::compute(const CFConvNeighbors& neighbors, const float* positions
 
             // Apply the second dense layer.
 
-            float cutoffScale = 0.5f * (cosf(r*M_PI/getCutoff()) + 1);
+            float cutoffScale = cutoffFunction(r);
             for (int i = 0; i < getWidth(); i++) {
                 float sum = b2[i];
                 for (int j = 0; j < getWidth(); j++)
@@ -176,79 +176,115 @@ void CpuCFConv::compute(const CFConvNeighbors& neighbors, const float* positions
 }
 
 void CpuCFConv::backprop(const CFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                 const float* outputDeriv, float* inputDeriv, float* positionDeriv, const float* w1, const float* b1, const float* w2, const float* b2) {
-//     // Clear the output array.
+                         const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv,
+                         const float* w1, const float* b1, const float* w2, const float* b2) {
+    // Clear the output array.
 
-//     memset(positionDeriv, 0, numAtoms*3*sizeof(float));
+    memset(inputDeriv, 0, numAtoms*getWidth()*sizeof(float));
+    memset(positionDeriv, 0, numAtoms*3*sizeof(float));
 
-//     // Backpropagate through the symmetry functions.
+    // Backpropagate through the symmetry functions.
 
-//     if (periodic) {
-//         if (triclinic) {
-//             backpropRadialFunctions<true, true>(radialDeriv, positionDeriv);
-//             if (torchani)
-//                 backpropAngularFunctions<true, true, true>(angularDeriv, positionDeriv);
-//             else
-//                 backpropAngularFunctions<true, true, false>(angularDeriv, positionDeriv);
-//         }
-//         else {
-//             backpropRadialFunctions<true, false>(radialDeriv, positionDeriv);
-//             if (torchani)
-//                 backpropAngularFunctions<true, false, true>(angularDeriv, positionDeriv);
-//             else
-//                 backpropAngularFunctions<true, false, false>(angularDeriv, positionDeriv);
-//         }
-//     }
-//     else {
-//         backpropRadialFunctions<false, false>(radialDeriv, positionDeriv);
-//         if (torchani)
-//             backpropAngularFunctions<false, false, true>(angularDeriv, positionDeriv);
-//         else
-//             backpropAngularFunctions<false, false, false>(angularDeriv, positionDeriv);
-//     }
+    const CpuCFConvNeighbors& cpuNeighbors = dynamic_cast<const CpuCFConvNeighbors&>(neighbors);
+    if (getPeriodic()) {
+        if (neighbors.getTriclinic())
+            backpropImpl<true, true>(cpuNeighbors, positions, periodicBoxVectors, input, outputDeriv, inputDeriv, positionDeriv, w1, b1, w2, b2);
+        else
+            backpropImpl<true, false>(cpuNeighbors, positions, periodicBoxVectors, input, outputDeriv, inputDeriv, positionDeriv, w1, b1, w2, b2);
+    }
+    else {
+        backpropImpl<false, false>(cpuNeighbors, positions, periodicBoxVectors, input, outputDeriv, inputDeriv, positionDeriv, w1, b1, w2, b2);
+    }
 }
 
-// template <bool PERIODIC, bool TRICLINIC>
-// void CpuCFConv::backpropRadialFunctions(const float* radialDeriv, float* positionDeriv) {
-//     int c1 = radialFunctions.size();
-//     int c2 = numSpecies*c1;
-//     float radialCutoff2 = radialCutoff*radialCutoff;
-//     float globalScale = (torchani ? 0.25f : 1.0f);
-//     for (int atom1 = 0; atom1 < numAtoms; atom1++) {
-//         for (int atom2 = atom1+1; atom2 < numAtoms; atom2++) {
-//             float delta[3];
-//             float r2;
-//             computeDisplacement<PERIODIC, TRICLINIC>(&positions[3*atom1], &positions[3*atom2], delta, r2);
-//             if (r2 < radialCutoff2) {
+template <bool PERIODIC, bool TRICLINIC>
+void CpuCFConv::backpropImpl(const CpuCFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
+                             const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv,
+                             const float* w1, const float* b1, const float* w2, const float* b2) {
+    vector<float> gaussian(getNumGaussians()), dGaussdR(getNumGaussians());
+    vector<float> y1(getWidth()), dY1dR(getWidth());
+    vector<float> y2(getWidth()), dY2dR(getWidth());
+    float invBoxSize[3];
+    if (PERIODIC) {
+        invBoxSize[0] = 1/periodicBoxVectors[0];
+        invBoxSize[1] = 1/periodicBoxVectors[4];
+        invBoxSize[2] = 1/periodicBoxVectors[8];
+    }
 
-//                 // Compute the derivatives of the symmetry functions.
+    // Clear the output arrays.
 
-//                 float r = sqrtf(r2);
-//                 float rInv = 1/r;
-//                 float cutoff = cutoffFunction(r, radialCutoff);
-//                 float dCdR = cutoffDeriv(r, radialCutoff);
-//                 for (int i = 0; i < radialFunctions.size(); i++) {
-//                     const RadialFunction& fn = radialFunctions[i];
-//                     float shifted = r-fn.rs;
-//                     float expTerm = expf(-fn.eta*shifted*shifted);
-//                     float dVdR = dCdR*expTerm - cutoff*2*fn.eta*shifted*expTerm;
-//                     float dEdV = radialDeriv[atom1*c2 + atomSpecies[atom2]*c1 + i] + radialDeriv[atom2*c2 + atomSpecies[atom1]*c1 + i];
-//                     float scale = globalScale * dEdV * dVdR * rInv;
-//                     for (int j = 0; j < 3; j++) {
-//                         float dVdX = scale * delta[j];
-//                         positionDeriv[3*atom1+j] -= dVdX;
-//                         positionDeriv[3*atom2+j] += dVdX;
-//                     }
-//                 }
-//             }
-//         }
-//     }
-// }
+    memset(inputDeriv, 0, getNumAtoms()*getWidth()*sizeof(float));
+    memset(positionDeriv, 0, getNumAtoms()*3*sizeof(float));
 
-// float CpuCFConv::cutoffFunction(float r, float rc) {
-//     return 0.5f * cosf(M_PI*r/rc) + 0.5f;
-// }
+    // Loop over pairs of atoms from the neighbor list.
 
-// float CpuCFConv::cutoffDeriv(float r, float rc) {
-//     return -(0.5f*M_PI/rc) * sinf(M_PI*r/rc);
-// }
+    for (int atom1 = 0; atom1 < getNumAtoms(); atom1++) {
+        for (int atom2 : neighbors.getNeighbors()[atom1]) {
+            // Compute the displacement.
+
+            float delta[3];
+            float r2;
+            computeDisplacement<PERIODIC, TRICLINIC>(&positions[3*atom1], &positions[3*atom2], delta, r2, periodicBoxVectors, invBoxSize);
+            float r = sqrtf(r2);
+            float rInv = 1/r;
+
+            // Compute the Gaussian basis functions.
+
+            for (int i = 0; i < getNumGaussians(); i++) {
+                float x = (r-gaussianPos[i])/getGaussianWidth();
+                gaussian[i] = exp(-0.5f*x*x);
+                dGaussdR[i] = -x*gaussian[i]/getGaussianWidth();
+            }
+
+            // Apply the first dense layer.
+
+            for (int i = 0; i < getWidth(); i++) {
+                float sum = b1[i], dSumdR = 0;
+                for (int j = 0; j < getNumGaussians(); j++) {
+                    sum += gaussian[j]*w1[i*getNumGaussians()+j];
+                    dSumdR += dGaussdR[j]*w1[i*getNumGaussians()+j];
+                }
+                float expSum = expf(sum);
+                y1[i] = logf(0.5f*expSum + 0.5f);
+                dY1dR[i] = dSumdR*expSum/(expSum + 1);
+            }
+
+            // Apply the second dense layer.
+
+            float cutoffScale = cutoffFunction(r);
+            float dCutoffdR = cutoffDeriv(r);
+            for (int i = 0; i < getWidth(); i++) {
+                float sum = b2[i], dSumdR = 0;
+                for (int j = 0; j < getWidth(); j++) {
+                    sum += y1[j]*w2[i*getWidth()+j];
+                    dSumdR += dY1dR[j]*w2[i*getWidth()+j];
+                }
+                y2[i] = cutoffScale*sum;
+                dY2dR[i] = dCutoffdR*sum + cutoffScale*dSumdR;
+            }
+
+            // Add it to the output.
+
+            for (int i = 0; i < getWidth(); i++) {
+                int index1 = atom1*getWidth()+i;
+                int index2 = atom2*getWidth()+i;
+                inputDeriv[index1] += y2[i]*outputDeriv[index2];
+                inputDeriv[index2] += y2[i]*outputDeriv[index1];
+                float scale = rInv*dY2dR[i]*(input[index2]*outputDeriv[index1] + input[index1]*outputDeriv[index2]);
+                for (int j = 0; j < 3; j++) {
+                    float dVdX = scale * delta[j];
+                    positionDeriv[atom1*3+j] -= dVdX;
+                    positionDeriv[atom2*3+j] += dVdX;
+                }
+            }
+        }
+    }
+}
+
+float CpuCFConv::cutoffFunction(float r) {
+    return 0.5f * cosf(M_PI*r/getCutoff()) + 0.5f;
+}
+
+float CpuCFConv::cutoffDeriv(float r) {
+    return -(0.5f*M_PI/getCutoff()) * sinf(M_PI*r/getCutoff());
+}

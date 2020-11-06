@@ -70,7 +70,7 @@ public:
      *                            not used, this is ignored and may be NULL.
      */
     void compute(const CFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                 float* input, float* output, const float* w1, const float* b1, const float* w2, const float* b2);
+                 const float* input, float* output, const float* w1, const float* b1, const float* w2, const float* b2);
     /**
      * Given the derivatives of some function E (typically energy) with respect to the outputs, backpropagate them
      * to find the derivates of E with respect to the inputs and atom positions.
@@ -78,14 +78,32 @@ public:
      * This must be called after compute().  It uses the atom positions and box vectors that were specified in the most
      * recent call to that function.
      *
-     * @param outputDeriv      an array of shape [numAtoms][outputWidth] containing the derivative of E with respect to each output value
-     * @param inputDeriv       an array of shape [numAtoms][inputWidth] to store the derivative of E with respect to each input value into
+     * @param outputDeriv      an array of shape [numAtoms][width] containing the derivative of E with respect to each output value
+     * @param inputDeriv       an array of shape [numAtoms][width] to store the derivative of E with respect to each input value into
      * @param positionDeriv    an array of shape [numAtoms][3] to store the derivative of E with respect to the atom positions into
      */
     void backprop(const CFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                  const float* outputDeriv, float* inputDeriv, float* positionDeriv, const float* w1, const float* b1,
+                  const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv, const float* w1, const float* b1,
                   const float* w2, const float* b2);
 private:
+    template <bool PERIODIC, bool TRICLINIC>
+    void backpropImpl(const CpuCFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
+                      const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv,
+                      const float* w1, const float* b1, const float* w2, const float* b2);
+    /**
+     * Compute the value of the cutoff function.  The implementation assumes the caller has already
+     * verified that r <= cutoff.
+     *
+     * @param r     the distance at which it is being evaluated
+     */
+    float cutoffFunction(float r);
+    /**
+     * Compute the derivative of the cutoff function.  The implementation assumes the caller has already
+     * verified that r <= cutoff.
+     *
+     * @param r     the distance at which it is being evaluated
+     */
+    float cutoffDeriv(float r);
     std::vector<float> gaussianPos;
 };
 

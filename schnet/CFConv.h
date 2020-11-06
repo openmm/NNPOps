@@ -82,7 +82,7 @@ public:
      *                            not used, this is ignored and may be NULL.
      */
     virtual void compute(const CFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                         float* input, float* output, const float* w1, const float* b1, const float* w2, const float* b2) = 0;
+                         const float* input, float* output, const float* w1, const float* b1, const float* w2, const float* b2) = 0;
     /**
      * Given the derivatives of some function E (typically energy) with respect to the outputs, backpropagate them
      * to find the derivates of E with respect to the inputs and atom positions.
@@ -95,8 +95,8 @@ public:
      * @param positionDeriv    an array of shape [numAtoms][3] to store the derivative of E with respect to the atom positions into
      */
     virtual void backprop(const CFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                          const float* outputDeriv, float* inputDeriv, float* positionDeriv, const float* w1, const float* b1,
-                          const float* w2, const float* b2) = 0;
+                          const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv,
+                          const float* w1, const float* b1, const float* w2, const float* b2) = 0;
     /**
      * Get the number of atoms in the system.
      */
