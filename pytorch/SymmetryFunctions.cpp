@@ -115,21 +115,10 @@ class GradANISymmetryFunction : public torch::autograd::Function<GradANISymmetry
 
 public:
     static torch::autograd::tensor_list forward(torch::autograd::AutogradContext *ctx,
-                                                int64_t numSpecies,
-                                                double Rcr,
-                                                double Rca,
-                                                const std::vector<double>& EtaR,
-                                                const std::vector<double>& ShfR,
-                                                const std::vector<double>& EtaA,
-                                                const std::vector<double>& Zeta,
-                                                const std::vector<double>& ShfA,
-                                                const std::vector<double>& ShfZ,
-                                                const std::vector<int64_t>& atomSpecies,
+                                                const torch::intrusive_ptr<CustomANISymmetryFunctions>& symFunc,
                                                 const torch::Tensor& positions,
                                                 const torch::optional<torch::Tensor>& periodicBoxVectors) {
 
-        const auto symFunc = torch::intrusive_ptr<CustomANISymmetryFunctions>::make(
-            numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies, positions);
         ctx->saved_data["symFunc"] = symFunc;
 
         return symFunc->forward(positions, periodicBoxVectors);
@@ -141,18 +130,9 @@ public:
         torch::Tensor positionsGrad = symFunc->backward(grads);
         ctx->saved_data.erase("symFunc");
 
-        return { torch::Tensor(),  // numSpecies
-                 torch::Tensor(),  // Rcr
-                 torch::Tensor(),  // Rca
-                 torch::Tensor(),  // EtaR
-                 torch::Tensor(),  // ShfR
-                 torch::Tensor(),  // EtaA
-                 torch::Tensor(),  // Zeta
-                 torch::Tensor(),  // ShfA
-                 torch::Tensor(),  // ShfZ
-                 torch::Tensor(),  // atomSpecies
-                 positionsGrad,    // positions
-                 torch::Tensor()}; // periodicBoxVectors
+        return { torch::Tensor(),   // symFunc
+                 positionsGrad,     // positions
+                 torch::Tensor() }; // periodicBoxVectors
     };
 };
 
@@ -169,7 +149,10 @@ static torch::autograd::tensor_list ANISymmetryFunctionsOp(int64_t numSpecies,
                                                            const torch::Tensor& positions,
                                                            const torch::optional<torch::Tensor>& periodicBoxVectors) {
 
-    return GradANISymmetryFunction::apply(numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies, positions, periodicBoxVectors);
+    const auto symFunc = torch::intrusive_ptr<CustomANISymmetryFunctions>::make(
+        numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies, positions);
+
+    return GradANISymmetryFunction::apply(symFunc, positions, periodicBoxVectors);
 }
 
 TORCH_LIBRARY(NNPOps, m) {
