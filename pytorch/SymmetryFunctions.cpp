@@ -140,11 +140,11 @@ public:
 };
 
 static torch::autograd::tensor_list ANISymmetryFunctionsOp(
-    const torch::intrusive_ptr<CustomANISymmetryFunctions>& symFunc,
+    const torch::optional<torch::intrusive_ptr<CustomANISymmetryFunctions>>& symFunc,
     const torch::Tensor& positions,
     const torch::optional<torch::Tensor>& periodicBoxVectors) {
 
-    return GradANISymmetryFunction::apply(symFunc, positions, periodicBoxVectors);
+    return GradANISymmetryFunction::apply(*symFunc, positions, periodicBoxVectors);
 }
 
 TORCH_LIBRARY(NNPOps, m) {

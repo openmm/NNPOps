@@ -63,12 +63,13 @@ class TorchANISymmetryFunctions(torch.nn.Module):
 
         >>> print(energy, forces)
     """
+    holder: Optional[torch.classes.NNPOps.CustomANISymmetryFunctions]
+
     def __init__(self, symmFunc: torchani.AEVComputer):
         """
         Arguments:
             symmFunc: the instance of torchani.AEVComputer (https://aiqm.github.io/torchani/api.html#torchani.AEVComputer)
         """
-
         super().__init__()
 
         self.numSpecies = symmFunc.num_species
@@ -80,6 +81,8 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         self.Zeta = symmFunc.Zeta[0, :, 0, 0].tolist()
         self.ShfA = symmFunc.ShfA[0, 0, :, 0].tolist()
         self.ShfZ = symmFunc.ShfZ[0, 0, 0, :].tolist()
+
+        self.holder = None
 
         self.triu_index = torch.tensor([0]) # A dummy variable to make TorchScript happy ;)
 
@@ -102,7 +105,6 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         species, positions = speciesAndPositions
         if species.shape[0] != 1:
             raise ValueError('Batched molecule computation is not supported')
-        species_: List[int] = species[0].tolist() # Explicit type casting for TorchScript
         if species.shape + (3,) != positions.shape:
             raise ValueError('Inconsistent shapes of "species" and "positions"')
         if cell is not None:
@@ -115,13 +117,15 @@ class TorchANISymmetryFunctions(torch.nn.Module):
                 if pbc_ != [True, True, True]:
                     raise ValueError('Only fully periodic systems are supported, i.e. pbc = [True, True, True]')
 
-        SymClass = torch.classes.NNPOps.CustomANISymmetryFunctions
-        symInst = SymClass(self.numSpecies, self.Rcr, self.Rca, self.EtaR, self.ShfR,
-                           self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
-                           species_, positions[0])
+        if self.holder is None:
+            SymClass = torch.classes.NNPOps.CustomANISymmetryFunctions
+            species_: List[int] = species[0].tolist() # Explicit type casting for TorchScript
+            self.holder = SymClass(self.numSpecies, self.Rcr, self.Rca, self.EtaR, self.ShfR,
+                                   self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
+                                   species_, positions)
 
         symFunc = torch.ops.NNPOps.ANISymmetryFunctions
-        radial, angular = symFunc(symInst, positions[0], cell)
+        radial, angular = symFunc(self.holder, positions[0], cell)
         features = torch.cat((radial, angular), dim=1).unsqueeze(0)
 
         return SpeciesAEV(species, features)
