@@ -35,19 +35,19 @@
 namespace NNPOps {
 namespace ANISymmetryFunctions {
 
-class CustomANISymmetryFunctions : public torch::CustomClassHolder {
+class Holder : public torch::CustomClassHolder {
 public:
-    CustomANISymmetryFunctions(int64_t numSpecies_,
-                               double Rcr,
-                               double Rca,
-                               const std::vector<double>& EtaR,
-                               const std::vector<double>& ShfR,
-                               const std::vector<double>& EtaA,
-                               const std::vector<double>& Zeta,
-                               const std::vector<double>& ShfA,
-                               const std::vector<double>& ShfZ,
-                               const std::vector<int64_t>& atomSpecies_,
-                               const torch::Tensor& positions) : torch::CustomClassHolder() {
+    Holder(int64_t numSpecies_,
+           double Rcr,
+           double Rca,
+           const std::vector<double>& EtaR,
+           const std::vector<double>& ShfR,
+           const std::vector<double>& EtaA,
+           const std::vector<double>& Zeta,
+           const std::vector<double>& ShfA,
+           const std::vector<double>& ShfZ,
+           const std::vector<int64_t>& atomSpecies_,
+           const torch::Tensor& positions) : torch::CustomClassHolder() {
 
         tensorOptions = torch::TensorOptions().device(positions.device()); // Data type of float by default
         int numAtoms = atomSpecies_.size();
@@ -114,27 +114,27 @@ private:
     torch::Tensor positionsGrad;
 };
 
-class GradANISymmetryFunction : public torch::autograd::Function<GradANISymmetryFunction> {
+class AutogradFunctions : public torch::autograd::Function<AutogradFunctions> {
 
 public:
     static torch::autograd::tensor_list forward(
         torch::autograd::AutogradContext *ctx,
-        const torch::intrusive_ptr<CustomANISymmetryFunctions>& symFunc,
+        const torch::intrusive_ptr<Holder>& holder,
         const torch::Tensor& positions,
         const torch::optional<torch::Tensor>& periodicBoxVectors) {
 
-        ctx->saved_data["symFunc"] = symFunc;
+        ctx->saved_data["holder"] = holder;
 
-        return symFunc->forward(positions, periodicBoxVectors);
+        return holder->forward(positions, periodicBoxVectors);
     };
 
     static torch::autograd::tensor_list backward(
         torch::autograd::AutogradContext *ctx,
         const torch::autograd::tensor_list& grads) {
 
-        const auto symFunc = ctx->saved_data["symFunc"].toCustomClass<CustomANISymmetryFunctions>();
-        torch::Tensor positionsGrad = symFunc->backward(grads);
-        ctx->saved_data.erase("symFunc");
+        const auto holder = ctx->saved_data["holder"].toCustomClass<Holder>();
+        torch::Tensor positionsGrad = holder->backward(grads);
+        ctx->saved_data.erase("holder");
 
         return { torch::Tensor(),   // symFunc
                  positionsGrad,     // positions
@@ -142,16 +142,16 @@ public:
     };
 };
 
-static torch::autograd::tensor_list ANISymmetryFunctionsOp(
-    const torch::optional<torch::intrusive_ptr<CustomANISymmetryFunctions>>& symFunc,
+torch::autograd::tensor_list operation(
+    const torch::optional<torch::intrusive_ptr<Holder>>& holder,
     const torch::Tensor& positions,
     const torch::optional<torch::Tensor>& periodicBoxVectors) {
 
-    return GradANISymmetryFunction::apply(*symFunc, positions, periodicBoxVectors);
+    return AutogradFunctions::apply(*holder, positions, periodicBoxVectors);
 }
 
-TORCH_LIBRARY(NNPOps, m) {
-    m.class_<CustomANISymmetryFunctions>("CustomANISymmetryFunctions")
+TORCH_LIBRARY(NNPOpsANISymmetryFunctions, m) {
+    m.class_<Holder>("Holder")
         .def(torch::init<int64_t,                        // numSpecies
                          double,                         // Rcr
                          double,                         // Rca
@@ -163,9 +163,9 @@ TORCH_LIBRARY(NNPOps, m) {
                          const std::vector<double>&,     // ShfZ
                          const std::vector<int64_t>&,    // atomSpecies
                          const torch::Tensor&>())        // positions
-        .def("forward", &CustomANISymmetryFunctions::forward)
-        .def("backward", &CustomANISymmetryFunctions::backward);
-    m.def("ANISymmetryFunctions", ANISymmetryFunctionsOp);
+        .def("forward", &Holder::forward)
+        .def("backward", &Holder::backward);
+    m.def("operation", operation);
 }
 
 } // namespace ANISymmetryFunctions

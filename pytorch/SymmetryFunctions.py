@@ -31,6 +31,8 @@ from torchani.aev import SpeciesAEV
 torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 torch.classes.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 
+Holder = torch.classes.NNPOpsANISymmetryFunctions.Holder
+operation = torch.ops.NNPOpsANISymmetryFunctions.operation
 
 class TorchANISymmetryFunctions(torch.nn.Module):
     """Optimized TorchANI symmetry functions
@@ -63,7 +65,7 @@ class TorchANISymmetryFunctions(torch.nn.Module):
 
         >>> print(energy, forces)
     """
-    holder: Optional[torch.classes.NNPOps.CustomANISymmetryFunctions]
+    holder: Optional[Holder]
 
     def __init__(self, symmFunc: torchani.AEVComputer):
         """
@@ -118,14 +120,13 @@ class TorchANISymmetryFunctions(torch.nn.Module):
                     raise ValueError('Only fully periodic systems are supported, i.e. pbc = [True, True, True]')
 
         if self.holder is None:
-            SymClass = torch.classes.NNPOps.CustomANISymmetryFunctions
             species_: List[int] = species[0].tolist() # Explicit type casting for TorchScript
-            self.holder = SymClass(self.numSpecies, self.Rcr, self.Rca, self.EtaR, self.ShfR,
-                                   self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
-                                   species_, positions)
+            self.holder = Holder(self.numSpecies, self.Rcr, self.Rca,
+                                 self.EtaR, self.ShfR,
+                                 self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
+                                 species_, positions)
 
-        symFunc = torch.ops.NNPOps.ANISymmetryFunctions
-        radial, angular = symFunc(self.holder, positions[0], cell)
+        radial, angular = operation(self.holder, positions[0], cell)
         features = torch.cat((radial, angular), dim=1).unsqueeze(0)
 
         return SpeciesAEV(species, features)
