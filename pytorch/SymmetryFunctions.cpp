@@ -32,6 +32,9 @@
         throw std::runtime_error(std::string("Encountered error ")+cudaGetErrorName(result)+" at "+__FILE__+":"+std::to_string(__LINE__));\
     }
 
+namespace NNPOps {
+namespace ANISymmetryFunctions {
+
 class CustomANISymmetryFunctions : public torch::CustomClassHolder {
 public:
     CustomANISymmetryFunctions(int64_t numSpecies_,
@@ -105,7 +108,7 @@ public:
 
 private:
     torch::TensorOptions tensorOptions;
-    std::shared_ptr<ANISymmetryFunctions> symFunc;
+    std::shared_ptr<::ANISymmetryFunctions> symFunc;
     torch::Tensor radial;
     torch::Tensor angular;
     torch::Tensor positionsGrad;
@@ -164,3 +167,6 @@ TORCH_LIBRARY(NNPOps, m) {
         .def("backward", &CustomANISymmetryFunctions::backward);
     m.def("ANISymmetryFunctions", ANISymmetryFunctionsOp);
 }
+
+} // namespace ANISymmetryFunctions
+} // namespace NNPOps
