@@ -35,31 +35,39 @@
 namespace NNPOps {
 namespace ANISymmetryFunctions {
 
+class Holder;
+using std::vector;
+using HolderPrt = torch::intrusive_ptr<Holder>;
+using torch::Tensor;
+using torch::optional;
+using Context = torch::autograd::AutogradContext;
+using torch::autograd::tensor_list;
+
 class Holder : public torch::CustomClassHolder {
 public:
     Holder(int64_t numSpecies_,
            double Rcr,
            double Rca,
-           const std::vector<double>& EtaR,
-           const std::vector<double>& ShfR,
-           const std::vector<double>& EtaA,
-           const std::vector<double>& Zeta,
-           const std::vector<double>& ShfA,
-           const std::vector<double>& ShfZ,
-           const std::vector<int64_t>& atomSpecies_,
-           const torch::Tensor& positions) : torch::CustomClassHolder() {
+           const vector<double>& EtaR,
+           const vector<double>& ShfR,
+           const vector<double>& EtaA,
+           const vector<double>& Zeta,
+           const vector<double>& ShfA,
+           const vector<double>& ShfZ,
+           const vector<int64_t>& atomSpecies_,
+           const Tensor& positions) : torch::CustomClassHolder() {
 
         tensorOptions = torch::TensorOptions().device(positions.device()); // Data type of float by default
         int numAtoms = atomSpecies_.size();
         int numSpecies = numSpecies_;
-        const std::vector<int> atomSpecies(atomSpecies_.begin(), atomSpecies_.end());
+        const vector<int> atomSpecies(atomSpecies_.begin(), atomSpecies_.end());
 
-        std::vector<RadialFunction> radialFunctions;
+        vector<RadialFunction> radialFunctions;
         for (const float eta: EtaR)
             for (const float rs: ShfR)
                 radialFunctions.push_back({eta, rs});
 
-        std::vector<AngularFunction> angularFunctions;
+        vector<AngularFunction> angularFunctions;
         for (const float eta: EtaA)
             for (const float zeta: Zeta)
                 for (const float rs: ShfA)
@@ -80,11 +88,11 @@ public:
         positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
     };
 
-    torch::autograd::tensor_list forward(const torch::Tensor& positions_, const torch::optional<torch::Tensor>& periodicBoxVectors_) {
+    tensor_list forward(const Tensor& positions_, const optional<Tensor>& periodicBoxVectors_) {
 
-        const torch::Tensor positions = positions_.to(tensorOptions);
+        const Tensor positions = positions_.to(tensorOptions);
 
-        torch::Tensor periodicBoxVectors;
+        Tensor periodicBoxVectors;
         float* periodicBoxVectorsPtr = nullptr;
         if (periodicBoxVectors_) {
             periodicBoxVectors = periodicBoxVectors_->to(tensorOptions);
@@ -96,10 +104,10 @@ public:
         return {radial, angular};
     };
 
-    torch::Tensor backward(const torch::autograd::tensor_list& grads) {
+    Tensor backward(const tensor_list& grads) {
 
-        const torch::Tensor radialGrad = grads[0].clone();
-        const torch::Tensor angularGrad = grads[1].clone();
+        const Tensor radialGrad = grads[0].clone();
+        const Tensor angularGrad = grads[1].clone();
 
         symFunc->backprop(radialGrad.data_ptr<float>(), angularGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
 
@@ -109,60 +117,56 @@ public:
 private:
     torch::TensorOptions tensorOptions;
     std::shared_ptr<::ANISymmetryFunctions> symFunc;
-    torch::Tensor radial;
-    torch::Tensor angular;
-    torch::Tensor positionsGrad;
+    Tensor radial;
+    Tensor angular;
+    Tensor positionsGrad;
 };
 
 class AutogradFunctions : public torch::autograd::Function<AutogradFunctions> {
 
 public:
-    static torch::autograd::tensor_list forward(
-        torch::autograd::AutogradContext *ctx,
-        const torch::intrusive_ptr<Holder>& holder,
-        const torch::Tensor& positions,
-        const torch::optional<torch::Tensor>& periodicBoxVectors) {
+    static tensor_list forward(Context *ctx,
+                               const HolderPrt& holder,
+                               const Tensor& positions,
+                               const optional<Tensor>& periodicBoxVectors) {
 
         ctx->saved_data["holder"] = holder;
 
         return holder->forward(positions, periodicBoxVectors);
     };
 
-    static torch::autograd::tensor_list backward(
-        torch::autograd::AutogradContext *ctx,
-        const torch::autograd::tensor_list& grads) {
+    static tensor_list backward(Context *ctx, const tensor_list& grads) {
 
         const auto holder = ctx->saved_data["holder"].toCustomClass<Holder>();
-        torch::Tensor positionsGrad = holder->backward(grads);
+        Tensor positionsGrad = holder->backward(grads);
         ctx->saved_data.erase("holder");
 
-        return { torch::Tensor(),   // symFunc
-                 positionsGrad,     // positions
-                 torch::Tensor() }; // periodicBoxVectors
+        return { Tensor(),      // symFunc
+                 positionsGrad, // positions
+                 Tensor() };    // periodicBoxVectors
     };
 };
 
-torch::autograd::tensor_list operation(
-    const torch::optional<torch::intrusive_ptr<Holder>>& holder,
-    const torch::Tensor& positions,
-    const torch::optional<torch::Tensor>& periodicBoxVectors) {
+tensor_list operation(const optional<HolderPrt>& holder,
+                      const Tensor& positions,
+                      const optional<Tensor>& periodicBoxVectors) {
 
     return AutogradFunctions::apply(*holder, positions, periodicBoxVectors);
 }
 
 TORCH_LIBRARY(NNPOpsANISymmetryFunctions, m) {
     m.class_<Holder>("Holder")
-        .def(torch::init<int64_t,                        // numSpecies
-                         double,                         // Rcr
-                         double,                         // Rca
-                         const std::vector<double>&,     // EtaR
-                         const std::vector<double>&,     // ShfR
-                         const std::vector<double>&,     // EtaA
-                         const std::vector<double>&,     // Zeta
-                         const std::vector<double>&,     // ShfA
-                         const std::vector<double>&,     // ShfZ
-                         const std::vector<int64_t>&,    // atomSpecies
-                         const torch::Tensor&>())        // positions
+        .def(torch::init<int64_t,                // numSpecies
+                         double,                 // Rcr
+                         double,                 // Rca
+                         const vector<double>&,  // EtaR
+                         const vector<double>&,  // ShfR
+                         const vector<double>&,  // EtaA
+                         const vector<double>&,  // Zeta
+                         const vector<double>&,  // ShfA
+                         const vector<double>&,  // ShfZ
+                         const vector<int64_t>&, // atomSpecies
+                         const Tensor&>())       // positions
         .def("forward", &Holder::forward)
         .def("backward", &Holder::backward);
     m.def("operation", operation);
