@@ -115,14 +115,23 @@ void CpuCFConvNeighbors::findNeighbors(const float* positions, const float* peri
     }
 }
 
-CpuCFConv::CpuCFConv(int numAtoms, int width, int numGaussians, float cutoff, bool periodic, float gaussianWidth) :
+CpuCFConv::CpuCFConv(int numAtoms, int width, int numGaussians, float cutoff, bool periodic, float gaussianWidth,
+                     const float* w1, const float* b1, const float* w2, const float* b2) :
            CFConv(numAtoms, width, numGaussians, cutoff, periodic, gaussianWidth) {
     for (int i = 0; i < numGaussians; i++)
         gaussianPos.push_back(i*cutoff/(numGaussians-1));
+    for (int i = 0; i < numGaussians*width; i++)
+        this->w1.push_back(w1[i]);
+    for (int i = 0; i < width*width; i++)
+        this->w2.push_back(w2[i]);
+    for (int i = 0; i < width; i++) {
+        this->b1.push_back(b1[i]);
+        this->b2.push_back(b2[i]);
+    }
 }
 
 void CpuCFConv::compute(const CFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                 const float* input, float* output, const float* w1, const float* b1, const float* w2, const float* b2) {
+                 const float* input, float* output) {
     const CpuCFConvNeighbors& cpuNeighbors = dynamic_cast<const CpuCFConvNeighbors&>(neighbors);
     vector<float> gaussian(getNumGaussians());
     vector<float> y1(getWidth());
@@ -176,8 +185,7 @@ void CpuCFConv::compute(const CFConvNeighbors& neighbors, const float* positions
 }
 
 void CpuCFConv::backprop(const CFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                         const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv,
-                         const float* w1, const float* b1, const float* w2, const float* b2) {
+                         const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv) {
     // Clear the output array.
 
     memset(inputDeriv, 0, numAtoms*getWidth()*sizeof(float));
@@ -188,19 +196,18 @@ void CpuCFConv::backprop(const CFConvNeighbors& neighbors, const float* position
     const CpuCFConvNeighbors& cpuNeighbors = dynamic_cast<const CpuCFConvNeighbors&>(neighbors);
     if (getPeriodic()) {
         if (neighbors.getTriclinic())
-            backpropImpl<true, true>(cpuNeighbors, positions, periodicBoxVectors, input, outputDeriv, inputDeriv, positionDeriv, w1, b1, w2, b2);
+            backpropImpl<true, true>(cpuNeighbors, positions, periodicBoxVectors, input, outputDeriv, inputDeriv, positionDeriv);
         else
-            backpropImpl<true, false>(cpuNeighbors, positions, periodicBoxVectors, input, outputDeriv, inputDeriv, positionDeriv, w1, b1, w2, b2);
+            backpropImpl<true, false>(cpuNeighbors, positions, periodicBoxVectors, input, outputDeriv, inputDeriv, positionDeriv);
     }
     else {
-        backpropImpl<false, false>(cpuNeighbors, positions, periodicBoxVectors, input, outputDeriv, inputDeriv, positionDeriv, w1, b1, w2, b2);
+        backpropImpl<false, false>(cpuNeighbors, positions, periodicBoxVectors, input, outputDeriv, inputDeriv, positionDeriv);
     }
 }
 
 template <bool PERIODIC, bool TRICLINIC>
 void CpuCFConv::backpropImpl(const CpuCFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                             const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv,
-                             const float* w1, const float* b1, const float* w2, const float* b2) {
+                             const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv) {
     vector<float> gaussian(getNumGaussians()), dGaussdR(getNumGaussians());
     vector<float> y1(getWidth()), dY1dR(getWidth());
     vector<float> y2(getWidth()), dY2dR(getWidth());

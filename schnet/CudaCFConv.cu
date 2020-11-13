@@ -183,9 +183,27 @@ void CudaCFConvNeighbors::build(const float* positions, const float* periodicBox
         buildNeighborList<false, false><<<numBlocks, blockSize>>>(getNumAtoms(), getCutoff(), neighbors, neighborCount, neighborDistances, (float3*) devicePositions, deviceBoxVectors);
 }
 
-CudaCFConv::CudaCFConv(int numAtoms, int width, int numGaussians, float cutoff, bool periodic, float gaussianWidth) :
-                       CFConv(numAtoms, width, numGaussians, cutoff, periodic, gaussianWidth), input(0), output(0), inputDeriv(0),
-                       positionDeriv(0), w1(0), b1(0), w2(0), b2(0) {
+CudaCFConv::CudaCFConv(int numAtoms, int width, int numGaussians, float cutoff, bool periodic, float gaussianWidth, const float* w1,
+            const float* b1, const float* w2, const float* b2) : CFConv(numAtoms, width, numGaussians, cutoff, periodic, gaussianWidth),
+            input(0), output(0), inputDeriv(0), positionDeriv(0), w1(0), b1(0), w2(0), b2(0) {
+    // Allocate memory on the device for the layer parameters.
+
+    CHECK_RESULT(cudaMallocManaged(&this->w1, numGaussians*width*sizeof(float)));
+    CHECK_RESULT(cudaMallocManaged(&this->w2, width*width*sizeof(float)));
+    CHECK_RESULT(cudaMallocManaged(&this->b1, width*sizeof(float)));
+    CHECK_RESULT(cudaMallocManaged(&this->b2, width*sizeof(float)));
+
+    // Copy the layer parameters to device memory.  The weight matrices are stored in transposed order,
+    // since that allows more efficient access in the kernels.
+
+    CHECK_RESULT(cudaMemcpyAsync(this->b1, b1, width*sizeof(float), cudaMemcpyDefault));
+    CHECK_RESULT(cudaMemcpyAsync(this->b2, b2, width*sizeof(float), cudaMemcpyDefault));
+    for (int i = 0; i < numGaussians; i++)
+        for (int j = 0; j < width; j++)
+            this->w1[i*width+j] = w1[i+j*numGaussians];
+    for (int i = 0; i < width; i++)
+        for (int j = 0; j < width; j++)
+            this->w2[i*width+j] = w2[i+j*width];
 }
 
 CudaCFConv::~CudaCFConv() {
@@ -275,7 +293,7 @@ __global__ void computeCFConv(int numAtoms, int numGaussians, int width, float c
             for (int i = indexInWarp; i < width; i += 32) {
                 float sum = b1[i];
                 for (int j = 0; j < numGaussians; j++)
-                    sum += temp1[j]*w1[i*numGaussians+j];
+                    sum += temp1[j]*w1[i+j*width];
                 temp2[i] = logf(0.5f*expf(sum) + 0.5f);
             }
             __syncwarp();
@@ -286,7 +304,7 @@ __global__ void computeCFConv(int numAtoms, int numGaussians, int width, float c
             for (int i = indexInWarp; i < width; i += 32) {
                 float sum = b2[i];
                 for (int j = 0; j < width; j++)
-                    sum += temp2[j]*w2[i*width+j];
+                    sum += temp2[j]*w2[i+j*width];
                 temp1[i] = cutoffScale*sum;
             }
             __syncwarp();
@@ -302,15 +320,11 @@ __global__ void computeCFConv(int numAtoms, int numGaussians, int width, float c
 }
 
 void CudaCFConv::compute(const CFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                const float* input, float* output, const float* w1, const float* b1, const float* w2, const float* b2) {
+                const float* input, float* output) {
     // Get device pointers to all the data we need, copying it if necessary.
 
     const float* deviceInput = ensureOnDevice(input, this->input, getNumAtoms()*getWidth()*sizeof(float));
     float* deviceOutput = ensureOnDevice(output, this->output, getNumAtoms()*getWidth()*sizeof(float));
-    const float* deviceW1 = ensureOnDevice(w1, this->w1, getNumGaussians()*getWidth()*sizeof(float));
-    const float* deviceB1 = ensureOnDevice(b1, this->b1, getWidth()*sizeof(float));
-    const float* deviceW2 = ensureOnDevice(w2, this->w2, getWidth()*getWidth()*sizeof(float));
-    const float* deviceB2 = ensureOnDevice(b2, this->b2, getWidth()*sizeof(float));
 
     // Clear the output array.
 
@@ -324,7 +338,7 @@ void CudaCFConv::compute(const CFConvNeighbors& neighbors, const float* position
     const int tempSize = max(getNumGaussians(), getWidth())*(blockSize/32);
     computeCFConv<<<numBlocks, blockSize, 2*tempSize*sizeof(float)>>>(getNumAtoms(), getNumGaussians(),
         getWidth(), getCutoff(), getGaussianWidth(), cudaNeighbors.getNeighbors(), cudaNeighbors.getNeighborCount(),
-        cudaNeighbors.getNeighborDistances(), deviceInput, deviceOutput, deviceW1, deviceB1, deviceW2, deviceB2);
+        cudaNeighbors.getNeighborDistances(), deviceInput, deviceOutput, w1, b1, w2, b2);
 
     // If necessary, copy the output.
 
@@ -381,7 +395,7 @@ __global__ void backpropCFConv(int numAtoms, int numGaussians, int width, float 
             for (int i = indexInWarp; i < width; i += 32) {
                 float sum = b1[i], dSumdR = 0;
                 for (int j = 0; j < numGaussians; j++) {
-                    float w = w1[i*numGaussians+j];
+                    float w = w1[i+j*width];
                     sum += temp1[j]*w;
                     dSumdR += dtemp1[j]*w;
                 }
@@ -398,7 +412,7 @@ __global__ void backpropCFConv(int numAtoms, int numGaussians, int width, float 
             for (int i = indexInWarp; i < width; i += 32) {
                 float sum = b2[i], dSumdR = 0;
                 for (int j = 0; j < width; j++) {
-                    float w =w2[i*width+j];
+                    float w = w2[i+j*width];
                     sum += temp2[j]*w;
                     dSumdR += dtemp2[j]*w;
                 }
@@ -427,18 +441,13 @@ __global__ void backpropCFConv(int numAtoms, int numGaussians, int width, float 
 
 
 void CudaCFConv::backprop(const CFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                        const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv,
-                        const float* w1, const float* b1, const float* w2, const float* b2) {
+                        const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv) {
     // Get device pointers to all the data we need, copying it if necessary.
 
     const float* deviceInput = ensureOnDevice(input, this->input, getNumAtoms()*getWidth()*sizeof(float));
     const float* deviceOutputDeriv = ensureOnDevice(outputDeriv, this->output, getNumAtoms()*getWidth()*sizeof(float));
     float* deviceInputDeriv = ensureOnDevice(inputDeriv, this->inputDeriv, getNumAtoms()*getWidth()*sizeof(float));
     float* devicePositionDeriv = ensureOnDevice(positionDeriv, this->positionDeriv, getNumAtoms()*sizeof(float3));
-    const float* deviceW1 = ensureOnDevice(w1, this->w1, getNumGaussians()*getWidth()*sizeof(float));
-    const float* deviceB1 = ensureOnDevice(b1, this->b1, getWidth()*sizeof(float));
-    const float* deviceW2 = ensureOnDevice(w2, this->w2, getWidth()*getWidth()*sizeof(float));
-    const float* deviceB2 = ensureOnDevice(b2, this->b2, getWidth()*sizeof(float));
 
     // Clear the output arrays.
 
@@ -456,18 +465,18 @@ void CudaCFConv::backprop(const CFConvNeighbors& neighbors, const float* positio
             backpropCFConv<true, true><<<numBlocks, blockSize, 4*tempSize*sizeof(float)>>>(getNumAtoms(), getNumGaussians(),
                 getWidth(), getCutoff(), getGaussianWidth(), cudaNeighbors.getNeighbors(), cudaNeighbors.getNeighborCount(),
                 (float3*) cudaNeighbors.getDevicePositions(), cudaNeighbors.getDeviceBoxVectors(), deviceInput, deviceOutputDeriv,
-                deviceInputDeriv, devicePositionDeriv, deviceW1, deviceB1, deviceW2, deviceB2);
+                deviceInputDeriv, devicePositionDeriv, w1, b1, w2, b2);
         else
             backpropCFConv<true, false><<<numBlocks, blockSize, 4*tempSize*sizeof(float)>>>(getNumAtoms(), getNumGaussians(),
                 getWidth(), getCutoff(), getGaussianWidth(), cudaNeighbors.getNeighbors(), cudaNeighbors.getNeighborCount(),
                 (float3*) cudaNeighbors.getDevicePositions(), cudaNeighbors.getDeviceBoxVectors(), deviceInput, deviceOutputDeriv,
-                deviceInputDeriv, devicePositionDeriv, deviceW1, deviceB1, deviceW2, deviceB2);
+                deviceInputDeriv, devicePositionDeriv, w1, b1, w2, b2);
     }
     else
         backpropCFConv<false, false><<<numBlocks, blockSize, 4*tempSize*sizeof(float)>>>(getNumAtoms(), getNumGaussians(),
             getWidth(), getCutoff(), getGaussianWidth(), cudaNeighbors.getNeighbors(), cudaNeighbors.getNeighborCount(),
             (float3*) cudaNeighbors.getDevicePositions(), cudaNeighbors.getDeviceBoxVectors(), deviceInput, deviceOutputDeriv,
-            deviceInputDeriv, devicePositionDeriv, deviceW1, deviceB1, deviceW2, deviceB2);
+            deviceInputDeriv, devicePositionDeriv, w1, b1, w2, b2);
 
     // If necessary, copy the output.
 

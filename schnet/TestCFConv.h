@@ -14,8 +14,7 @@ void assertEqual(float v1, float v2, float atol, float rtol) {
         throw runtime_error(string("Assertion failure: expected ")+to_string(v1)+" found "+to_string(v2));
 }
 
-void validateDerivatives(CFConvNeighbors& neighbors, CFConv& conv, float* positions, float* periodicVectors,
-                         vector<float>& x, float* w1, float* w2, vector<float>& b1, vector<float>& b2) {
+void validateDerivatives(CFConvNeighbors& neighbors, CFConv& conv, float* positions, float* periodicVectors, vector<float>& x) {
     int numAtoms = conv.getNumAtoms();
     int width = conv.getWidth();
     vector<float> y(numAtoms*width);
@@ -26,10 +25,9 @@ void validateDerivatives(CFConvNeighbors& neighbors, CFConv& conv, float* positi
         // Use backprop to compute the gradient of one symmetry function.
 
         neighbors.build(positions, periodicVectors);
-        conv.compute(neighbors, positions, periodicVectors, x.data(), y.data(), (float*) w1, b1.data(), (float*) w2, b2.data());
+        conv.compute(neighbors, positions, periodicVectors, x.data(), y.data());
         outputDeriv[i] = 1;
-        conv.backprop(neighbors, positions, periodicVectors, x.data(), outputDeriv.data(), inputDeriv.data(), positionDeriv.data(),
-                      (float*) w1, b1.data(), (float*) w2, b2.data());
+        conv.backprop(neighbors, positions, periodicVectors, x.data(), outputDeriv.data(), inputDeriv.data(), positionDeriv.data());
         outputDeriv[i] = 0;
 
         // Displace the inputs along the gradient direction, compute the symmetry functions,
@@ -42,11 +40,11 @@ void validateDerivatives(CFConvNeighbors& neighbors, CFConv& conv, float* positi
         float delta = step/norm;
         for (int j = 0; j < offsetx.size(); j++)
             offsetx[j] = x[j] - delta*inputDeriv[j];
-        conv.compute(neighbors, positions, periodicVectors, offsetx.data(), y.data(), (float*) w1, b1.data(), (float*) w2, b2.data());
+        conv.compute(neighbors, positions, periodicVectors, offsetx.data(), y.data());
         float value1 = y[i];
         for (int j = 0; j < offsetx.size(); j++)
             offsetx[j] = x[j] + delta*inputDeriv[j];
-        conv.compute(neighbors, positions, periodicVectors, offsetx.data(), y.data(), (float*) w1, b1.data(), (float*) w2, b2.data());
+        conv.compute(neighbors, positions, periodicVectors, offsetx.data(), y.data());
         float value2 = y[i];
         float estimate = (value2-value1)/(2*step);
 
@@ -65,12 +63,12 @@ void validateDerivatives(CFConvNeighbors& neighbors, CFConv& conv, float* positi
         for (int j = 0; j < offsetPositions.size(); j++)
             offsetPositions[j] = positions[j] - delta*positionDeriv[j];
         neighbors.build(offsetPositions.data(), periodicVectors);
-        conv.compute(neighbors, offsetPositions.data(), periodicVectors, x.data(), y.data(), (float*) w1, b1.data(), (float*) w2, b2.data());
+        conv.compute(neighbors, offsetPositions.data(), periodicVectors, x.data(), y.data());
         value1 = y[i];
         for (int j = 0; j < offsetPositions.size(); j++)
             offsetPositions[j] = positions[j] + delta*positionDeriv[j];
         neighbors.build(offsetPositions.data(), periodicVectors);
-        conv.compute(neighbors, offsetPositions.data(), periodicVectors, x.data(), y.data(), (float*) w1, b1.data(), (float*) w2, b2.data());
+        conv.compute(neighbors, offsetPositions.data(), periodicVectors, x.data(), y.data());
         value2 = y[i];
         estimate = (value2-value1)/(2*step);
 
@@ -130,11 +128,11 @@ void testWater(float* periodicVectors, float* expectedOutput) {
     vector<float> y(8*18);
     CFConvNeighbors* neighbors = createNeighbors(numAtoms, 2.0, (periodicVectors != NULL));
     neighbors->build((float*) positions, periodicVectors);
-    CFConv* conv = createConv(numAtoms, 8, 5, 2.0, (periodicVectors != NULL), 0.5);
-    conv->compute(*neighbors, (float*) positions, periodicVectors, x.data(), y.data(), (float*) w1, b1.data(), (float*) w2, b2.data());
+    CFConv* conv = createConv(numAtoms, 8, 5, 2.0, (periodicVectors != NULL), 0.5, (float*) w1, b1.data(), (float*) w2, b2.data());
+    conv->compute(*neighbors, (float*) positions, periodicVectors, x.data(), y.data());
     for (int i = 0; i < y.size(); i++)
         assertEqual(expectedOutput[i], y[i], 1e-4, 1e-3);
-    validateDerivatives(*neighbors, *conv, (float*) positions, periodicVectors, x, (float*) w1, (float*) w2, b1, b2);
+    validateDerivatives(*neighbors, *conv, (float*) positions, periodicVectors, x);
     delete neighbors;
     delete conv;
 }

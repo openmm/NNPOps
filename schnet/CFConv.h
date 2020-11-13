@@ -86,7 +86,10 @@ private:
 
 /**
  * This class computes the continuous filter convolution (cfconv) function used in SchNet.
- * For every pair of atoms, it performs the following calculations:
+ * Create an instance of this class at the same time you create the model and then reuse it
+ * for every calculation on that model.
+ * 
+ * For each pair of atoms, it performs the following calculations:
  * 
  * 1. Compute a set of Gaussian basis functions describing the distance between them.
  * 2. Pass them through a dense layer.
@@ -99,10 +102,6 @@ private:
  * 
  * This calculation is designed to match the behavior of SchNetPack.  It is similar but not
  * identical to that described in the original SchNet publication.
- * 
- * Create an instance of this class at the same time you create the model and then reuse it for every
- * calculation on that model.  You also can share a single object between multiple layers if the
- * hyperparameters specified in the constructor are the same for all of them.
  * 
  * This is an abstract class.  Subclasses provide implementations on particular
  * types of hardware.
@@ -118,6 +117,10 @@ public:
      * @param cutoff         the cutoff distance
      * @param periodic       whether to apply periodic boundary conditions
      * @param gaussianWidth  the width of the Gaussian basis functions
+     * @param w1             an array of shape [numGaussians][width] containing the weights of the first dense layer
+     * @param b1             an array of length [width] containing the biases of the first dense layer
+     * @param w2             an array of shape [width][width] containing the weights of the second dense layer
+     * @param b2             an array of length [width] containing the biases of the second dense layer
      */
     CFConv(int numAtoms, int width, int numGaussians, float cutoff, bool periodic, float gaussianWidth) :
            numAtoms(numAtoms), width(width), numGaussians(numGaussians), cutoff(cutoff), periodic(periodic), gaussianWidth(gaussianWidth) {
@@ -134,13 +137,9 @@ public:
      *                            not used, this is ignored and may be NULL.
      * @param input               an array of shape [numAtoms][width] containing the input vectors
      * @param output              an array of shape [numAtoms][width] to store the output vectors into
-     * @param w1                  an array of shape [numGaussians][width] containing the weights of the first dense layer
-     * @param b1                  an array of length [width] containing the biases of the first dense layer
-     * @param w2                  an array of shape [width][width] containing the weights of the second dense layer
-     * @param b2                  an array of length [width] containing the biases of the second dense layer
      */
     virtual void compute(const CFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                         const float* input, float* output, const float* w1, const float* b1, const float* w2, const float* b2) = 0;
+                         const float* input, float* output) = 0;
     /**
      * Given the derivatives of some function E (typically energy) with respect to the outputs, backpropagate them
      * to find the derivates of E with respect to the inputs and atom positions.
@@ -154,14 +153,9 @@ public:
      * @param outputDeriv         an array of shape [numAtoms][width] containing the derivative of E with respect to each output value
      * @param inputDeriv          an array of shape [numAtoms][width] to store the derivative of E with respect to each input value into
      * @param positionDeriv       an array of shape [numAtoms][3] to store the derivative of E with respect to the atom positions into
-     * @param w1                  an array of shape [numGaussians][width] containing the weights of the first dense layer
-     * @param b1                  an array of length [width] containing the biases of the first dense layer
-     * @param w2                  an array of shape [width][width] containing the weights of the second dense layer
-     * @param b2                  an array of length [width] containing the biases of the second dense layer
      */
     virtual void backprop(const CFConvNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                          const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv,
-                          const float* w1, const float* b1, const float* w2, const float* b2) = 0;
+                          const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv) = 0;
     /**
      * Get the number of atoms in the system.
      */
