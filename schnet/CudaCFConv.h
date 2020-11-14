@@ -75,14 +75,14 @@ public:
         return deviceBoxVectors;
     }
     /**
-     * Get the neighbors of each atom based on the most recent call to build().
-     * The neighbors of atom i begin at element i*numAtoms.
+     * Get the list of all neighbor pairs based on the most recent call to build().
+     * Each element contains the indices of two interacting atoms.
      */
-    const int* getNeighbors() const {
+    const int2* getNeighbors() const {
         return neighbors;
     }
     /**
-     * Get the number of neighbors of each atom based on the most recent call to build().
+     * Get the total number of neighbor pairs based on the most recent call to build().
      */
     const int* getNeighborCount() const {
         return neighborCount;
@@ -93,6 +93,13 @@ public:
      */
     const float* getNeighborDistances() const {
         return neighborDistances;
+    }
+    /**
+     * Get the displacement between each pair of atoms.  Each element refers to the
+     * corresponding element of the array returned by getNeighbors().
+     */
+    const float3* getNeighborDeltas() const {
+        return neighborDeltas;
     }
     /**
      * Get the maximum number of thread blocks we should try to launch on this
@@ -106,9 +113,10 @@ private:
     float* periodicBoxVectors;
     float* devicePositions;
     float* deviceBoxVectors;
-    int* neighbors;
+    int2* neighbors;
     int* neighborCount;
     float* neighborDistances;
+    float3* neighborDeltas;
     bool triclinic;
     int maxBlocks;
 };

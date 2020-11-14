@@ -38,16 +38,17 @@ CudaCFConvNeighbors::CudaCFConvNeighbors(int numAtoms, float cutoff, bool period
                                          positions(0), periodicBoxVectors(0), neighbors(0), neighborCount(0), neighborDistances(0) {
     CHECK_RESULT(cudaMallocManaged(&positions, numAtoms*sizeof(float3)));
     CHECK_RESULT(cudaMallocManaged(&periodicBoxVectors, 9*sizeof(float)));
-    CHECK_RESULT(cudaMallocManaged(&neighbors, numAtoms*numAtoms*sizeof(int)));
-    CHECK_RESULT(cudaMallocManaged(&neighborCount, numAtoms*sizeof(int)));
+    CHECK_RESULT(cudaMallocManaged(&neighbors, numAtoms*numAtoms*sizeof(int2)));
+    CHECK_RESULT(cudaMallocManaged(&neighborCount, sizeof(int)));
     CHECK_RESULT(cudaMallocManaged(&neighborDistances, numAtoms*numAtoms*sizeof(float)));
+    CHECK_RESULT(cudaMallocManaged(&neighborDeltas, numAtoms*numAtoms*sizeof(float3)));
 
     // Set an upper limit on how many thread blocks we try to launch based on the size of the GPU.
 
     int device, numMultiprocessors;
     CHECK_RESULT(cudaGetDevice(&device));
     CHECK_RESULT(cudaDeviceGetAttribute(&numMultiprocessors, cudaDevAttrMultiProcessorCount, device));
-    maxBlocks = numMultiprocessors*4;
+    maxBlocks = numMultiprocessors*5;
 }
 
 CudaCFConvNeighbors::~CudaCFConvNeighbors() {
@@ -61,6 +62,8 @@ CudaCFConvNeighbors::~CudaCFConvNeighbors() {
         cudaFree(neighborCount);
     if (neighborDistances != 0)
         cudaFree(neighborDistances);
+    if (neighborDeltas != 0)
+        cudaFree(neighborDeltas);
 }
 
 template <bool PERIODIC, bool TRICLINIC>
@@ -90,8 +93,8 @@ __device__ void computeDisplacement(float3 pos1, float3 pos2, float3& delta, flo
 }
 
 template <bool PERIODIC, bool TRICLINIC>
-__global__ void buildNeighborList(int numAtoms, float cutoff, int* neighbors, int* neighborCount, float* neighborDistances,
-            const float3* positions, const float* periodicBoxVectors) {
+__global__ void buildNeighborList(int numAtoms, float cutoff, int2* neighbors, int* neighborCount, float* neighborDistances,
+            float3* neighborDeltas, const float3* positions, const float* periodicBoxVectors) {
     const int warp = (blockIdx.x*blockDim.x+threadIdx.x)/32;
     const int indexInWarp = threadIdx.x%32;
     const int numWarps = (gridDim.x*blockDim.x)/32;
@@ -102,7 +105,6 @@ __global__ void buildNeighborList(int numAtoms, float cutoff, int* neighbors, in
     // Each warp loops over atoms.
 
     for (int atom1 = warp; atom1 < numAtoms; atom1 += numWarps) {
-        int numNeighbors = 0;
         float3 pos1 = positions[atom1];
 
         // The threads in the warp loop over second atoms.
@@ -114,15 +116,17 @@ __global__ void buildNeighborList(int numAtoms, float cutoff, int* neighbors, in
             computeDisplacement<PERIODIC, TRICLINIC>(pos1, pos2, delta, r2, periodicBoxVectors, invBoxSize);
             bool isNeighbor = (r2 < cutoff2 && atom1 != atom2);
             int neighborFlags = __ballot_sync(0xFFFFFFFF, isNeighbor);
+            int startIndex = 0;
+            if (indexInWarp == 0)
+                startIndex = atomicAdd(neighborCount, __popc(neighborFlags));
+            startIndex = __shfl_sync(0xFFFFFFFF, startIndex, 0);
             if (isNeighbor) {
-                int index = numNeighbors + __popc(neighborFlags&warpMask);
-                neighbors[atom1*numAtoms + index] = atom2;
-                neighborDistances[atom1*numAtoms + index] = sqrtf(r2);
+                int index = startIndex + __popc(neighborFlags&warpMask);
+                neighbors[index] = make_int2(atom1, atom2);
+                neighborDistances[index] = sqrtf(r2);
+                neighborDeltas[index] = delta;
             }
-            numNeighbors += __popc(neighborFlags);
         }
-        if (indexInWarp == 0)
-            neighborCount[atom1] = numNeighbors;
     }
 }
 
@@ -171,16 +175,17 @@ void CudaCFConvNeighbors::build(const float* positions, const float* periodicBox
 
     // Build the neighbor list.
 
+    CHECK_RESULT(cudaMemsetAsync(neighborCount, 0, sizeof(int)));
     int blockSize = 192;
     int numBlocks = min(maxBlocks, getNumAtoms());
     if (getPeriodic()) {
         if (triclinic)
-            buildNeighborList<true, true><<<numBlocks, blockSize>>>(getNumAtoms(), getCutoff(), neighbors, neighborCount, neighborDistances, (float3*) devicePositions, deviceBoxVectors);
+            buildNeighborList<true, true><<<numBlocks, blockSize>>>(getNumAtoms(), getCutoff(), neighbors, neighborCount, neighborDistances, neighborDeltas, (float3*) devicePositions, deviceBoxVectors);
         else
-            buildNeighborList<true, false><<<numBlocks, blockSize>>>(getNumAtoms(), getCutoff(), neighbors, neighborCount, neighborDistances, (float3*) devicePositions, deviceBoxVectors);
+            buildNeighborList<true, false><<<numBlocks, blockSize>>>(getNumAtoms(), getCutoff(), neighbors, neighborCount, neighborDistances, neighborDeltas, (float3*) devicePositions, deviceBoxVectors);
     }
     else
-        buildNeighborList<false, false><<<numBlocks, blockSize>>>(getNumAtoms(), getCutoff(), neighbors, neighborCount, neighborDistances, (float3*) devicePositions, deviceBoxVectors);
+        buildNeighborList<false, false><<<numBlocks, blockSize>>>(getNumAtoms(), getCutoff(), neighbors, neighborCount, neighborDistances, neighborDeltas, (float3*) devicePositions, deviceBoxVectors);
 }
 
 CudaCFConv::CudaCFConv(int numAtoms, int width, int numGaussians, float cutoff, bool periodic, float gaussianWidth, const float* w1,
@@ -258,63 +263,60 @@ __device__ float cutoffDeriv(float r, float rc) {
 }
 
 __global__ void computeCFConv(int numAtoms, int numGaussians, int width, float cutoff, float gaussianWidth,
-            const int* neighbors, const int* neighborCount, const float* neighborDistance, const float* input,
+            const int2* neighbors, const int* neighborCount, const float* neighborDistance, const float* input,
             float* output, const float* w1, const float* b1, const float* w2, const float* b2) {
-    const int warp = threadIdx.x/32;
+    const int warp = (blockIdx.x*blockDim.x+threadIdx.x)/32;
     const int indexInWarp = threadIdx.x%32;
-    const int numWarps = blockDim.x/32;
+    const int numWarps = (gridDim.x*blockDim.x)/32;
+    const int warpInBlock = threadIdx.x/32;
+    const int numWarpsInBlock = blockDim.x/32;
     const int tempSize = max(numGaussians, width);
     extern __shared__ float tempArrays[];
-    float* temp1 = &tempArrays[tempSize*warp];
-    float* temp2 = &tempArrays[tempSize*(numWarps+warp)];
+    float* temp1 = &tempArrays[tempSize*warpInBlock];
+    float* temp2 = &tempArrays[tempSize*(numWarpsInBlock+warpInBlock)];
 
-    // Each thread block loops over atoms.
+    // Each warp loops over pairs of atoms.
 
-    for (int atom1 = blockIdx.x; atom1 < numAtoms; atom1 += gridDim.x) {
-        int numNeighbors = neighborCount[atom1];
+    for (int pair = warp; pair < *neighborCount; pair += numWarps) {
+        int atom1 = neighbors[pair].x;
+        int atom2 = neighbors[pair].y;
+        float r = neighborDistance[pair];
 
-        // The warps in the block loop over atoms from the neighbor list.
+        // Compute the Gaussian basis functions and store them in temp1.
 
-        for (int neighborIndex = warp; neighborIndex < numNeighbors; neighborIndex += numWarps) {
-            int atom2 = neighbors[atom1*numAtoms + neighborIndex];
-            float r = neighborDistance[atom1*numAtoms + neighborIndex];
+        for (int i = indexInWarp; i < numGaussians; i += 32) {
+            float gaussianPos = i*cutoff/(numGaussians-1);
+            float x = (r-gaussianPos)/gaussianWidth;
+            temp1[i] = expf(-0.5f*x*x);
+        }
+        __syncwarp();
 
-            // Compute the Gaussian basis functions and store them in temp1.
+        // Apply the first dense layer, storing the result in temp2.
 
-            for (int i = indexInWarp; i < numGaussians; i += 32) {
-                float gaussianPos = i*cutoff/(numGaussians-1);
-                float x = (r-gaussianPos)/gaussianWidth;
-                temp1[i] = expf(-0.5f*x*x);
-            }
-            __syncwarp();
+        for (int i = indexInWarp; i < width; i += 32) {
+            float sum = b1[i];
+            for (int j = 0; j < numGaussians; j++)
+                sum += temp1[j]*w1[i+j*width];
+            temp2[i] = logf(0.5f*expf(sum) + 0.5f);
+        }
+        __syncwarp();
 
-            // Apply the first dense layer, storing the result in temp2.
+        // Apply the second dense layer, storing the result in temp1.
 
-            for (int i = indexInWarp; i < width; i += 32) {
-                float sum = b1[i];
-                for (int j = 0; j < numGaussians; j++)
-                    sum += temp1[j]*w1[i+j*width];
-                temp2[i] = logf(0.5f*expf(sum) + 0.5f);
-            }
-            __syncwarp();
+        float cutoffScale = cutoffFunction(r, cutoff);
+        for (int i = indexInWarp; i < width; i += 32) {
+            float sum = b2[i];
+            for (int j = 0; j < width; j++)
+                sum += temp2[j]*w2[i+j*width];
+            temp1[i] = cutoffScale*sum;
+        }
+        __syncwarp();
 
-            // Apply the second dense layer, storing the result in temp1.
+        // Add it to the output.
 
-            float cutoffScale = cutoffFunction(r, cutoff);
-            for (int i = indexInWarp; i < width; i += 32) {
-                float sum = b2[i];
-                for (int j = 0; j < width; j++)
-                    sum += temp2[j]*w2[i+j*width];
-                temp1[i] = cutoffScale*sum;
-            }
-            __syncwarp();
-
-            // Add it to the output.
-
-            for (int i = indexInWarp; i < width; i += 32) {
-                atomicAdd(&output[atom1*width+i], temp1[i]*input[atom2*width+i]);
-                atomicAdd(&output[atom2*width+i], temp1[i]*input[atom1*width+i]);
-            }
+        for (int i = indexInWarp; i < width; i += 32) {
+            atomicAdd(&output[atom1*width+i], temp1[i]*input[atom2*width+i]);
+            atomicAdd(&output[atom2*width+i], temp1[i]*input[atom1*width+i]);
         }
     }
 }
@@ -348,92 +350,84 @@ void CudaCFConv::compute(const CFConvNeighbors& neighbors, const float* position
 
 template <bool PERIODIC, bool TRICLINIC>
 __global__ void backpropCFConv(int numAtoms, int numGaussians, int width, float cutoff, float gaussianWidth,
-            const int* neighbors, const int* neighborCount, const float3* positions, const float* periodicBoxVectors,
+            const int2* neighbors, const int* neighborCount, const float3* neighborDeltas,
             const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv, const float* w1,
             const float* b1, const float* w2, const float* b2) {
-    const int warp = threadIdx.x/32;
+    const int warp = (blockIdx.x*blockDim.x+threadIdx.x)/32;
     const int indexInWarp = threadIdx.x%32;
-    const int numWarps = blockDim.x/32;
-    const float3 invBoxSize = (PERIODIC ? make_float3(1/periodicBoxVectors[0], 1/periodicBoxVectors[4], 1/periodicBoxVectors[8]) : make_float3(0, 0, 0));
+    const int numWarps = (gridDim.x*blockDim.x)/32;
+    const int warpInBlock = threadIdx.x/32;
+    const int numWarpsInBlock = blockDim.x/32;
     const int tempSize = max(numGaussians, width);
     extern __shared__ float tempArrays[];
-    float* temp1 = &tempArrays[tempSize*warp];
-    float* temp2 = &tempArrays[tempSize*(numWarps+warp)];
-    float* dtemp1 = &tempArrays[tempSize*(2*numWarps+warp)];
-    float* dtemp2 = &tempArrays[tempSize*(3*numWarps+warp)];
+    float* temp1 = &tempArrays[tempSize*warpInBlock];
+    float* temp2 = &tempArrays[tempSize*(numWarpsInBlock+warpInBlock)];
+    float* dtemp1 = &tempArrays[tempSize*(2*numWarpsInBlock+warpInBlock)];
+    float* dtemp2 = &tempArrays[tempSize*(3*numWarpsInBlock+warpInBlock)];
 
-    // Each thread block loops over atoms.
+    // Each warp loops over pairs of atoms.
 
-    for (int atom1 = blockIdx.x; atom1 < numAtoms; atom1 += gridDim.x) {
-        int numNeighbors = neighborCount[atom1];
-        float3 pos1 = positions[atom1];
+    for (int pair = warp; pair < *neighborCount; pair += numWarps) {
+        int atom1 = neighbors[pair].x;
+        int atom2 = neighbors[pair].y;
+        float3 delta = neighborDeltas[pair];
+        float r = sqrtf(delta.x*delta.x + delta.y*delta.y + delta.z*delta.z);
+        float rInv = 1/r;
 
-        // The warps in the block loop over atoms from the neighbor list.
+        // Compute the Gaussian basis functions and store them in temp1.
 
-        for (int neighborIndex = warp; neighborIndex < numNeighbors; neighborIndex += numWarps) {
-            int atom2 = neighbors[atom1*numAtoms + neighborIndex];
-            float3 pos2 = positions[atom2];
-            float3 delta;
-            float r2;
-            computeDisplacement<PERIODIC, TRICLINIC>(pos1, pos2, delta, r2, periodicBoxVectors, invBoxSize);
-            float r = sqrtf(r2);
-            float rInv = 1/r;
+        for (int i = indexInWarp; i < numGaussians; i += 32) {
+            float gaussianPos = i*cutoff/(numGaussians-1);
+            float x = (r-gaussianPos)/gaussianWidth;
+            float gaussian = expf(-0.5f*x*x);
+            temp1[i] = gaussian;
+            dtemp1[i] = -x*gaussian/gaussianWidth;
+        }
+        __syncwarp();
 
-            // Compute the Gaussian basis functions and store them in temp1.
+        // Apply the first dense layer, storing the result in temp2.
 
-            for (int i = indexInWarp; i < numGaussians; i += 32) {
-                float gaussianPos = i*cutoff/(numGaussians-1);
-                float x = (r-gaussianPos)/gaussianWidth;
-                float gaussian = expf(-0.5f*x*x);
-                temp1[i] = gaussian;
-                dtemp1[i] = -x*gaussian/gaussianWidth;
+        for (int i = indexInWarp; i < width; i += 32) {
+            float sum = b1[i], dSumdR = 0;
+            for (int j = 0; j < numGaussians; j++) {
+                float w = w1[i+j*width];
+                sum += temp1[j]*w;
+                dSumdR += dtemp1[j]*w;
             }
-            __syncwarp();
+            float expSum = expf(sum);
+            temp2[i] = logf(0.5f*expSum + 0.5f);
+            dtemp2[i] = dSumdR*expSum/(expSum + 1);
+        }
+        __syncwarp();
 
-            // Apply the first dense layer, storing the result in temp2.
+        // Apply the second dense layer, storing the result in temp1.
 
-            for (int i = indexInWarp; i < width; i += 32) {
-                float sum = b1[i], dSumdR = 0;
-                for (int j = 0; j < numGaussians; j++) {
-                    float w = w1[i+j*width];
-                    sum += temp1[j]*w;
-                    dSumdR += dtemp1[j]*w;
-                }
-                float expSum = expf(sum);
-                temp2[i] = logf(0.5f*expSum + 0.5f);
-                dtemp2[i] = dSumdR*expSum/(expSum + 1);
+        float cutoffScale = cutoffFunction(r, cutoff);
+        float dCutoffdR = cutoffDeriv(r, cutoff);
+        for (int i = indexInWarp; i < width; i += 32) {
+            float sum = b2[i], dSumdR = 0;
+            for (int j = 0; j < width; j++) {
+                float w = w2[i+j*width];
+                sum += temp2[j]*w;
+                dSumdR += dtemp2[j]*w;
             }
-            __syncwarp();
+            temp1[i] = cutoffScale*sum;
+            dtemp1[i] = dCutoffdR*sum + cutoffScale*dSumdR;
+        }
+        __syncwarp();
 
-            // Apply the second dense layer, storing the result in temp1.
+        // Add it to the output.
 
-            float cutoffScale = cutoffFunction(r, cutoff);
-            float dCutoffdR = cutoffDeriv(r, cutoff);
-            for (int i = indexInWarp; i < width; i += 32) {
-                float sum = b2[i], dSumdR = 0;
-                for (int j = 0; j < width; j++) {
-                    float w = w2[i+j*width];
-                    sum += temp2[j]*w;
-                    dSumdR += dtemp2[j]*w;
-                }
-                temp1[i] = cutoffScale*sum;
-                dtemp1[i] = dCutoffdR*sum + cutoffScale*dSumdR;
-            }
-            __syncwarp();
-
-            // Add it to the output.
-
-            for (int i = indexInWarp; i < width; i += 32) {
-                int index1 = atom1*width+i;
-                int index2 = atom2*width+i;
-                atomicAdd(&inputDeriv[index1], temp1[i]*outputDeriv[index2]);
-                atomicAdd(&inputDeriv[index2], temp1[i]*outputDeriv[index1]);
-                float scale = rInv*dtemp1[i]*(input[index2]*outputDeriv[index1] + input[index1]*outputDeriv[index2]);
-                float dVdX[3] = {scale*delta.x, scale*delta.y, scale*delta.z};
-                for (int j = 0; j < 3; j++) {
-                    atomicAdd(&positionDeriv[atom1*3+j], -dVdX[j]);
-                    atomicAdd(&positionDeriv[atom2*3+j], dVdX[j]);
-                }
+        for (int i = indexInWarp; i < width; i += 32) {
+            int index1 = atom1*width+i;
+            int index2 = atom2*width+i;
+            atomicAdd(&inputDeriv[index1], temp1[i]*outputDeriv[index2]);
+            atomicAdd(&inputDeriv[index2], temp1[i]*outputDeriv[index1]);
+            float scale = rInv*dtemp1[i]*(input[index2]*outputDeriv[index1] + input[index1]*outputDeriv[index2]);
+            float dVdX[3] = {scale*delta.x, scale*delta.y, scale*delta.z};
+            for (int j = 0; j < 3; j++) {
+                atomicAdd(&positionDeriv[atom1*3+j], -dVdX[j]);
+                atomicAdd(&positionDeriv[atom2*3+j], dVdX[j]);
             }
         }
     }
@@ -464,18 +458,18 @@ void CudaCFConv::backprop(const CFConvNeighbors& neighbors, const float* positio
         if (neighbors.getTriclinic())
             backpropCFConv<true, true><<<numBlocks, blockSize, 4*tempSize*sizeof(float)>>>(getNumAtoms(), getNumGaussians(),
                 getWidth(), getCutoff(), getGaussianWidth(), cudaNeighbors.getNeighbors(), cudaNeighbors.getNeighborCount(),
-                (float3*) cudaNeighbors.getDevicePositions(), cudaNeighbors.getDeviceBoxVectors(), deviceInput, deviceOutputDeriv,
+                cudaNeighbors.getNeighborDeltas(), deviceInput, deviceOutputDeriv,
                 deviceInputDeriv, devicePositionDeriv, w1, b1, w2, b2);
         else
             backpropCFConv<true, false><<<numBlocks, blockSize, 4*tempSize*sizeof(float)>>>(getNumAtoms(), getNumGaussians(),
                 getWidth(), getCutoff(), getGaussianWidth(), cudaNeighbors.getNeighbors(), cudaNeighbors.getNeighborCount(),
-                (float3*) cudaNeighbors.getDevicePositions(), cudaNeighbors.getDeviceBoxVectors(), deviceInput, deviceOutputDeriv,
+                cudaNeighbors.getNeighborDeltas(), deviceInput, deviceOutputDeriv,
                 deviceInputDeriv, devicePositionDeriv, w1, b1, w2, b2);
     }
     else
         backpropCFConv<false, false><<<numBlocks, blockSize, 4*tempSize*sizeof(float)>>>(getNumAtoms(), getNumGaussians(),
             getWidth(), getCutoff(), getGaussianWidth(), cudaNeighbors.getNeighbors(), cudaNeighbors.getNeighborCount(),
-            (float3*) cudaNeighbors.getDevicePositions(), cudaNeighbors.getDeviceBoxVectors(), deviceInput, deviceOutputDeriv,
+            cudaNeighbors.getNeighborDeltas(), deviceInput, deviceOutputDeriv,
             deviceInputDeriv, devicePositionDeriv, w1, b1, w2, b2);
 
     // If necessary, copy the output.
