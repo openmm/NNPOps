@@ -1,5 +1,7 @@
 #include "CudaCFConv.h"
 #include <cmath>
+#include <cstdio>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -63,6 +65,10 @@ void runBenchmark(int iterations, vector<float>& positions, vector<float>& perio
     int width = 128;
     int numGaussians = 50;
     float cutoff = 10;
+
+    // Generate random weights and biases.  We don't care about the values, since they
+    // don't affect speed.
+
     vector<float> w1, b1, w2, b2;
     std::default_random_engine generator(0);
     std::normal_distribution<double> distribution(0, 1);
@@ -74,6 +80,9 @@ void runBenchmark(int iterations, vector<float>& positions, vector<float>& perio
         for (int j = 0; j < width; j++)
             w2.push_back(distribution(generator));
     }
+
+    // Allocate all the memory we will need.
+
     CudaCFConvNeighbors neighbors(numAtoms, cutoff, periodicBoxVectors.size() > 0);
     CudaCFConv cfconv(numAtoms, width, numGaussians, cutoff, periodicBoxVectors.size() > 0, 0.2, w1.data(), b1.data(), w2.data(), b2.data());
     float *positionsData, *vectorsData, *input, *output, *inputDerivs, *outputDerivs, *positionDerivs;
@@ -89,6 +98,10 @@ void runBenchmark(int iterations, vector<float>& positions, vector<float>& perio
     for (int i = 0; i < width; i++)
         for (int j = 0; j < numAtoms; j++)
             input[j*width+i] = distribution(generator);
+
+    // Run the benchmark.
+
+    clock_t start = clock();
     for (int i = 0; i < iterations; i++) {
         neighbors.build(positionsData, vectorsData);
         for (int j = 0; j < 6; j++) {
@@ -96,6 +109,14 @@ void runBenchmark(int iterations, vector<float>& positions, vector<float>& perio
             cfconv.backprop(neighbors, positionsData, vectorsData, input, outputDerivs, inputDerivs, positionDerivs);
         }
     }
+    cudaDeviceSynchronize();
+    clock_t finish = clock();
+    double duration = (double) (finish-start)/CLOCKS_PER_SEC;
+    printf("  %f sec\n", duration);
+    printf("  %f ms/iteration\n", duration/iterations*1000);
+
+    // Release device memory.
+
     cudaFree(positionsData);
     cudaFree(vectorsData);
     cudaFree(input);

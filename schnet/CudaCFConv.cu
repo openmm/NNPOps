@@ -48,7 +48,7 @@ CudaCFConvNeighbors::CudaCFConvNeighbors(int numAtoms, float cutoff, bool period
     int device, numMultiprocessors;
     CHECK_RESULT(cudaGetDevice(&device));
     CHECK_RESULT(cudaDeviceGetAttribute(&numMultiprocessors, cudaDevAttrMultiProcessorCount, device));
-    maxBlocks = numMultiprocessors*5;
+    maxBlocks = numMultiprocessors*4;
 }
 
 CudaCFConvNeighbors::~CudaCFConvNeighbors() {
@@ -334,7 +334,7 @@ void CudaCFConv::compute(const CFConvNeighbors& neighbors, const float* position
 
     // Invoke the kernel.
 
-    const int blockSize = 192;
+    const int blockSize = 256;
     const CudaCFConvNeighbors& cudaNeighbors = dynamic_cast<const CudaCFConvNeighbors&>(neighbors);
     const int numBlocks = min(cudaNeighbors.getMaxBlocks(), getNumAtoms());
     const int tempSize = max(getNumGaussians(), getWidth())*(blockSize/32);
@@ -424,10 +424,14 @@ __global__ void backpropCFConv(int numAtoms, int numGaussians, int width, float 
             atomicAdd(&inputDeriv[index1], temp1[i]*outputDeriv[index2]);
             atomicAdd(&inputDeriv[index2], temp1[i]*outputDeriv[index1]);
             float scale = rInv*dtemp1[i]*(input[index2]*outputDeriv[index1] + input[index1]*outputDeriv[index2]);
-            float dVdX[3] = {scale*delta.x, scale*delta.y, scale*delta.z};
-            for (int j = 0; j < 3; j++) {
-                atomicAdd(&positionDeriv[atom1*3+j], -dVdX[j]);
-                atomicAdd(&positionDeriv[atom2*3+j], dVdX[j]);
+            for (int offset = 16; offset > 0; offset /= 2)
+                scale += __shfl_down_sync(0xFFFFFFFF, scale, offset);
+            if (indexInWarp == 0) {
+                float dVdX[3] = {scale*delta.x, scale*delta.y, scale*delta.z};
+                for (int j = 0; j < 3; j++) {
+                    atomicAdd(&positionDeriv[atom1*3+j], -dVdX[j]);
+                    atomicAdd(&positionDeriv[atom2*3+j], dVdX[j]);
+                }
             }
         }
     }
@@ -450,7 +454,7 @@ void CudaCFConv::backprop(const CFConvNeighbors& neighbors, const float* positio
 
     // Invoke the kernel.
 
-    const int blockSize = 192;
+    const int blockSize = 256;
     const CudaCFConvNeighbors& cudaNeighbors = dynamic_cast<const CudaCFConvNeighbors&>(neighbors);
     const int numBlocks = min(cudaNeighbors.getMaxBlocks(), getNumAtoms());
     const int tempSize = max(getNumGaussians(), getWidth())*(blockSize/32);
