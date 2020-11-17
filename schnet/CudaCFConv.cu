@@ -43,12 +43,11 @@ CudaCFConvNeighbors::CudaCFConvNeighbors(int numAtoms, float cutoff, bool period
     CHECK_RESULT(cudaMallocManaged(&neighborDistances, numAtoms*numAtoms*sizeof(float)));
     CHECK_RESULT(cudaMallocManaged(&neighborDeltas, numAtoms*numAtoms*sizeof(float3)));
 
-    // Set an upper limit on how many thread blocks we try to launch based on the size of the GPU.
+    // We will limit how many thread blocks we try to launch based on the size of the GPU.
 
-    int device, numMultiprocessors;
+    int device;
     CHECK_RESULT(cudaGetDevice(&device));
     CHECK_RESULT(cudaDeviceGetAttribute(&numMultiprocessors, cudaDevAttrMultiProcessorCount, device));
-    maxBlocks = numMultiprocessors*4;
 }
 
 CudaCFConvNeighbors::~CudaCFConvNeighbors() {
@@ -177,7 +176,7 @@ void CudaCFConvNeighbors::build(const float* positions, const float* periodicBox
 
     CHECK_RESULT(cudaMemsetAsync(neighborCount, 0, sizeof(int)));
     int blockSize = 192;
-    int numBlocks = min(maxBlocks, getNumAtoms());
+    int numBlocks = min(numMultiprocessors*2, getNumAtoms());
     if (getPeriodic()) {
         if (triclinic)
             buildNeighborList<true, true><<<numBlocks, blockSize>>>(getNumAtoms(), getCutoff(), neighbors, neighborCount, neighborDistances, neighborDeltas, (float3*) devicePositions, deviceBoxVectors);
@@ -209,6 +208,12 @@ CudaCFConv::CudaCFConv(int numAtoms, int width, int numGaussians, float cutoff, 
     for (int i = 0; i < width; i++)
         for (int j = 0; j < width; j++)
             this->w2[i*width+j] = w2[i+j*width];
+
+    // We will limit how many thread blocks we try to launch based on the size of the GPU.
+
+    int device;
+    CHECK_RESULT(cudaGetDevice(&device));
+    CHECK_RESULT(cudaDeviceGetAttribute(&numMultiprocessors, cudaDevAttrMultiProcessorCount, device));
 }
 
 CudaCFConv::~CudaCFConv() {
@@ -334,9 +339,9 @@ void CudaCFConv::compute(const CFConvNeighbors& neighbors, const float* position
 
     // Invoke the kernel.
 
-    const int blockSize = 256;
+    const int blockSize = 512;
     const CudaCFConvNeighbors& cudaNeighbors = dynamic_cast<const CudaCFConvNeighbors&>(neighbors);
-    const int numBlocks = min(cudaNeighbors.getMaxBlocks(), getNumAtoms());
+    const int numBlocks = numMultiprocessors*2;
     const int tempSize = max(getNumGaussians(), getWidth())*(blockSize/32);
     computeCFConv<<<numBlocks, blockSize, 2*tempSize*sizeof(float)>>>(getNumAtoms(), getNumGaussians(),
         getWidth(), getCutoff(), getGaussianWidth(), cudaNeighbors.getNeighbors(), cudaNeighbors.getNeighborCount(),
@@ -454,9 +459,9 @@ void CudaCFConv::backprop(const CFConvNeighbors& neighbors, const float* positio
 
     // Invoke the kernel.
 
-    const int blockSize = 256;
+    const int blockSize = 512;
     const CudaCFConvNeighbors& cudaNeighbors = dynamic_cast<const CudaCFConvNeighbors&>(neighbors);
-    const int numBlocks = min(cudaNeighbors.getMaxBlocks(), getNumAtoms());
+    const int numBlocks = numMultiprocessors*2;
     const int tempSize = max(getNumGaussians(), getWidth())*(blockSize/32);
     if (getPeriodic()) {
         if (neighbors.getTriclinic())

@@ -101,13 +101,6 @@ public:
     const float3* getNeighborDeltas() const {
         return neighborDeltas;
     }
-    /**
-     * Get the maximum number of thread blocks we should try to launch on this
-     * GPU for any kernel.
-     */
-    int getMaxBlocks() const {
-        return maxBlocks;
-    }
 private:
     float* positions;
     float* periodicBoxVectors;
@@ -118,7 +111,7 @@ private:
     float* neighborDistances;
     float3* neighborDeltas;
     bool triclinic;
-    int maxBlocks;
+    int numMultiprocessors;
 };
 
 /**
@@ -204,6 +197,7 @@ private:
     const float* ensureOnDevice(const float* arg, float*& deviceMemory, int size);
     float *input, *output, *inputDeriv, *positionDeriv;
     float *w1, *b1, *w2, *b2;
+    int numMultiprocessors;
 };
 
 #endif
