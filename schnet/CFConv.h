@@ -117,10 +117,6 @@ public:
      * @param cutoff         the cutoff distance
      * @param periodic       whether to apply periodic boundary conditions
      * @param gaussianWidth  the width of the Gaussian basis functions
-     * @param w1             an array of shape [numGaussians][width] containing the weights of the first dense layer
-     * @param b1             an array of length [width] containing the biases of the first dense layer
-     * @param w2             an array of shape [width][width] containing the weights of the second dense layer
-     * @param b2             an array of length [width] containing the biases of the second dense layer
      */
     CFConv(int numAtoms, int width, int numGaussians, float cutoff, bool periodic, float gaussianWidth) :
            numAtoms(numAtoms), width(width), numGaussians(numGaussians), cutoff(cutoff), periodic(periodic), gaussianWidth(gaussianWidth) {
