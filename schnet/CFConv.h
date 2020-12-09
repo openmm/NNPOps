@@ -93,7 +93,7 @@ private:
  * 
  * 1. Compute a set of Gaussian basis functions describing the distance between them.
  * 2. Pass them through a dense layer.
- * 3. Apply a shifted softplus activation function.
+ * 3. Apply an activation function.
  * 4. Pass the result through a second dense layer.
  * 5. Apply a cosine cutoff function to make interactions smoothly go to zero at the cutoff.
  * 
@@ -109,6 +109,19 @@ private:
 class CFConv {
 public:
     /**
+     * This is an enumeration of supported activation functions.
+     */
+    enum ActivationFunction {
+        /**
+         * y(x) = log(0.5*exp(x) + 0.5)
+         */
+        ShiftedSoftplus = 0,
+        /**
+         * y(x) = tanh(x)
+         */
+        Tanh = 1
+    };
+    /**
      * Construct on object for computing continuous filter convolution (cfconv) functions.
      *
      * @param numAtoms       the number of atoms in the system
@@ -117,9 +130,11 @@ public:
      * @param cutoff         the cutoff distance
      * @param periodic       whether to apply periodic boundary conditions
      * @param gaussianWidth  the width of the Gaussian basis functions
+     * @param activation     the activation function to use between the two dense layers
      */
-    CFConv(int numAtoms, int width, int numGaussians, float cutoff, bool periodic, float gaussianWidth) :
-           numAtoms(numAtoms), width(width), numGaussians(numGaussians), cutoff(cutoff), periodic(periodic), gaussianWidth(gaussianWidth) {
+    CFConv(int numAtoms, int width, int numGaussians, float cutoff, bool periodic, float gaussianWidth,
+           ActivationFunction activation) : numAtoms(numAtoms), width(width), numGaussians(numGaussians),
+           cutoff(cutoff), periodic(periodic), gaussianWidth(gaussianWidth), activation(activation) {
     }
     virtual ~CFConv() {
     }
@@ -188,10 +203,17 @@ public:
     float getGaussianWidth() const {
         return gaussianWidth;
     }
+    /**
+     * Get the activation function used between the two dense layers.
+     */
+    ActivationFunction getActivation() const {
+        return activation;
+    }
 protected:
     const int numAtoms, width, numGaussians;
     const float cutoff, gaussianWidth;
     const bool periodic;
+    const ActivationFunction activation;
 };
 
 #endif

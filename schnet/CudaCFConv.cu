@@ -187,8 +187,9 @@ void CudaCFConvNeighbors::build(const float* positions, const float* periodicBox
         buildNeighborList<false, false><<<numBlocks, blockSize>>>(getNumAtoms(), getCutoff(), neighbors, neighborCount, neighborDistances, neighborDeltas, (float3*) devicePositions, deviceBoxVectors);
 }
 
-CudaCFConv::CudaCFConv(int numAtoms, int width, int numGaussians, float cutoff, bool periodic, float gaussianWidth, const float* w1,
-            const float* b1, const float* w2, const float* b2) : CFConv(numAtoms, width, numGaussians, cutoff, periodic, gaussianWidth),
+CudaCFConv::CudaCFConv(int numAtoms, int width, int numGaussians, float cutoff, bool periodic, float gaussianWidth,
+                       ActivationFunction activation, const float* w1, const float* b1, const float* w2, const float* b2) :
+            CFConv(numAtoms, width, numGaussians, cutoff, periodic, gaussianWidth, activation),
             input(0), output(0), inputDeriv(0), positionDeriv(0), w1(0), b1(0), w2(0), b2(0) {
     // Allocate memory on the device for the layer parameters.
 
@@ -267,7 +268,7 @@ __device__ float cutoffDeriv(float r, float rc) {
     return -(0.5f*Pi/rc) * sinf(Pi*r/rc);
 }
 
-__global__ void computeCFConv(int numAtoms, int numGaussians, int width, float cutoff, float gaussianWidth,
+__global__ void computeCFConv(int numAtoms, int numGaussians, int width, float cutoff, float gaussianWidth, int activation,
             const int2* neighbors, const int* neighborCount, const float* neighborDistance, const float* input,
             float* output, const float* w1, const float* b1, const float* w2, const float* b2) {
     const int warp = (blockIdx.x*blockDim.x+threadIdx.x)/32;
@@ -302,7 +303,10 @@ __global__ void computeCFConv(int numAtoms, int numGaussians, int width, float c
             float sum = b1[i];
             for (int j = 0; j < numGaussians; j++)
                 sum += temp1[j]*w1[i+j*width];
-            temp2[i] = logf(0.5f*expf(sum) + 0.5f);
+            if (activation == 0)
+                temp2[i] = logf(0.5f*expf(sum) + 0.5f);
+            else
+                temp2[i] = tanhf(sum);
         }
         __syncwarp();
 
@@ -344,8 +348,9 @@ void CudaCFConv::compute(const CFConvNeighbors& neighbors, const float* position
     const int numBlocks = numMultiprocessors*2;
     const int tempSize = max(getNumGaussians(), getWidth())*(blockSize/32);
     computeCFConv<<<numBlocks, blockSize, 2*tempSize*sizeof(float)>>>(getNumAtoms(), getNumGaussians(),
-        getWidth(), getCutoff(), getGaussianWidth(), cudaNeighbors.getNeighbors(), cudaNeighbors.getNeighborCount(),
-        cudaNeighbors.getNeighborDistances(), deviceInput, deviceOutput, w1, b1, w2, b2);
+        getWidth(), getCutoff(), getGaussianWidth(), getActivation(), cudaNeighbors.getNeighbors(),
+        cudaNeighbors.getNeighborCount(), cudaNeighbors.getNeighborDistances(), deviceInput,
+        deviceOutput, w1, b1, w2, b2);
 
     // If necessary, copy the output.
 
@@ -355,7 +360,7 @@ void CudaCFConv::compute(const CFConvNeighbors& neighbors, const float* position
 
 template <bool PERIODIC, bool TRICLINIC>
 __global__ void backpropCFConv(int numAtoms, int numGaussians, int width, float cutoff, float gaussianWidth,
-            const int2* neighbors, const int* neighborCount, const float3* neighborDeltas,
+            int activation, const int2* neighbors, const int* neighborCount, const float3* neighborDeltas,
             const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv, const float* w1,
             const float* b1, const float* w2, const float* b2) {
     const int warp = (blockIdx.x*blockDim.x+threadIdx.x)/32;
@@ -399,9 +404,16 @@ __global__ void backpropCFConv(int numAtoms, int numGaussians, int width, float 
                 sum += temp1[j]*w;
                 dSumdR += dtemp1[j]*w;
             }
-            float expSum = expf(sum);
-            temp2[i] = logf(0.5f*expSum + 0.5f);
-            dtemp2[i] = dSumdR*expSum/(expSum + 1);
+            if (activation == 0) {
+                float expSum = expf(sum);
+                temp2[i] = logf(0.5f*expSum + 0.5f);
+                dtemp2[i] = dSumdR*expSum/(expSum + 1);
+            }
+            else {
+                float th = tanhf(sum);
+                temp2[i] = th;
+                dtemp2[i] = dSumdR*(1-th*th);
+            }
         }
         __syncwarp();
 
@@ -466,19 +478,19 @@ void CudaCFConv::backprop(const CFConvNeighbors& neighbors, const float* positio
     if (getPeriodic()) {
         if (neighbors.getTriclinic())
             backpropCFConv<true, true><<<numBlocks, blockSize, 4*tempSize*sizeof(float)>>>(getNumAtoms(), getNumGaussians(),
-                getWidth(), getCutoff(), getGaussianWidth(), cudaNeighbors.getNeighbors(), cudaNeighbors.getNeighborCount(),
-                cudaNeighbors.getNeighborDeltas(), deviceInput, deviceOutputDeriv,
+                getWidth(), getCutoff(), getGaussianWidth(), getActivation(), cudaNeighbors.getNeighbors(),
+                cudaNeighbors.getNeighborCount(), cudaNeighbors.getNeighborDeltas(), deviceInput, deviceOutputDeriv,
                 deviceInputDeriv, devicePositionDeriv, w1, b1, w2, b2);
         else
             backpropCFConv<true, false><<<numBlocks, blockSize, 4*tempSize*sizeof(float)>>>(getNumAtoms(), getNumGaussians(),
-                getWidth(), getCutoff(), getGaussianWidth(), cudaNeighbors.getNeighbors(), cudaNeighbors.getNeighborCount(),
-                cudaNeighbors.getNeighborDeltas(), deviceInput, deviceOutputDeriv,
+                getWidth(), getCutoff(), getGaussianWidth(), getActivation(), cudaNeighbors.getNeighbors(),
+                cudaNeighbors.getNeighborCount(), cudaNeighbors.getNeighborDeltas(), deviceInput, deviceOutputDeriv,
                 deviceInputDeriv, devicePositionDeriv, w1, b1, w2, b2);
     }
     else
         backpropCFConv<false, false><<<numBlocks, blockSize, 4*tempSize*sizeof(float)>>>(getNumAtoms(), getNumGaussians(),
-            getWidth(), getCutoff(), getGaussianWidth(), cudaNeighbors.getNeighbors(), cudaNeighbors.getNeighborCount(),
-            cudaNeighbors.getNeighborDeltas(), deviceInput, deviceOutputDeriv,
+            getWidth(), getCutoff(), getGaussianWidth(), getActivation(), cudaNeighbors.getNeighbors(),
+            cudaNeighbors.getNeighborCount(), cudaNeighbors.getNeighborDeltas(), deviceInput, deviceOutputDeriv,
             deviceInputDeriv, devicePositionDeriv, w1, b1, w2, b2);
 
     // If necessary, copy the output.
