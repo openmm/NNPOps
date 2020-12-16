@@ -123,7 +123,7 @@ private:
  * 
  * 1. Compute a set of Gaussian basis functions describing the distance between them.
  * 2. Pass them through a dense layer.
- * 3. Apply a shifted softplus activation function.
+ * 3. Apply an activation function.
  * 4. Pass the result through a second dense layer.
  * 5. Apply a cosine cutoff function to make interactions smoothly go to zero at the cutoff.
  * 
@@ -144,13 +144,14 @@ public:
      * @param cutoff         the cutoff distance
      * @param periodic       whether to apply periodic boundary conditions
      * @param gaussianWidth  the width of the Gaussian basis functions
+     * @param activation     the activation function to use between the two dense layers
      * @param w1             an array of shape [numGaussians][width] containing the weights of the first dense layer
      * @param b1             an array of length [width] containing the biases of the first dense layer
      * @param w2             an array of shape [width][width] containing the weights of the second dense layer
      * @param b2             an array of length [width] containing the biases of the second dense layer
      */
     CudaCFConv(int numAtoms, int width, int numGaussians, float cutoff, bool periodic, float gaussianWidth,
-               const float* w1, const float* b1, const float* w2, const float* b2);
+               ActivationFunction activation, const float* w1, const float* b1, const float* w2, const float* b2);
     ~CudaCFConv();
     /**
      * Compute the output of the layer.  All of the pointers passed to this method may refer to either host or device memory.

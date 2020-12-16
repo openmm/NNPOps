@@ -78,7 +78,7 @@ void validateDerivatives(CFConvNeighbors& neighbors, CFConv& conv, float* positi
     }
 }
 
-void testWater(float* periodicVectors, float* expectedOutput) {
+void testWater(float* periodicVectors, float* expectedOutput, CFConv::ActivationFunction activation) {
     int numAtoms = 18;
     float positions[18][3] = {
         { 0.726, -1.384, -0.376},
@@ -128,7 +128,7 @@ void testWater(float* periodicVectors, float* expectedOutput) {
     vector<float> y(8*18);
     CFConvNeighbors* neighbors = createNeighbors(numAtoms, 2.0, (periodicVectors != NULL));
     neighbors->build((float*) positions, periodicVectors);
-    CFConv* conv = createConv(numAtoms, 8, 5, 2.0, (periodicVectors != NULL), 0.5, (float*) w1, b1.data(), (float*) w2, b2.data());
+    CFConv* conv = createConv(numAtoms, 8, 5, 2.0, (periodicVectors != NULL), 0.5, activation, (float*) w1, b1.data(), (float*) w2, b2.data());
     conv->compute(*neighbors, (float*) positions, periodicVectors, x.data(), y.data());
     for (int i = 0; i < y.size(); i++)
         assertEqual(expectedOutput[i], y[i], 1e-4, 1e-3);
@@ -159,7 +159,7 @@ void testWaterNonperiodic() {
         35.483078, 25.192368, 20.326399, -11.645652, -17.048292, -6.7168756, 7.7418537, 38.036129,
         35.362617, 25.096624, 20.284662, -11.627875, -16.997498, -6.7423472, 7.7480173, 38.007557
     };
-    testWater(NULL, expectedOutput);
+    testWater(NULL, expectedOutput, CFConv::ShiftedSoftplus);
 }
 
 void testWaterPeriodic() {
@@ -189,7 +189,7 @@ void testWaterPeriodic() {
         0.0, 5.0, 0.0,
         0.0, 0.0, 5.0
     };
-    testWater(periodicVectors, expectedOutput);
+    testWater(periodicVectors, expectedOutput, CFConv::ShiftedSoftplus);
 }
 
 void testWaterTriclinic() {
@@ -219,12 +219,38 @@ void testWaterTriclinic() {
         1.5, 5.0, 0.0,
         -0.5, -1.0, 5.0
     };
-    testWater(periodicVectors, expectedOutput);
+    testWater(periodicVectors, expectedOutput, CFConv::ShiftedSoftplus);
+}
+
+void testWaterTanh() {
+    // Values computed with SchNetPack.
+    float expectedOutput[] = {
+        1.3675559, 0.5935415, 1.9673429, -0.95395255, 0.50335306, -0.48667794, 1.7807188, 3.3819561,
+        0.29005343, 0.14386685, 0.53776228, -0.28281462, 0.16077384, -0.16586897, 0.63400537, 1.2554247,
+        0.11627886, 0.07301569, 0.3117035, -0.17863229, 0.10733558, -0.11581345, 0.45773405, 0.93143916,
+        4.4241352, 1.8217319, 5.763402, -2.6756771, 1.3593771, -1.2676939, 4.4866109, 8.2608976,
+        1.8093463, 0.74896717, 2.4062924, -1.1258253, 0.5758335, -0.5449248, 1.9352937, 3.5917006,
+        1.8147539, 0.75354069, 2.418226, -1.1328967, 0.58087122, -0.54870433, 1.9535246, 3.6271381,
+        6.5715466, 2.6803012, 8.4133148, -3.8772564, 1.9475672, -1.8058398, 6.336915, 11.591103,
+        3.5397758, 1.4405037, 4.5571709, -2.1003108, 1.0585054, -0.98888546, 3.4656358, 6.3538094,
+        3.6488724, 1.4866341, 4.7028041, -2.1701686, 1.0932748, -1.0214566, 3.5815094, 6.5694709,
+        9.3324986, 3.7891164, 11.839811, -5.4330664, 2.7172399, -2.5089715, 8.7689342, 15.976856,
+        5.2280664, 2.117528, 6.6500511, -3.0500164, 1.5282308, -1.4179878, 4.9473982, 9.0240326,
+        4.9489441, 2.0055315, 6.2975488, -2.8885479, 1.4482468, -1.3434849, 4.6904936, 8.5567827,
+        12.145325, 4.9184694, 15.3298, -7.017447, 3.5011201, -3.2249959, 11.244879, 20.440998,
+        6.9010692, 2.7870331, 8.7232628, -3.9895077, 1.9928961, -1.8433089, 6.4140768, 11.666815,
+        6.5481153, 2.6455522, 8.2783947, -3.7856936, 1.8922514, -1.7496059, 6.0915923, 11.080776,
+        13.773149, 5.5679493, 17.322308, -7.9124432, 3.9436364, -3.6259429, 12.627276, 22.916275,
+        7.3554273, 2.9703379, 9.2593012, -4.2263622, 2.1111732, -1.9438766, 6.7665024, 12.282778,
+        7.3363366, 2.9642651, 9.2432461, -4.2205625, 2.1098421, -1.9429932, 6.7673745, 12.288699
+    };
+    testWater(NULL, expectedOutput, CFConv::Tanh);
 }
 
 int main() {
     testWaterNonperiodic();
     testWaterPeriodic();
     testWaterTriclinic();
+    testWaterTanh();
     return 0;
 }

@@ -116,8 +116,8 @@ void CpuCFConvNeighbors::findNeighbors(const float* positions, const float* peri
 }
 
 CpuCFConv::CpuCFConv(int numAtoms, int width, int numGaussians, float cutoff, bool periodic, float gaussianWidth,
-                     const float* w1, const float* b1, const float* w2, const float* b2) :
-           CFConv(numAtoms, width, numGaussians, cutoff, periodic, gaussianWidth) {
+                     ActivationFunction activation, const float* w1, const float* b1, const float* w2, const float* b2) :
+            CFConv(numAtoms, width, numGaussians, cutoff, periodic, gaussianWidth, activation) {
     for (int i = 0; i < numGaussians; i++)
         gaussianPos.push_back(i*cutoff/(numGaussians-1));
     for (int i = 0; i < numGaussians*width; i++)
@@ -161,7 +161,10 @@ void CpuCFConv::compute(const CFConvNeighbors& neighbors, const float* positions
                 float sum = b1[i];
                 for (int j = 0; j < getNumGaussians(); j++)
                     sum += gaussian[j]*w1[i*getNumGaussians()+j];
-                y1[i] = logf(0.5f*expf(sum) + 0.5f);
+                if (getActivation() == ShiftedSoftplus)
+                    y1[i] = logf(0.5f*expf(sum) + 0.5f);
+                else
+                    y1[i] = tanhf(sum);
             }
 
             // Apply the second dense layer.
@@ -251,9 +254,16 @@ void CpuCFConv::backpropImpl(const CpuCFConvNeighbors& neighbors, const float* p
                     sum += gaussian[j]*w1[i*getNumGaussians()+j];
                     dSumdR += dGaussdR[j]*w1[i*getNumGaussians()+j];
                 }
-                float expSum = expf(sum);
-                y1[i] = logf(0.5f*expSum + 0.5f);
-                dY1dR[i] = dSumdR*expSum/(expSum + 1);
+                if (getActivation() == ShiftedSoftplus) {
+                    float expSum = expf(sum);
+                    y1[i] = logf(0.5f*expSum + 0.5f);
+                    dY1dR[i] = dSumdR*expSum/(expSum + 1);
+                }
+                else {
+                    float th = tanhf(sum);
+                    y1[i] = th;
+                    dY1dR[i] = dSumdR*(1-th*th);
+                }
             }
 
             // Apply the second dense layer.
