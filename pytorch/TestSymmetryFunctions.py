@@ -25,9 +25,58 @@ import mdtraj
 import pytest
 import tempfile
 import torch
+from ase.io import read
 import torchani
 
 from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
+
+
+@pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
+@pytest.mark.parametrize('molFile', ['3NIR.pdb'])
+def test_compare_with_native_pbc_on(deviceString, molFile):
+
+    device = torch.device(deviceString)
+
+    mol = read(f'molecules/{molFile}')
+    atomicNumbers = torch.tensor([mol.get_atomic_numbers()], device=device)
+    atomicPositions = torch.tensor([mol.get_positions()], dtype=torch.float32, requires_grad=True, device=device)
+    cell = torch.tensor(mol.get_cell(complete=True), dtype=torch.float32, device=device)
+    pbc = torch.tensor(mol.get_pbc(), dtype=torch.bool, device=device)
+    if pbc[0] is False:
+        pbc = None
+        cell = None
+    print(f'Mol: {molFile}, size: {atomicNumbers.shape[-1]} atoms')
+    print(f'cell: {cell}')
+    print(f'pbc: {pbc}')
+
+    nnp = torchani.models.ANI2x(periodic_table_index=True).to(device)
+    speciesPositions = nnp.species_converter((atomicNumbers, atomicPositions))
+    aev_ref = nnp.aev_computer(speciesPositions, cell, pbc).aevs
+    energy_ref = nnp((atomicNumbers, atomicPositions), cell, pbc).energies
+    energy_ref.backward()
+    grad_ref = atomicPositions.grad.clone()
+
+    nnp.aev_computer = TorchANISymmetryFunctions(nnp.aev_computer)
+    energy = nnp((atomicNumbers, atomicPositions), cell, pbc).energies
+    aev = nnp.aev_computer(speciesPositions, cell, pbc).aevs
+    aev_pbc_off = nnp.aev_computer(speciesPositions).aevs
+    atomicPositions.grad.zero_()
+    energy.backward()
+    grad = atomicPositions.grad.clone()
+
+    aev_error = torch.max(torch.abs((aev - aev_ref)))
+    aev_diff_pbc_on_off = torch.max(torch.abs((aev - aev_pbc_off)))
+    energy_error = torch.abs((energy - energy_ref)/energy_ref).item()
+    grad_error = torch.max(torch.abs((grad - grad_ref)/grad_ref))
+
+    print(f'AEV Error: {aev_error:.1e}')
+    print(f'AEV difference between PBC ON and OFF: {aev_diff_pbc_on_off:.1e}')
+    print(f'Energy Error: {energy_error:.1e}')
+    print(f'Grad Error: {grad_error:.1e}')
+    assert aev_error < 5e-5
+    assert energy_error < 5e-5
+    assert grad_error < 5e-3
+
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
 @pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])

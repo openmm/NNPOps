@@ -54,6 +54,7 @@ $ conda create -n nnpops \
                gxx_linux-64 \
                make \
                mdtraj \
+               ase \
                pytest \
                python=3.8 \
                pytorch=1.6 \
