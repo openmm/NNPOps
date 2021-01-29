@@ -69,7 +69,7 @@ class TorchANISymmetryFunctions(torch.nn.Module):
 
         super().__init__()
 
-        self.numSpecies = symmFunc.num_species
+        self.num_species = symmFunc.num_species
         self.Rcr = symmFunc.Rcr
         self.Rca = symmFunc.Rca
         self.EtaR = symmFunc.EtaR[:, 0].tolist()
@@ -114,7 +114,7 @@ class TorchANISymmetryFunctions(torch.nn.Module):
                     raise ValueError('Only fully periodic systems are supported, i.e. pbc = [True, True, True]')
 
         symFunc = torch.ops.NNPOps.ANISymmetryFunctions
-        radial, angular = symFunc(self.numSpecies, self.Rcr, self.Rca, self.EtaR, self.ShfR,
+        radial, angular = symFunc(self.num_species, self.Rcr, self.Rca, self.EtaR, self.ShfR,
                                   self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
                                   species_, positions[0], cell)
         features = torch.cat((radial, angular), dim=1).unsqueeze(0)
