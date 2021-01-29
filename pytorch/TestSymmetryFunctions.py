@@ -42,9 +42,8 @@ def test_compare_with_native_pbc_on(deviceString, molFile):
     atomicPositions = torch.tensor([mol.get_positions()], dtype=torch.float32, requires_grad=True, device=device)
     cell = torch.tensor(mol.get_cell(complete=True), dtype=torch.float32, device=device)
     pbc = torch.tensor(mol.get_pbc(), dtype=torch.bool, device=device)
-    if pbc[0] is False:
-        pbc = None
-        cell = None
+    if not pbc.all():
+        raise ValueError('Only fully periodic systems are supported, i.e. pbc = [True, True, True]')
     print(f'Mol: {molFile}, size: {atomicNumbers.shape[-1]} atoms')
     print(f'cell: {cell}')
     print(f'pbc: {pbc}')

@@ -69,7 +69,7 @@ $ git clone https://github.com/peastman/NNPOps.git
 ```bash
 $ mkdir build
 $ cd build
-$ cmake ../NNPOps/pytorch \
+$ cmake ../pytorch \
         -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
         -DCMAKE_CUDA_HOST_COMPILER=$CXX \
         -DTorch_DIR=$CONDA_PREFIX/lib/python3.8/site-packages/torch/share/cmake/Torch \
