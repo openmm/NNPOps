@@ -20,7 +20,7 @@ build:
     - lib/python3.9/site-packages/torch/lib/ # [py==39]
   script:
     - cmake $SRC_DIR/pytorch
-            -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
+            -DCMAKE_CUDA_COMPILER=/usr/local/cuda-10.2/bin/nvcc
             -DCMAKE_CUDA_HOST_COMPILER=$CXX
             -DTorch_DIR=$PREFIX/lib/python$PY_VER/site-packages/torch/share/cmake/Torch
             -DCMAKE_BUILD_TYPE=Release
@@ -32,14 +32,12 @@ requirements:
     - cmake
     - gxx_linux-64 <9 # CUDA 10.2 doesn't support GCC 9
     - make
-  # Version specifications according to https://github.com/openmm/openmm-torch/issues/14
   host:
     - cudatoolkit 10.2.*
-    - cudnn # A buid dependency for PyTorch
     - python
-    - pytorch 1.6.*
+    - pytorch 1.7.* cuda*
   run:
-    - pytorch >=1.5
+    - pytorch >=1.7 cuda*
     - torchani >=2.2
 
 test:
