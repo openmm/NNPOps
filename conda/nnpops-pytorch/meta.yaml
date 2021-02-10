@@ -37,6 +37,7 @@ requirements:
     - python
     - pytorch 1.7.* cuda*
   run:
+    - cudatoolkit 10.2.*
     - pytorch >=1.7 cuda*
     - torchani >=2.2
 
