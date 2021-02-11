@@ -18,6 +18,7 @@ target_compile_features(${LIBRARY} PRIVATE cxx_std_14)
 target_include_directories(${LIBRARY} PRIVATE ${PYTHON_INCLUDE_DIRS})
 target_include_directories(${LIBRARY} PRIVATE ../ani)
 target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${PYTHON_LIBRARIES})
+set_property(TARGET ${LIBRARY} PROPERTY CUDA_ARCHITECTURES OFF)
 
 install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
 install(FILES BatchedNN.py SymmetryFunctions.py DESTINATION ${Python_SITEARCH}/${NAME})
