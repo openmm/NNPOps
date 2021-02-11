@@ -1,5 +1,5 @@
 {% set name = "nnpops-pytorch" %}
-{% set version = "0.0.0a3" %}
+{% set version = "0.0.0a4" %}
 {% set build = 0 %}
 
 package:
