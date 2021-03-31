@@ -40,7 +40,7 @@ positions.grad.zero_()
 sum_aev.backward()
 grad = positions.grad.clone()
 
-N = 40000
+N = 100000
 start = time.time()
 for _ in range(N):
     aev = symmFunc(speciesPositions).aevs
@@ -55,7 +55,5 @@ print(f'  Speed: {delta/N*1000} ms/it')
 
 aev_error = torch.max(torch.abs(aev - aev_ref))
 grad_error = torch.max(torch.abs(grad - grad_ref))
-print(aev_error)
-print(grad_error)
 assert aev_error < 0.0002
 assert grad_error < 0.007
