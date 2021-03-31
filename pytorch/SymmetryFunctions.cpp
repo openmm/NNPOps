@@ -48,7 +48,7 @@ public:
 
     // Constructor for an uninitialized object
     // Note: this is need for serialization
-    Holder() {};
+    Holder() : torch::CustomClassHolder() {};
 
     Holder(int64_t numSpecies_,
            double Rcr,
