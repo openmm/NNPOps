@@ -112,7 +112,11 @@ public:
         symFunc->backprop(radialGrad.data_ptr<float>(), angularGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
 
         return positionsGrad;
-    }
+    };
+
+    bool is_initialized() {
+        return bool(symFunc);
+    };
 
 private:
     torch::TensorOptions tensorOptions;
@@ -168,7 +172,8 @@ TORCH_LIBRARY(NNPOpsANISymmetryFunctions, m) {
                          const vector<int64_t>&, // atomSpecies
                          const Tensor&>())       // positions
         .def("forward", &Holder::forward)
-        .def("backward", &Holder::backward);
+        .def("backward", &Holder::backward)
+        .def("is_initialized", &Holder::is_initialized);
     m.def("operation", operation);
 }
 
