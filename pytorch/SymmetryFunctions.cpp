@@ -57,6 +57,9 @@ public:
            const vector<int64_t>& atomSpecies_,
            const Tensor& positions) : torch::CustomClassHolder() {
 
+        if (numSpecies_ == 0)
+            return;
+
         tensorOptions = torch::TensorOptions().device(positions.device()); // Data type of float by default
         int numAtoms = atomSpecies_.size();
         int numSpecies = numSpecies_;

@@ -65,8 +65,6 @@ class TorchANISymmetryFunctions(torch.nn.Module):
 
         >>> print(energy, forces)
     """
-    holder: Optional[Holder]
-
     def __init__(self, symmFunc: torchani.AEVComputer):
         """
         Arguments:
@@ -84,7 +82,9 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         self.ShfA = symmFunc.ShfA[0, 0, :, 0].tolist()
         self.ShfZ = symmFunc.ShfZ[0, 0, 0, :].tolist()
 
-        self.holder = None
+        # Create an uninitialized holder
+        self.holder = Holder(0, 0, 0, [], [] , [] , [], [] , [], [], Tensor())
+        assert not self.holder.is_initialized()
 
         self.triu_index = torch.tensor([0]) # A dummy variable to make TorchScript happy ;)
 
@@ -119,12 +119,13 @@ class TorchANISymmetryFunctions(torch.nn.Module):
                 if pbc_ != [True, True, True]:
                     raise ValueError('Only fully periodic systems are supported, i.e. pbc = [True, True, True]')
 
-        if self.holder is None:
+        if not self.holder.is_initialized():
             species_: List[int] = species[0].tolist() # Explicit type casting for TorchScript
             self.holder = Holder(self.numSpecies, self.Rcr, self.Rca,
                                  self.EtaR, self.ShfR,
                                  self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
                                  species_, positions)
+            assert self.holder.is_initialized()
 
         radial, angular = operation(self.holder, positions[0], cell)
         features = torch.cat((radial, angular), dim=1).unsqueeze(0)
