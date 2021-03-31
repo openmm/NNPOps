@@ -37,7 +37,7 @@ namespace ANISymmetryFunctions {
 
 class Holder;
 using std::vector;
-using HolderPrt = torch::intrusive_ptr<Holder>;
+using HolderPtr = torch::intrusive_ptr<Holder>;
 using torch::Tensor;
 using torch::optional;
 using Context = torch::autograd::AutogradContext;
@@ -126,7 +126,7 @@ class AutogradFunctions : public torch::autograd::Function<AutogradFunctions> {
 
 public:
     static tensor_list forward(Context *ctx,
-                               const HolderPrt& holder,
+                               const HolderPtr& holder,
                                const Tensor& positions,
                                const optional<Tensor>& periodicBoxVectors) {
 
@@ -147,7 +147,7 @@ public:
     };
 };
 
-tensor_list operation(const optional<HolderPrt>& holder,
+tensor_list operation(const optional<HolderPtr>& holder,
                       const Tensor& positions,
                       const optional<Tensor>& periodicBoxVectors) {
 
