@@ -45,6 +45,11 @@ using torch::autograd::tensor_list;
 
 class Holder : public torch::CustomClassHolder {
 public:
+
+    // Constructor for an uninitialized object
+    // Note: this is need for serialization
+    Holder() {};
+
     Holder(int64_t numSpecies_,
            double Rcr,
            double Rca,
@@ -57,6 +62,8 @@ public:
            const vector<int64_t>& atomSpecies_,
            const Tensor& positions) : torch::CustomClassHolder() {
 
+        // Construct an uninitialized object
+        // Note: this is needed for Python bindings
         if (numSpecies_ == 0)
             return;
 
@@ -148,7 +155,7 @@ public:
         Tensor positionsGrad = holder->backward(grads);
         ctx->saved_data.erase("holder");
 
-        return { Tensor(),      // symFunc
+        return { Tensor(),      // holder
                  positionsGrad, // positions
                  Tensor() };    // periodicBoxVectors
     };
@@ -176,7 +183,15 @@ TORCH_LIBRARY(NNPOpsANISymmetryFunctions, m) {
                          const Tensor&>())       // positions
         .def("forward", &Holder::forward)
         .def("backward", &Holder::backward)
-        .def("is_initialized", &Holder::is_initialized);
+        .def("is_initialized", &Holder::is_initialized)
+        .def_pickle(
+            // __getstate__
+            // Note: nothing is during serialization
+            [](const HolderPtr& self) -> int64_t { return 0; },
+            // __setstate__
+            // Note: a new uninitialized object is create during deserialization
+            [](int64_t state) -> HolderPtr { return HolderPtr::make(); }
+        );
     m.def("operation", operation);
 }
 
