@@ -35,10 +35,10 @@ requirements:
   host:
     - cudatoolkit 10.2.*
     - python
-    - pytorch 1.7.* cuda*
+    - pytorch 1.8.0 cuda*
   run:
     - cudatoolkit 10.2.*
-    - pytorch >=1.7 cuda*
+    - pytorch >=1.8 cuda*
     - torchani >=2.2
 
 test:
