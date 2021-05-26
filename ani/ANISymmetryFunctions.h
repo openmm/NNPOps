@@ -62,6 +62,8 @@ public:
                numAtoms(numAtoms), numSpecies(numSpecies), radialCutoff(radialCutoff), angularCutoff(angularCutoff),
                periodic(periodic), atomSpecies(atomSpecies), radialFunctions(radialFunctions), angularFunctions(angularFunctions), torchani(torchani) {
     }
+    virtual ~ANISymmetryFunctions() {
+    }
     /**
      * Compute the symmetry functions.
      *

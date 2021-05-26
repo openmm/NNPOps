@@ -1,0 +1,12 @@
+name: nnpops
+channels:
+  - conda-forge
+dependencies:
+  - cmake
+  - gxx_linux-64
+  - make
+  - mdtraj
+  - torchani 2.2
+  - pytest
+  - python 3.9
+  - pytorch 1.8.0

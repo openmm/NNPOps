@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <stdio.h>
+#include <time.h>
 
 using namespace std;
 
@@ -149,7 +151,14 @@ int main(int argc, char* argv[]) {
             {12.5, 3.1625, 14.1, 2.74889}
         };
         CudaANISymmetryFunctions ani(species.size(), 7, 5.1, 3.5, periodicBoxVectors.size() > 0, species, radialFunctions, angularFunctions, true);
+        clock_t start, finish;
+        double duration;
+        start = clock();
         runBenchmark(ani, stoi(argv[2]), positions, species, periodicBoxVectors);
+        finish = clock();
+        duration = (double)(finish - start) / CLOCKS_PER_SEC;
+        printf("  %f s\n", duration);
+        printf("  %f ms/it\n", duration/stoi(argv[2])*1000);
     }
     catch (const exception& e) {
         cout << e.what() << endl;

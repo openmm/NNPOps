@@ -37,7 +37,7 @@ def test_compare_with_native(deviceString, molFile):
 
     mol = mdtraj.load(f'molecules/{molFile}_ligand.mol2')
     atomicNumbers = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
-    atomicPositions = torch.tensor(mol.xyz, dtype=torch.float32, requires_grad=True, device=device)
+    atomicPositions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
 
     nnp = torchani.models.ANI2x(periodic_table_index=True).to(device)
     energy_ref = nnp((atomicNumbers, atomicPositions)).energies
@@ -64,7 +64,7 @@ def test_model_serialization(deviceString, molFile):
 
     mol = mdtraj.load(f'molecules/{molFile}_ligand.mol2')
     atomicNumbers = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
-    atomicPositions = torch.tensor(mol.xyz, dtype=torch.float32, requires_grad=True, device=device)
+    atomicPositions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
 
     nnp_ref = torchani.models.ANI2x(periodic_table_index=True).to(device)
     nnp_ref.aev_computer = TorchANISymmetryFunctions(nnp_ref.aev_computer)
