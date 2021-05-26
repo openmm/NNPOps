@@ -9,7 +9,7 @@ device = torch.device('cuda')
 
 mol = mdtraj.load('molecules/2iuz_ligand.mol2')
 species = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
-positions = torch.tensor(mol.xyz, dtype=torch.float32, requires_grad=True, device=device)
+positions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
 
 nnp = torchani.models.ANI2x(periodic_table_index=True, model_index=None).to(device)
 speciesPositions = nnp.species_converter((species, positions))
@@ -40,7 +40,7 @@ positions.grad.zero_()
 sum_aev.backward()
 grad = positions.grad.clone()
 
-N = 40000
+N = 100000
 start = time.time()
 for _ in range(N):
     aev = symmFunc(speciesPositions).aevs
@@ -55,7 +55,5 @@ print(f'  Speed: {delta/N*1000} ms/it')
 
 aev_error = torch.max(torch.abs(aev - aev_ref))
 grad_error = torch.max(torch.abs(grad - grad_ref))
-print(aev_error)
-print(grad_error)
 assert aev_error < 0.0002
 assert grad_error < 0.007
