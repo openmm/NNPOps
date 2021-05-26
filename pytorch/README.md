@@ -52,7 +52,7 @@ $ git clone https://github.com/openmm/NNPOps.git
 - Crate a *Conda* environment
 ```bash
 $ cd NNPOps
-$ conda create -f pytorch/environment.yml
+$ conda env create -f pytorch/environment.yml
 $ conda activate nnpops
 ```
 
