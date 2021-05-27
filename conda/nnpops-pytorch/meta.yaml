@@ -30,14 +30,14 @@ build:
 requirements:
   build:
     - cmake
-    - gxx_linux-64 <9 # CUDA 10.2 doesn't support GCC 9
+    - gxx_linux-64
     - make
   host:
-    - cudatoolkit 10.2.*
+    - cudatoolkit 11.0.*
     - python
     - pytorch 1.8.0 cuda*
   run:
-    - cudatoolkit 10.2.*
+    - cudatoolkit 11.0.*
     - pytorch >=1.8 cuda*
     - torchani >=2.2
 
