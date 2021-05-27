@@ -20,7 +20,7 @@ build:
     - lib/python3.9/site-packages/torch/lib/ # [py==39]
   script:
     - cmake $SRC_DIR/pytorch
-            -DCMAKE_CUDA_COMPILER=/usr/local/cuda-10.2/bin/nvcc
+            -DCMAKE_CUDA_COMPILER=/usr/local/cuda-11.0/bin/nvcc
             -DCMAKE_CUDA_HOST_COMPILER=$CXX
             -DTorch_DIR=$PREFIX/lib/python$PY_VER/site-packages/torch/share/cmake/Torch
             -DCMAKE_BUILD_TYPE=Release
