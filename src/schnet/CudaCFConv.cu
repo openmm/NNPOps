@@ -260,11 +260,11 @@ const float* CudaCFConv::ensureOnDevice(const float* arg, float*& deviceMemory, 
     return (const float*) attrib.devicePointer;
 }
 
-__device__ float cutoffFunction(float r, float rc) {
+__device__ float cutoffFunction2(float r, float rc) {
     return 0.5f * cosf(Pi*r/rc) + 0.5f;
 }
 
-__device__ float cutoffDeriv(float r, float rc) {
+__device__ float cutoffDeriv2(float r, float rc) {
     return -(0.5f*Pi/rc) * sinf(Pi*r/rc);
 }
 
@@ -312,7 +312,7 @@ __global__ void computeCFConv(int numAtoms, int numGaussians, int width, float c
 
         // Apply the second dense layer, storing the result in temp1.
 
-        float cutoffScale = cutoffFunction(r, cutoff);
+        float cutoffScale = cutoffFunction2(r, cutoff);
         for (int i = indexInWarp; i < width; i += 32) {
             float sum = b2[i];
             for (int j = 0; j < width; j++)
@@ -419,8 +419,8 @@ __global__ void backpropCFConv(int numAtoms, int numGaussians, int width, float 
 
         // Apply the second dense layer, storing the result in temp1.
 
-        float cutoffScale = cutoffFunction(r, cutoff);
-        float dCutoffdR = cutoffDeriv(r, cutoff);
+        float cutoffScale = cutoffFunction2(r, cutoff);
+        float dCutoffdR = cutoffDeriv2(r, cutoff);
         for (int i = indexInWarp; i < width; i += 32) {
             float sum = b2[i], dSumdR = 0;
             for (int j = 0; j < width; j++) {
