@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 
 set(NAME NNPOps)
 set(LIBRARY ${NAME}PyTorch)
@@ -13,10 +13,18 @@ add_library(${LIBRARY} SHARED src/ani/CpuANISymmetryFunctions.cpp
                               src/pytorch/SymmetryFunctions.cpp
                               src/schnet/CpuCFConv.cpp
                               src/schnet/CudaCFConv.cu)
-target_compile_features(${LIBRARY} PRIVATE cxx_std_14)
-target_include_directories(${LIBRARY} PRIVATE ${PYTHON_INCLUDE_DIRS})
 target_include_directories(${LIBRARY} PRIVATE src/ani src/schnet)
 target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${PYTHON_LIBRARIES})
+
+set(TEST_PATHS src/ani/TestCpuANISymmetryFunctions.cpp
+               src/ani/TestCudaANISymmetryFunctions.cpp
+               src/schnet/TestCpuCFConv.cpp
+               src/schnet/TestCudaCFConv.cu)
+foreach(TEST_PATH ${TEST_PATHS})
+    cmake_path(GET TEST_PATH STEM TEST_NAME)
+    add_executable(${TEST_NAME} ${TEST_PATH})
+    target_link_libraries(${TEST_NAME} ${LIBRARY})
+endforeach()
 
 install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
 install(FILES src/pytorch/SymmetryFunctions.py DESTINATION ${Python_SITEARCH}/${NAME})
