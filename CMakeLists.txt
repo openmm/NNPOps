@@ -7,6 +7,7 @@ project(${NAME} LANGUAGES CXX CUDA)
 find_package(Python REQUIRED)
 find_package(PythonLibs REQUIRED)
 find_package(Torch REQUIRED)
+enable_testing()
 
 add_library(${LIBRARY} SHARED src/ani/CpuANISymmetryFunctions.cpp
                               src/ani/CudaANISymmetryFunctions.cu
@@ -24,7 +25,10 @@ foreach(TEST_PATH ${TEST_PATHS})
     cmake_path(GET TEST_PATH STEM TEST_NAME)
     add_executable(${TEST_NAME} ${TEST_PATH})
     target_link_libraries(${TEST_NAME} ${LIBRARY})
+    add_test(${TEST_NAME} ${TEST_NAME})
 endforeach()
+
+add_test(PyTest pytest ${CMAKE_SOURCE_DIR}/src/pytorch/TestSymmetryFunctions.py)
 
 install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
 install(FILES src/pytorch/SymmetryFunctions.py DESTINATION ${Python_SITEARCH}/${NAME})
