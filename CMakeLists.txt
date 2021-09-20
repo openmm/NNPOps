@@ -8,11 +8,14 @@ find_package(Python REQUIRED)
 find_package(PythonLibs REQUIRED)
 find_package(Torch REQUIRED)
 
-add_library(${LIBRARY} SHARED src/pytorch/SymmetryFunctions.cpp
-                              src/ani/CpuANISymmetryFunctions.cpp
-                              src/ani/CudaANISymmetryFunctions.cu)
+add_library(${LIBRARY} SHARED src/ani/CpuANISymmetryFunctions.cpp
+                              src/ani/CudaANISymmetryFunctions.cu
+                              src/pytorch/SymmetryFunctions.cpp
+                              src/schnet/CpuCFConv.cpp
+                              src/schnet/CudaCFConv.cu)
 target_compile_features(${LIBRARY} PRIVATE cxx_std_14)
-target_include_directories(${LIBRARY} PRIVATE ${PYTHON_INCLUDE_DIRS} src/ani)
+target_include_directories(${LIBRARY} PRIVATE ${PYTHON_INCLUDE_DIRS})
+target_include_directories(${LIBRARY} PRIVATE src/ani src/schnet)
 target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${PYTHON_LIBRARIES})
 
 install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
