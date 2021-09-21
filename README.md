@@ -1,4 +1,4 @@
-## NNPOps
+# NNPOps
 
 The goal of this repository is to promote the use of neural network potentials (NNPs)
 by providing highly optimized, open source implementations of bottleneck operations
@@ -19,3 +19,43 @@ for optimum performance.
 5. This code is designed for inference (running simulations), not training (creating
 new potential functions).  It computes gradients with respect to particle positions,
 not model parameters.
+
+## Installation
+
+### From the source
+
+#### Prerequisites
+
+- *Linux*
+- *CUDA Toolkit* (https://developer.nvidia.com/cuda-downloads)
+- *Miniconda* (https://docs.conda.io/en/latest/miniconda.html#linux-installers)
+
+#### Build & install
+
+- Get the source code
+```bash
+$ git clone https://github.com/openmm/NNPOps.git
+```
+
+- Crate and activate a *Conda* environment
+```bash
+$ cd NNPOps
+$ conda env create -n nnpops -f environment.yml
+$ conda activate nnpops
+```
+
+- Configure, build, and install
+```bash
+$ mkdir build && cd build
+$ cmake .. \
+        -DTorch_DIR=$CONDA_PREFIX/lib/python3.9/site-packages/torch/share/cmake/Torch \
+        -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
+$ make install
+```
+
+- Optional: run tests and benchmarks
+```bash
+$ cd ../src/pytorch
+$ pytest TestSymmetryFunctions.py
+$ python BenchmarkTorchANISymmetryFunctions.py
+```
