@@ -28,14 +28,17 @@ import tempfile
 import torch
 import torchani
 
-from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
-
-
 molecules = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'molecules')
+
+def test_import():
+    import NNPOps
+    import NNPOps.SymmetryFunctions
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
 @pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
 def test_compare_with_native(deviceString, molFile):
+
+    from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
 
     device = torch.device(deviceString)
 
@@ -63,6 +66,8 @@ def test_compare_with_native(deviceString, molFile):
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
 @pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
 def test_model_serialization(deviceString, molFile):
+
+    from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
 
     device = torch.device(deviceString)
 
