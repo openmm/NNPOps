@@ -37,6 +37,11 @@ not model parameters.
 $ git clone https://github.com/openmm/NNPOps.git
 ```
 
+- Set `CUDA_HOME`.
+```bash
+$ export CUDA_HOME=/usr/local/cuda-11.2
+```
+
 - Crate and activate a *Conda* environment
 ```bash
 $ cd NNPOps
@@ -53,9 +58,7 @@ $ cmake .. \
 $ make install
 ```
 
-- Optional: run tests and benchmarks
+- Run the tests
 ```bash
-$ cd ../src/pytorch
-$ pytest TestSymmetryFunctions.py
-$ python BenchmarkTorchANISymmetryFunctions.py
+$ ctest
 ```
