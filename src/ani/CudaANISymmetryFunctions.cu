@@ -122,11 +122,11 @@ __device__ void computeDisplacement(float3 pos1, float3 pos2, float3& delta, flo
     r2 = delta.x*delta.x + delta.y*delta.y + delta.z*delta.z;
 }
 
-__device__ float cutoffFunction(float r, float rc) {
+static __device__ float cutoffFunction(float r, float rc) {
     return 0.5f * cosf(Pi*r/rc) + 0.5f;
 }
 
-__device__ float cutoffDeriv(float r, float rc) {
+static __device__ float cutoffDeriv(float r, float rc) {
     return -(0.5f*Pi/rc) * sinf(Pi*r/rc);
 }
 
