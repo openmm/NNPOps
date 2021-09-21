@@ -26,7 +26,6 @@ not model parameters.
 
 #### Prerequisites
 
-- *Linux*
 - *CUDA Toolkit* (https://developer.nvidia.com/cuda-downloads)
 - *Miniconda* (https://docs.conda.io/en/latest/miniconda.html#linux-installers)
 
@@ -37,7 +36,7 @@ not model parameters.
 $ git clone https://github.com/openmm/NNPOps.git
 ```
 
-- Set `CUDA_HOME`.
+- Set `CUDA_HOME`
 ```bash
 $ export CUDA_HOME=/usr/local/cuda-11.2
 ```
