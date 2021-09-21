@@ -22,6 +22,7 @@
 #
 
 import mdtraj
+import os
 import pytest
 import tempfile
 import torch
@@ -29,13 +30,16 @@ import torchani
 
 from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
 
+
+molecules = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'molecules')
+
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
 @pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
 def test_compare_with_native(deviceString, molFile):
 
     device = torch.device(deviceString)
 
-    mol = mdtraj.load(f'molecules/{molFile}_ligand.mol2')
+    mol = mdtraj.load(os.path.join(molecules, f'{molFile}_ligand.mol2'))
     atomicNumbers = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
     atomicPositions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
 
@@ -62,7 +66,7 @@ def test_model_serialization(deviceString, molFile):
 
     device = torch.device(deviceString)
 
-    mol = mdtraj.load(f'molecules/{molFile}_ligand.mol2')
+    mol = mdtraj.load(os.path.join(molecules, f'{molFile}_ligand.mol2'))
     atomicNumbers = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
     atomicPositions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
 
