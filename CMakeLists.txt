@@ -31,4 +31,6 @@ endforeach()
 add_test(TestSymmetryFunctions pytest ${CMAKE_SOURCE_DIR}/src/pytorch/TestSymmetryFunctions.py)
 
 install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
-install(FILES src/pytorch/SymmetryFunctions.py DESTINATION ${Python_SITEARCH}/${NAME})
+install(FILES src/pytorch/__init__.py
+              src/pytorch/SymmetryFunctions.py
+        DESTINATION ${Python_SITEARCH}/${NAME})
