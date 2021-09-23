@@ -260,11 +260,11 @@ const float* CudaCFConv::ensureOnDevice(const float* arg, float*& deviceMemory, 
     return (const float*) attrib.devicePointer;
 }
 
-__device__ float cutoffFunction(float r, float rc) {
+static __device__ float cutoffFunction(float r, float rc) {
     return 0.5f * cosf(Pi*r/rc) + 0.5f;
 }
 
-__device__ float cutoffDeriv(float r, float rc) {
+static __device__ float cutoffDeriv(float r, float rc) {
     return -(0.5f*Pi/rc) * sinf(Pi*r/rc);
 }
 
