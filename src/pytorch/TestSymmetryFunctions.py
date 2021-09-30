@@ -61,7 +61,10 @@ def test_compare_with_native(deviceString, molFile):
     grad_error = torch.max(torch.abs((grad - grad_ref)/grad_ref))
 
     assert energy_error < 5e-7
-    assert grad_error < 7e-3
+    if molFile == '3o99':
+        assert grad_error < 7e-3
+    else:
+        assert grad_error < 5e-3
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
 @pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
