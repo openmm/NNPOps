@@ -64,7 +64,7 @@ $ ctest
 
 ## Usage
 
-Accelerated [*TorchANI*](https://aiqm.github.io/torchani/) operation:
+Accelerated [*TorchANI*](https://aiqm.github.io/torchani/) operations:
 - [`torchani.AEVComputer`](https://aiqm.github.io/torchani/api.html?highlight=speciesaev#torchani.AEVComputer)
 - [`torchani.neurochem.NeuralNetwork`](https://aiqm.github.io/torchani/api.html#module-torchani.neurochem)
 

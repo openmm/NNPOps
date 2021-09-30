@@ -42,7 +42,7 @@ energy_ref = nnp((species, positions)).energies
 energy_ref.backward()
 grad_ref = positions.grad.clone()
 
-N = 2000
+N = 3000
 start = time.time()
 for _ in range(N):
     energy_ref = nnp((species, positions)).energies
@@ -68,14 +68,14 @@ print(nnp)
 
 # nnp = torch.jit.script(nnp)
 # nnp.save('nnp.pt')
-# npp = torch.jit.load('nnp.pt')
+# npp = torch.jit.load('nnp.pt').to(device)
 
 energy = nnp((species, positions)).energies
 positions.grad.zero_()
 energy.backward()
 grad = positions.grad.clone()
 
-N = 10000
+N = 15000
 start = time.time()
 for _ in range(N):
     energy = nnp((species, positions)).energies
@@ -84,7 +84,7 @@ print(f'ANI-2x with BatchedNN (forward pass)')
 print(f'  Duration: {delta} s')
 print(f'  Speed: {delta/N*1000} ms/it')
 
-N = 5000
+N = 7500
 start = time.time()
 for _ in range(N):
     energy = nnp((species, positions)).energies
