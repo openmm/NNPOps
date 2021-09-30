@@ -34,6 +34,6 @@ add_test(TestBatchedNN pytest ${CMAKE_SOURCE_DIR}/src/pytorch/TestBatchedNN.py)
 
 install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
 install(FILES src/pytorch/__init__.py
-              src/pytorch/BenchmarkBatchedNN.py
+              src/pytorch/BatchedNN.py
               src/pytorch/SymmetryFunctions.py
         DESTINATION ${Python_SITEARCH}/${NAME})
