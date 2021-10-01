@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out
+      uses: actions/checkout@v2
+    
+    - name: Install CUDA Toolkit
+      uses: Jimver/cuda-toolkit@v0.2.4
+      with:
+        cuda: 11.2.2
+
+    - name: Install Miniconda
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        activate-environment: ""
+        auto-activate-base: true
+        miniforge-variant: Mambaforge
+
+    - name: Install dependencies
+      shell: bash -l {0}
+      run: mamba env create -n nnpops -f environment.yml
+    
+    - name: Configure, compile, and install
+      shell: bash -l {0}
+      run: |
+        conda activate nnpops
+        mkdir build && cd build
+        cmake .. \
+              -DTorch_DIR=$CONDA_PREFIX/lib/python3.9/site-packages/torch/share/cmake/Torch \
+              -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
+        make install
+
+    - name: Test
+      shell: bash -l {0}
+      run: |
+        conda activate nnpops
+        cd build
+        make test
