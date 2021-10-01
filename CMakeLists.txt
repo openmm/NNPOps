@@ -11,6 +11,7 @@ enable_testing()
 
 add_library(${LIBRARY} SHARED src/ani/CpuANISymmetryFunctions.cpp
                               src/ani/CudaANISymmetryFunctions.cu
+                              src/pytorch/BatchedNN.cpp
                               src/pytorch/SymmetryFunctions.cpp
                               src/schnet/CpuCFConv.cpp
                               src/schnet/CudaCFConv.cu)
@@ -29,8 +30,10 @@ foreach(TEST_PATH ${TEST_PATHS})
 endforeach()
 
 add_test(TestSymmetryFunctions pytest ${CMAKE_SOURCE_DIR}/src/pytorch/TestSymmetryFunctions.py)
+add_test(TestBatchedNN pytest ${CMAKE_SOURCE_DIR}/src/pytorch/TestBatchedNN.py)
 
 install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
 install(FILES src/pytorch/__init__.py
+              src/pytorch/BatchedNN.py
               src/pytorch/SymmetryFunctions.py
         DESTINATION ${Python_SITEARCH}/${NAME})
