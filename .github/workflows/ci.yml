@@ -46,4 +46,4 @@ jobs:
       run: |
         conda activate nnpops
         cd build
-        ctest --verbose
+        ctest --verbose --exclude-regex TestCuda
