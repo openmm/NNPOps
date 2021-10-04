@@ -5,7 +5,6 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
-  workflow_dispatch:
 
 jobs:
   build:
@@ -38,19 +37,18 @@ jobs:
       with:
         activate-environment: ""
         auto-activate-base: true
-        miniforge-variant: Mambaforge
-
-    - name: Set versions
-      run: sed -i -e "/cudatoolkit/c\  - cudatoolkit ${{ matrix.cuda }}"
-                  -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}"
-                  -e "/nvcc_linux-64/c\  - nvcc_linux-64 ${{ matrix.nvcc }}"
-                  -e "/python/c\  - python ${{ matrix.python }}"
-                  -e "/pytorch-gpu/c\  - pytorch-gpu ${{ matrix.pytorch }}"
-                  environment.yml
+        miniforge-variant: Miniforge3
 
     - name: Install dependencies
       shell: bash -l {0}
-      run: conda env create -n nnpops -f environment.yml
+      run: |
+        sed -i -e "/cudatoolkit/c\  - cudatoolkit ${{ matrix.cuda }}" \
+               -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
+               -e "/nvcc_linux-64/c\  - nvcc_linux-64 ${{ matrix.nvcc }}" \
+               -e "/python/c\  - python ${{ matrix.python }}" \
+               -e "/pytorch-gpu/c\  - pytorch-gpu ${{ matrix.pytorch }}" \
+               environment.yml
+        conda env create -n nnpops -f environment.yml
 
     - name: Configure, compile, and install
       shell: bash -l {0}
