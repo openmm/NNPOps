@@ -3,7 +3,7 @@ channels:
 dependencies:
   - cmake
   - cudatoolkit 11.2.2
-  - gxx_linux-64 <=10
+  - gxx_linux-64 10.3.0
   - make
   - mdtraj
   - nvcc_linux-64 11.2

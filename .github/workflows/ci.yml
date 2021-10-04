@@ -14,10 +14,12 @@ jobs:
       matrix:
         include:
           - cuda: 10.2.89
+            gcc: 8.5.0
             nvcc: 10.2
             python: 3.8
             pytorch: 1.7.1
           - cuda: 11.2.2
+            gcc: 10.3.0
             nvcc: 11.2
             python: 3.9
             pytorch: 1.8.0
@@ -40,6 +42,7 @@ jobs:
 
     - name: Set versions
       run: sed -i -e "/cudatoolkit/c\  - cudatoolkit ${{ matrix.cuda }}"
+                  -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}"
                   -e "/nvcc_linux-64/c\  - nvcc_linux-64 ${{ matrix.nvcc }}"
                   -e "/python/c\  - python ${{ matrix.python }}"
                   -e "/pytorch-gpu/c\  - pytorch-gpu ${{ matrix.pytorch }}"
