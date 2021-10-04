@@ -29,8 +29,8 @@ foreach(TEST_PATH ${TEST_PATHS})
     add_test(${TEST_NAME} ${TEST_NAME})
 endforeach()
 
-add_test(TestSymmetryFunctions pytest ${CMAKE_SOURCE_DIR}/src/pytorch/TestSymmetryFunctions.py)
-add_test(TestBatchedNN pytest ${CMAKE_SOURCE_DIR}/src/pytorch/TestBatchedNN.py)
+add_test(TestBatchedNN         pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestBatchedNN.py)
+add_test(TestSymmetryFunctions pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestSymmetryFunctions.py)
 
 install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
 install(FILES src/pytorch/__init__.py

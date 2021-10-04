@@ -59,7 +59,7 @@ $ make install
 
 - Run the tests
 ```bash
-$ ctest
+$ ctest --verbose
 ```
 
 ## Usage
