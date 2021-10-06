@@ -21,7 +21,7 @@ jobs:
             gcc: 10.3.0
             nvcc: 11.2
             python: 3.9
-            pytorch: 1.8.0
+            pytorch: 1.8.0 # Cannot test with PyTorch 1.9, because of https://github.com/aiqm/torchani/issues/598
 
     steps:
     - name: Check out
