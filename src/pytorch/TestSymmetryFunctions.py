@@ -38,6 +38,9 @@ def test_import():
 @pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
 def test_compare_with_native(deviceString, molFile):
 
+    if deviceString == 'cuda' and not torch.cuda.is_available():
+        pytest.skip('CUDA is not available')
+
     from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
 
     device = torch.device(deviceString)
@@ -69,6 +72,9 @@ def test_compare_with_native(deviceString, molFile):
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
 @pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
 def test_model_serialization(deviceString, molFile):
+
+    if deviceString == 'cuda' and not torch.cuda.is_available():
+        pytest.skip('CUDA is not available')
 
     from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
 
