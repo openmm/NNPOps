@@ -16,12 +16,12 @@ jobs:
             gcc: 8.5.0
             nvcc: 10.2
             python: 3.8
-            pytorch: 1.7.1
+            pytorch: 1.8.0
           - cuda: 11.2.2
             gcc: 10.3.0
             nvcc: 11.2
             python: 3.9
-            pytorch: 1.8.0
+            pytorch: 1.10.0
 
     steps:
     - name: Check out
