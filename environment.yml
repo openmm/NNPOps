@@ -11,3 +11,4 @@ dependencies:
   - pytest
   - python 3.9
   - pytorch-gpu 1.10.0
+  - sysroot_linux-64 2.17
