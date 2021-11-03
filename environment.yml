@@ -1,7 +1,7 @@
 channels:
   - conda-forge
 dependencies:
-  - cmake
+  - cmake >=3.20
   - cudatoolkit 11.2.2
   - gxx_linux-64 10.3.0
   - make
