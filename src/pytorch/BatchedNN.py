@@ -34,7 +34,7 @@ torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch
 batchedLinear = torch.ops.NNPOpsBatchedNN.BatchedLinear
 
 
-class TorchANIBatchedNN(torch.nn.Module):
+class _BatchedNN(torch.nn.Module):
 
     def __init__(self, converter: SpeciesConverter, ensemble: Union[ANIModel, Ensemble], atomicNumbers: Tensor):
 
@@ -44,10 +44,10 @@ class TorchANIBatchedNN(torch.nn.Module):
         species_list = converter((atomicNumbers, torch.empty(0))).species[0].tolist()
 
         # Handle the case when the ensemble is just one model
-        ensemble = [ensemble] if type(ensemble) == ANIModel else ensemble
+        self._ensemble = [ensemble] if type(ensemble) == ANIModel else ensemble
 
         # Convert models to the list of linear layers
-        models = [list(model.values()) for model in ensemble]
+        models = [list(model.values()) for model in self._ensemble]
 
         # Extract the weihts and biases of the linear layers
         for ilayer in [0, 2, 4, 6]:
@@ -82,6 +82,9 @@ class TorchANIBatchedNN(torch.nn.Module):
 
         return nn.Parameter(weights), nn.Parameter(biases)
 
+    def _atomic_energies(self, species_aev: Tuple[Tensor, Tensor]) -> Tensor:
+        return self._ensemble[0]._atomic_energies(species_aev)
+
     def forward(self, species_aev: Tuple[Tensor, Tensor]) -> SpeciesEnergies:
 
         species, aev = species_aev
@@ -102,3 +105,12 @@ class TorchANIBatchedNN(torch.nn.Module):
         energies = torch.mean(torch.sum(vectors, (1, 3, 4)), 1)
 
         return SpeciesEnergies(species, energies)
+
+
+class TorchANIBatchedNN(torch.nn.ModuleList):
+
+    def __init__(self, converter: SpeciesConverter, ensemble: Union[ANIModel, Ensemble], atomicNumbers: Tensor):
+        super().__init__([_BatchedNN(converter, ensemble, atomicNumbers)])
+
+    def forward(self, species_aev: Tuple[Tensor, Tensor]) -> SpeciesEnergies:
+        return self[0].forward(species_aev)
