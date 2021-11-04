@@ -72,7 +72,7 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         """
         super().__init__()
 
-        self.numSpecies = symmFunc.num_species
+        self.num_species = symmFunc.num_species
         self.Rcr = symmFunc.Rcr
         self.Rca = symmFunc.Rca
         self.EtaR = symmFunc.EtaR[:, 0].tolist()
@@ -121,7 +121,7 @@ class TorchANISymmetryFunctions(torch.nn.Module):
 
         if not self.holder.is_initialized():
             species_: List[int] = species[0].tolist() # Explicit type casting for TorchScript
-            self.holder = Holder(self.numSpecies, self.Rcr, self.Rca,
+            self.holder = Holder(self.num_species, self.Rcr, self.Rca,
                                  self.EtaR, self.ShfR,
                                  self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
                                  species_, positions)
