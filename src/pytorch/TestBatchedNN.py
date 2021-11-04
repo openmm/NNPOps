@@ -87,10 +87,6 @@ def test_model_serialization(deviceString, molFile):
     nnp_ref = torchani.models.ANI2x(periodic_table_index=True).to(device)
     nnp_ref.neural_networks = TorchANIBatchedNN(nnp_ref.species_converter, nnp_ref.neural_networks, atomicNumbers).to(device)
 
-    # Circumvent https://github.com/aiqm/torchani/issues/598#issuecomment-959004422
-    nnp_ref.aev_computer.use_cuda_extension = False
-    nnp_ref.aev_computer.cuaev_computer = None
-
     energy_ref = nnp_ref((atomicNumbers, atomicPositions)).energies
     energy_ref.backward()
     grad_ref = atomicPositions.grad.clone()

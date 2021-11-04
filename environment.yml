@@ -7,7 +7,7 @@ dependencies:
   - make
   - mdtraj
   - nvcc_linux-64 11.2
-  - torchani 2.2.1
+  - torchani 2.2.2
   - pytest
   - python 3.9
   - pytorch-gpu 1.10.0
