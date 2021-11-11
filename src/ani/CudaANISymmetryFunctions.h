@@ -24,6 +24,7 @@
  * SOFTWARE.
  */
 
+#include <cuda_runtime.h>
 #include "ANISymmetryFunctions.h"
 
 class CudaANISymmetryFunctions : public ANISymmetryFunctions {
@@ -78,6 +79,10 @@ public:
      * @param positionDeriv    an array of shape [numAtoms][3] to store the derivative of E with respect to the atom positions into
      */
     void backprop(const float* radialDeriv, const float* angularDeriv, float* positionDeriv);
+    /**
+     * TODO
+     */
+    void setStream(cudaStream_t stream);
 private:
     int* neighbors;
     int* neighborCount;
@@ -92,6 +97,7 @@ private:
     float* positionDerivValues;
     bool triclinic;
     int maxBlocks;
+    cudaStream_t stream;
 };
 
 #endif

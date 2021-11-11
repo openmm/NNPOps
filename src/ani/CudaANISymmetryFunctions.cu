@@ -39,7 +39,7 @@ CudaANISymmetryFunctions::CudaANISymmetryFunctions(int numAtoms, int numSpecies,
         const std::vector<RadialFunction>& radialFunctions, const std::vector<AngularFunction>& angularFunctions, bool torchani) :
            ANISymmetryFunctions(numAtoms, numSpecies, radialCutoff, angularCutoff, periodic, atomSpecies, radialFunctions, angularFunctions, torchani),
            positions(0), neighbors(0), neighborCount(0), periodicBoxVectors(0), angularIndex(0), atomSpeciesArray(0), radialFunctionArray(0), angularFunctionArray(0),
-           radialValues(0), angularValues(0), positionDerivValues(0) {
+           radialValues(0), angularValues(0), positionDerivValues(0), stream(0) {
     CHECK_RESULT(cudaMallocManaged(&positions, numAtoms*sizeof(float3)));
     CHECK_RESULT(cudaMallocManaged(&neighbors, numAtoms*numAtoms*sizeof(int)));
     CHECK_RESULT(cudaMallocManaged(&neighborCount, numAtoms*sizeof(int)));
@@ -94,6 +94,10 @@ CudaANISymmetryFunctions::~CudaANISymmetryFunctions() {
         cudaFree(angularValues);
     if (positionDerivValues != 0)
         cudaFree(positionDerivValues);
+}
+
+void CudaANISymmetryFunctions::setStream(cudaStream_t stream) {
+    this->stream = stream;
 }
 
 template <bool PERIODIC, bool TRICLINIC>
@@ -363,31 +367,31 @@ void CudaANISymmetryFunctions::computeSymmetryFunctions(const float* positions, 
     int numAngular = angularFunctions.size();
     if (periodic) {
         if (triclinic) {
-            computeRadialFunctions<true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
+            computeRadialFunctions<true, true><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
             if (torchani)
-                computeAngularFunctions<true, true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                computeAngularFunctions<true, true, true><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
             else
-                computeAngularFunctions<true, true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                computeAngularFunctions<true, true, false><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
         }
         else {
-            computeRadialFunctions<true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
+            computeRadialFunctions<true, false><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
             if (torchani)
-                computeAngularFunctions<true, false, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                computeAngularFunctions<true, false, true><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
             else
-                computeAngularFunctions<true, false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                computeAngularFunctions<true, false, false><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
         }
     }
     else {
-        computeRadialFunctions<false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
+        computeRadialFunctions<false, false><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numRadial, radialCutoff, angularCutoff, radialPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray);
         if (torchani)
-            computeAngularFunctions<false, false, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+            computeAngularFunctions<false, false, true><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
         else
-            computeAngularFunctions<false, false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+            computeAngularFunctions<false, false, false><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
     }
 
     // Apply the overall scale factors to the symmetry functions.
 
-    scaleSymmetryFunctions<<<maxBlocks, 128>>>(numAtoms, numSpecies, numRadial, numAngular, torchani, radialPtr, angularPtr, angularFunctionArray);
+    scaleSymmetryFunctions<<<maxBlocks, 128, 0, stream>>>(numAtoms, numSpecies, numRadial, numAngular, torchani, radialPtr, angularPtr, angularFunctionArray);
 
     // Copy the final values to the destination memory.
 
@@ -633,26 +637,26 @@ void CudaANISymmetryFunctions::backprop(const float* radialDeriv, const float* a
     int numBlocks = min(maxBlocks, numAtoms);
     if (periodic) {
         if (triclinic) {
-            backpropRadialFunctions<true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, radialPtr, posPtr, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray, torchani);
+            backpropRadialFunctions<true, true><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numRadial, radialCutoff, radialPtr, posPtr, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray, torchani);
             if (torchani)
-                backpropAngularFunctions<true, true, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                backpropAngularFunctions<true, true, true><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
             else
-                backpropAngularFunctions<true, true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                backpropAngularFunctions<true, true, false><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
         }
         else {
-            backpropRadialFunctions<true, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, radialPtr, posPtr, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray, torchani);
+            backpropRadialFunctions<true, false><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numRadial, radialCutoff, radialPtr, posPtr, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray, torchani);
             if (torchani)
-                backpropAngularFunctions<true, false, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                backpropAngularFunctions<true, false, true><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
             else
-                backpropAngularFunctions<true, false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+                backpropAngularFunctions<true, false, false><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
         }
     }
     else {
-        backpropRadialFunctions<false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numRadial, radialCutoff, radialPtr, posPtr, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray, torchani);
+        backpropRadialFunctions<false, false><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numRadial, radialCutoff, radialPtr, posPtr, (float3*) this->positions, this->periodicBoxVectors, radialFunctionArray, atomSpeciesArray, torchani);
         if (torchani)
-            backpropAngularFunctions<false, false, true><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+            backpropAngularFunctions<false, false, true><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
         else
-            backpropAngularFunctions<false, false, false><<<numBlocks, blockSize>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
+            backpropAngularFunctions<false, false, false><<<numBlocks, blockSize, 0, stream>>>(numAtoms, numSpecies, numAngular, angularCutoff, angularPtr, posPtr, neighbors, neighborCount, (float3*) this->positions, this->periodicBoxVectors, angularFunctionArray, atomSpeciesArray, angularIndex);
     }
 
     // Copy the final values to the destination memory.
