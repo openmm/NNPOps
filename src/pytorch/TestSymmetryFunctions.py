@@ -106,3 +106,39 @@ def test_model_serialization(deviceString, molFile):
 
     assert energy_error < 5e-7
     assert grad_error < 5e-3
+
+@pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
+def test_non_default_stream(molFile):
+
+    if not torch.cuda.is_available():
+        pytest.skip('CUDA is not available')
+
+    from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
+
+    device = torch.device('cuda')
+
+    mol = mdtraj.load(os.path.join(molecules, f'{molFile}_ligand.mol2'))
+    atomicNumbers = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
+    atomicPositions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
+
+    nnp = torchani.models.ANI2x(periodic_table_index=True).to(device)
+    nnp.aev_computer = TorchANISymmetryFunctions(nnp.aev_computer)
+
+    energy_ref = nnp((atomicNumbers, atomicPositions)).energies
+    energy_ref.backward()
+    grad_ref = atomicPositions.grad.clone()
+
+    stream = torch.cuda.Stream()
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        energy = nnp((atomicNumbers, atomicPositions)).energies
+        atomicPositions.grad.zero_()
+        energy.backward()
+        grad = atomicPositions.grad.clone()
+    torch.cuda.current_stream().wait_stream(stream)
+
+    energy_error = torch.abs((energy - energy_ref)/energy_ref)
+    grad_error = torch.max(torch.abs((grad - grad_ref)/grad_ref))
+
+    assert energy_error < 5e-7
+    assert grad_error < 5e-3
