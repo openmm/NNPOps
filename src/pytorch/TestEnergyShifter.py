@@ -54,7 +54,7 @@ def test_compare_with_native(deviceString, molFile):
     energy_ref.backward()
     grad_ref = atomicPositions.grad.clone()
 
-    nnp.energy_shifter = TorchANIEnergyShifter(nnp.species_converter, nnp.energy_shifter, atomicNumbers)
+    nnp.energy_shifter = TorchANIEnergyShifter(nnp.species_converter, nnp.energy_shifter, atomicNumbers).to(device)
     energy = nnp((atomicNumbers, atomicPositions)).energies
     atomicPositions.grad.zero_()
     energy.backward()
@@ -82,7 +82,7 @@ def test_model_serialization(deviceString, molFile):
     atomicPositions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
 
     nnp_ref = torchani.models.ANI2x(periodic_table_index=True).to(device)
-    nnp_ref.energy_shifter = TorchANIEnergyShifter(nnp_ref.species_converter, nnp_ref.energy_shifter, atomicNumbers)
+    nnp_ref.energy_shifter = TorchANIEnergyShifter(nnp_ref.species_converter, nnp_ref.energy_shifter, atomicNumbers).to(device)
 
     energy_ref = nnp_ref((atomicNumbers, atomicPositions)).energies
     energy_ref.backward()
