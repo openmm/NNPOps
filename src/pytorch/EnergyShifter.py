@@ -35,11 +35,10 @@ class TorchANIEnergyShifter(torch.nn.Module):
         super().__init__()
 
         # Convert atomic numbers to a list of species
-        species_list = converter((atomicNumbers, torch.empty(0))).species[0]
-        species_list = torch.reshape(species_list, (1, -1))
+        species = converter((atomicNumbers, torch.empty(0))).species
 
         # Compute atomic self energies
-        self_energies = torch.nn.Parameter(shifter.sae(species_list))
+        self_energies = torch.nn.Parameter(shifter.sae(species))
         self.register_parameter('self_energies', self_energies)
 
     def forward(self, species_energies: Tuple[Tensor, Tensor],
