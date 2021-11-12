@@ -38,8 +38,7 @@ class TorchANIEnergyShifter(torch.nn.Module):
         species = converter((atomicNumbers, torch.empty(0))).species
 
         # Compute atomic self energies
-        self_energies = torch.nn.Parameter(shifter.sae(species))
-        self.register_parameter('self_energies', self_energies)
+        self.register_buffer('self_energies', shifter.sae(species))
 
     def forward(self, species_energies: Tuple[Tensor, Tensor],
                 cell: Optional[Tensor] = None,
