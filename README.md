@@ -75,6 +75,7 @@ import mdtraj
 import torch
 import torchani
 
+from NNPOps.SpeciesConverter import TorchANISpeciesConverter
 from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
 from NNPOps.BatchedNN import TorchANIBatchedNN
 
@@ -87,6 +88,7 @@ positions = torch.tensor(molecule.xyz * 10, dtype=torch.float32, requires_grad=T
 
 # Construct ANI-2x and replace its operations with the optimized ones
 nnp = torchani.models.ANI2x(periodic_table_index=True).to(device)
+nnp.species_converter = TorchANISpeciesConverter(nnp.species_converter, species).to(device)
 nnp.aev_computer = TorchANISymmetryFunctions(nnp.aev_computer).to(device)
 nnp.neural_networks = TorchANIBatchedNN(nnp.species_converter, nnp.neural_networks, species).to(device)
 
