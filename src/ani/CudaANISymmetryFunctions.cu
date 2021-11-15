@@ -100,6 +100,10 @@ void CudaANISymmetryFunctions::setStream(cudaStream_t stream) {
     this->stream = stream;
 }
 
+cudaStream_t CudaANISymmetryFunctions::getStream() const {
+    return stream;
+}
+
 template <bool PERIODIC, bool TRICLINIC>
 __device__ void computeDisplacement(float3 pos1, float3 pos2, float3& delta, float& r2, const float* periodicBoxVectors, float3 invBoxSize) {
     delta.x = pos2.x-pos1.x;

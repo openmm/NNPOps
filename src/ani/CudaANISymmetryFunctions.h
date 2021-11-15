@@ -80,9 +80,17 @@ public:
      */
     void backprop(const float* radialDeriv, const float* angularDeriv, float* positionDeriv);
     /**
-     * TODO
+     * Set the CUDA stream. By default, it is set to 0, which means the default stream.
+     *
+     * @param stream a CUDA stream object
      */
     void setStream(cudaStream_t stream);
+    /**
+     * Get the CUDA stream.
+     *
+     * @return a CUDA stream object
+     */
+    cudaStream_t getStream() const;
 private:
     int* neighbors;
     int* neighborCount;
