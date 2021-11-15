@@ -12,6 +12,7 @@ enable_testing()
 add_library(${LIBRARY} SHARED src/ani/CpuANISymmetryFunctions.cpp
                               src/ani/CudaANISymmetryFunctions.cu
                               src/pytorch/BatchedNN.cpp
+                              src/pytorch/CFConv.cpp
                               src/pytorch/SymmetryFunctions.cpp
                               src/schnet/CpuCFConv.cpp
                               src/schnet/CudaCFConv.cu)
