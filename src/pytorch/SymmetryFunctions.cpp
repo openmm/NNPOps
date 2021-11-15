@@ -22,7 +22,6 @@
  */
 
 #include <stdexcept>
-#include <cuda_runtime.h>
 #include <torch/script.h>
 #include <c10/cuda/CUDAStream.h>
 #include "CpuANISymmetryFunctions.h"
@@ -113,8 +112,8 @@ public:
         }
 
         if (cudaSymFunc) {
-            cudaStream_t stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index()).stream();
-            cudaSymFunc->setStream(stream);
+            const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
+            cudaSymFunc->setStream(stream.stream());
         }
 
         symFunc->computeSymmetryFunctions(positions.data_ptr<float>(), periodicBoxVectorsPtr, radial.data_ptr<float>(), angular.data_ptr<float>());
@@ -128,8 +127,8 @@ public:
         const Tensor angularGrad = grads[1].clone();
 
         if (cudaSymFunc) {
-            cudaStream_t stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index()).stream();
-            cudaSymFunc->setStream(stream);
+            const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
+            cudaSymFunc->setStream(stream.stream());
         }
 
         symFunc->backprop(radialGrad.data_ptr<float>(), angularGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
