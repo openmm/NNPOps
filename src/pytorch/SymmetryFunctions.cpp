@@ -113,7 +113,7 @@ public:
         }
 
         if (cudaSymFunc) {
-            stream = torch::cuda::getCurrentCUDAStream(positions.device().index()).stream();
+            cudaStream_t stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index()).stream();
             cudaSymFunc->setStream(stream);
         }
 
@@ -128,6 +128,7 @@ public:
         const Tensor angularGrad = grads[1].clone();
 
         if (cudaSymFunc) {
+            cudaStream_t stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index()).stream();
             cudaSymFunc->setStream(stream);
         }
 
@@ -147,7 +148,6 @@ private:
     Tensor angular;
     Tensor positionsGrad;
     CudaANISymmetryFunctions* cudaSymFunc;
-    cudaStream_t stream;
 };
 
 class AutogradFunctions : public torch::autograd::Function<AutogradFunctions> {
