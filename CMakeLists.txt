@@ -30,6 +30,7 @@ foreach(TEST_PATH ${TEST_PATHS})
 endforeach()
 
 add_test(TestBatchedNN         pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestBatchedNN.py)
+add_test(TestSpeciesConverter  pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestSpeciesConverter.py)
 add_test(TestSymmetryFunctions pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestSymmetryFunctions.py)
 
 install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
