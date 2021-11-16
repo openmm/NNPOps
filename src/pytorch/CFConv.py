@@ -71,6 +71,7 @@ class CFConv(torch.nn.Module):
                                  self.numFilters,
                                  self.numGaussians,
                                  self.cutoff,
+                                 self.gaussianWidth,
                                  self.activation,
                                  self.weights1,
                                  self.biases1,

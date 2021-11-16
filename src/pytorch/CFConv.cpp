@@ -71,32 +71,35 @@ public:
         tensorOptions = torch::TensorOptions().device(positions.device()); // Data type of float by default
 
         const ::CFConv::ActivationFunction activation = static_cast<::CFConv::ActivationFunction>(activation_);
-        const Tensor weights1 = weights1_.to(tensorOptions);
-        const Tensor biases1 = biases1_.to(tensorOptions);
-        const Tensor weights2 = weights2_.to(tensorOptions);
-        const Tensor biases2 = biases2_.to(tensorOptions);
+
+        // Note: weights and biases have to be in the CPU memory
+        const Tensor weights1 = weights1_.to(tensorOptions).cpu();
+        const Tensor biases1 = biases1_.to(tensorOptions).cpu();
+        const Tensor weights2 = weights2_.to(tensorOptions).cpu();
+        const Tensor biases2 = biases2_.to(tensorOptions).cpu();
 
         const torch::Device& device = tensorOptions.device();
-        if (device.is_cpu())
+        if (device.is_cpu()) {
             neighbors = std::make_shared<CpuCFConvNeighbors>(numAtoms, cutoff, false);
             conv = std::make_shared<CpuCFConv>(numAtoms, numFilters, numGausians, cutoff, false, gaussianWidth, activation,
                                                weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
-        if (device.is_cuda()) {
+        } else if (device.is_cuda()) {
             // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
             CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
             neighbors = std::make_shared<CudaCFConvNeighbors>(numAtoms, cutoff, false);
             conv = std::make_shared<CudaCFConv>(numAtoms, numFilters, numGausians, cutoff, false, gaussianWidth, activation,
                                                 weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
-        }
+        } else
+            throw std::runtime_error("Unsupported device");
 
-        output  = torch::empty({numAtoms, numFilters}, tensorOptions);
+        output = torch::empty({numAtoms, numFilters}, tensorOptions);
         inputGrad = torch::empty({numAtoms, numFilters}, tensorOptions);
         positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
 
         // cudaConv = dynamic_cast<CudaCFConv*>(conv.get());
     };
 
-    tensor_list forward(const Tensor& positions_, const Tensor& input_) {
+    Tensor forward(const Tensor& positions_, const Tensor& input_) {
 
         positions = positions_.to(tensorOptions).clone();
         input = input_.to(tensorOptions).clone();
@@ -109,12 +112,12 @@ public:
         neighbors->build(positions.data_ptr<float>(), nullptr);
         conv->compute(*neighbors.get(), positions.data_ptr<float>(), nullptr, positions.data_ptr<float>(), output.data_ptr<float>());
 
-        return {output};
+        return output;
     };
 
-    tensor_list backward(const tensor_list& grads) {
+    tensor_list backward(const Tensor& outputGrad_) {
 
-        const Tensor outputGrad = grads[0].clone();
+        const Tensor outputGrad = outputGrad_.clone();
 
         // if (cudaConv) {
         //     const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
@@ -146,7 +149,7 @@ private:
 class AutogradFunctions : public torch::autograd::Function<AutogradFunctions> {
 
 public:
-    static tensor_list forward(Context *ctx,
+    static Tensor forward(Context *ctx,
                                const HolderPtr& holder,
                                const Tensor& positions,
                                const Tensor& input) {
@@ -159,7 +162,7 @@ public:
     static tensor_list backward(Context *ctx, const tensor_list& grads) {
 
         const HolderPtr holder = ctx->saved_data["holder"].toCustomClass<Holder>();
-        tensor_list output = holder->backward(grads);
+        tensor_list output = holder->backward(grads[0]);
         ctx->saved_data.erase("holder");
 
         return { Tensor(),   // holder
@@ -168,7 +171,7 @@ public:
     };
 };
 
-tensor_list operation(const optional<HolderPtr>& holder,
+Tensor operation(const optional<HolderPtr>& holder,
                       const Tensor& positions,
                       const Tensor& input) {
 
