@@ -22,8 +22,9 @@
  */
 
 #include <stdexcept>
+#include <cuda_runtime.h>
 #include <torch/script.h>
-#include <c10/cuda/CUDAStream.h>
+// #include <c10/cuda/CUDAStream.h>
 #include "CpuCFConv.h"
 #include "CudaCFConv.h"
 
@@ -33,7 +34,7 @@
     }
 
 namespace NNPOps {
-namespace SchNet {
+namespace CFConv {
 
 class Holder;
 using std::vector;
@@ -56,10 +57,10 @@ public:
            double cutoff,
            double gaussianWidth,
            int64_t activation_,
-           const vector<double>& linear1_weights_,
-           const vector<double>& linear1_biases_,
-           const vector<double>& linear2_weights_,
-           const vector<double>& linear2_biases_,
+           const Tensor& weights1_,
+           const Tensor& biases1_,
+           const Tensor& weights2_,
+           const Tensor& biases2_,
            const Tensor& positions) : torch::CustomClassHolder() {
 
         // Construct an uninitialized object
@@ -67,26 +68,25 @@ public:
         if (numAtoms == 0)
             return;
 
-        const CFConv::ActivationFunction activation = static_cast<CFConv::ActivationFunction>(activation_);
-
-        const vector<float> linear1_weights = {linear1_weights_.begin(), linear1_weights_.end()};
-        const vector<float> linear1_biases = {linear1_weights_.begin(), linear1_biases_.end()};
-        const vector<float> linear2_weights = {linear2_weights_.begin(), linear2_weights_.end()};
-        const vector<float> linear2_biases = {linear1_weights_.begin(), linear2_biases_.end()};
-
         tensorOptions = torch::TensorOptions().device(positions.device()); // Data type of float by default
+
+        const ::CFConv::ActivationFunction activation = static_cast<::CFConv::ActivationFunction>(activation_);
+        const Tensor weights1 = weights1_.to(tensorOptions);
+        const Tensor biases1 = biases1_.to(tensorOptions);
+        const Tensor weights2 = weights2_.to(tensorOptions);
+        const Tensor biases2 = biases2_.to(tensorOptions);
 
         const torch::Device& device = tensorOptions.device();
         if (device.is_cpu())
             neighbors = std::make_shared<CpuCFConvNeighbors>(numAtoms, cutoff, false);
             conv = std::make_shared<CpuCFConv>(numAtoms, numFilters, numGausians, cutoff, false, gaussianWidth, activation,
-                                               linear1_weights.data(), linear1_biases.data(), linear2_weights.data(), linear2_biases.data());
+                                               weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
         if (device.is_cuda()) {
             // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
             CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
             neighbors = std::make_shared<CudaCFConvNeighbors>(numAtoms, cutoff, false);
             conv = std::make_shared<CudaCFConv>(numAtoms, numFilters, numGausians, cutoff, false, gaussianWidth, activation,
-                                                linear1_weights.data(), linear1_biases.data(), linear2_weights.data(), linear2_biases.data());
+                                                weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
         }
 
         output  = torch::empty({numAtoms, numFilters}, tensorOptions);
@@ -96,24 +96,18 @@ public:
         // cudaConv = dynamic_cast<CudaCFConv*>(conv.get());
     };
 
-    tensor_list forward(const Tensor& positions_, const optional<Tensor>& periodicBoxVectors_, const Tensor& input_) {
+    tensor_list forward(const Tensor& positions_, const Tensor& input_) {
 
         positions = positions_.to(tensorOptions).clone();
         input = input_.to(tensorOptions).clone();
-
-        periodicBoxVectorsPtr = nullptr;
-        if (periodicBoxVectors_) {
-            periodicBoxVectors = periodicBoxVectors_->to(tensorOptions);
-            periodicBoxVectorsPtr = periodicBoxVectors.data_ptr<float>();
-        }
 
         // if (cudaConv) {
         //     const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
         //     cudaConv->setStream(stream.stream());
         // }
 
-        neighbors->build(positions.data_ptr<float>(), periodicBoxVectorsPtr);
-        conv->compute(*neighbors.get(), positions.data_ptr<float>(), periodicBoxVectorsPtr, positions.data_ptr<float>(), output.data_ptr<float>());
+        neighbors->build(positions.data_ptr<float>(), nullptr);
+        conv->compute(*neighbors.get(), positions.data_ptr<float>(), nullptr, positions.data_ptr<float>(), output.data_ptr<float>());
 
         return {output};
     };
@@ -127,7 +121,7 @@ public:
         //     cudaConv->setStream(stream.stream());
         // }
 
-        conv->backprop(*neighbors.get(), positions.data_ptr<float>(), periodicBoxVectorsPtr, input.data_ptr<float>(),
+        conv->backprop(*neighbors.get(), positions.data_ptr<float>(), nullptr, input.data_ptr<float>(),
                        outputGrad.data_ptr<float>(), inputGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
 
         return {positionsGrad, inputGrad};
@@ -142,8 +136,6 @@ private:
     std::shared_ptr<::CFConvNeighbors> neighbors;
     std::shared_ptr<::CFConv> conv;
     Tensor positions;
-    Tensor periodicBoxVectors;
-    float* periodicBoxVectorsPtr;
     Tensor input;
     Tensor output;
     Tensor positionsGrad;
@@ -157,54 +149,51 @@ public:
     static tensor_list forward(Context *ctx,
                                const HolderPtr& holder,
                                const Tensor& positions,
-                               const optional<Tensor>& periodicBoxVectors,
                                const Tensor& input) {
 
         ctx->saved_data["holder"] = holder;
 
-        return holder->forward(positions, periodicBoxVectors, input);
+        return holder->forward(positions, input);
     };
 
     static tensor_list backward(Context *ctx, const tensor_list& grads) {
 
-        const auto holder = ctx->saved_data["holder"].toCustomClass<Holder>();
+        const HolderPtr holder = ctx->saved_data["holder"].toCustomClass<Holder>();
         tensor_list output = holder->backward(grads);
         ctx->saved_data.erase("holder");
 
         return { Tensor(),   // holder
                  output[0],  // positions
-                 Tensor(),   // periodicBoxVectors
                  output[1]}; // input
     };
 };
 
 tensor_list operation(const optional<HolderPtr>& holder,
                       const Tensor& positions,
-                      const optional<Tensor>& periodicBoxVectors,
                       const Tensor& input) {
 
-    return AutogradFunctions::apply(*holder, positions, periodicBoxVectors, input);
+    return AutogradFunctions::apply(*holder, positions, input);
 }
 
-TORCH_LIBRARY(NNPOpsSchNetCFConv, m) {
+TORCH_LIBRARY(NNPOpsCFConv, m) {
     m.class_<Holder>("Holder")
-        .def(torch::init<int64_t,               // nunAtoms
-                         int64_t,               // numFilters
-                         int64_t,               // numGausians
-                         double,                // cutoff
-                         double,                // gaussianWidth
-                         int64_t,               // activation
-                         const vector<double>&, // linear1_weights
-                         const vector<double>&, // linear1_biases
-                         const vector<double>&, // linear2_weights
-                         const vector<double>&, // linear2_biases
-                         const Tensor&>())      // positions
+        .def(torch::init<int64_t,          // nunAtoms
+                         int64_t,          // numFilters
+                         int64_t,          // numGausians
+                         double,           // cutoff
+                         double,           // gaussianWidth
+                         int64_t,          // activation
+                         const Tensor&,    // linear1_weights
+                         const Tensor&,    // linear1_biases
+                         const Tensor&,    // linear2_weights
+                         const Tensor&,    // linear2_biases
+                         const Tensor&>()) // positions
         .def("forward", &Holder::forward)
         .def("backward", &Holder::backward)
         .def("is_initialized", &Holder::is_initialized)
         .def_pickle(
             // __getstate__
-            // Note: nothing is during serialization
+            // Note: nothing is done during serialization
             [](const HolderPtr& self) -> int64_t { return 0; },
             // __setstate__
             // Note: a new uninitialized object is create during deserialization
@@ -213,5 +202,5 @@ TORCH_LIBRARY(NNPOpsSchNetCFConv, m) {
     m.def("operation", operation);
 }
 
-} // namespace SchNet
+} // namespace CFConv
 } // namespace NNPOps
