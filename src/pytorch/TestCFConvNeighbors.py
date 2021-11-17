@@ -21,7 +21,6 @@
 # SOFTWARE.
 #
 
-import mdtraj
 import os
 import pytest
 import tempfile
@@ -34,8 +33,7 @@ def test_import():
     import NNPOps.CFConvNeighbors
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
-@pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
-def test_build(deviceString, molFile):
+def test_build(deviceString):
 
     if deviceString == 'cuda' and not torch.cuda.is_available():
         pytest.skip('CUDA is not available')
@@ -44,19 +42,18 @@ def test_build(deviceString, molFile):
 
     device = torch.device(deviceString)
 
-    mol = mdtraj.load(os.path.join(molecules, f'{molFile}_ligand.mol2'))
-    positions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)[0]
+    numAtoms = 10
+    cutoff = 5
+    positions = 10*torch.rand(numAtoms, 3, dtype=torch.float32, device=device) - 5
 
-    neighbors = CFConvNeighbors(numAtoms=len(positions), cutoff=5)
+    neighbors = CFConvNeighbors(numAtoms, cutoff)
 
     for _ in range(3):
         neighbors.build(positions)
-        # TODO test the result
 
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
-@pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
-def test_model_serialization(deviceString, molFile):
+def test_model_serialization(deviceString):
 
     if deviceString == 'cuda' and not torch.cuda.is_available():
         pytest.skip('CUDA is not available')
@@ -65,10 +62,11 @@ def test_model_serialization(deviceString, molFile):
 
     device = torch.device(deviceString)
 
-    mol = mdtraj.load(os.path.join(molecules, f'{molFile}_ligand.mol2'))
-    positions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)[0]
+    numAtoms = 10
+    cutoff = 5
+    positions = 10*torch.rand(numAtoms, 3, dtype=torch.float32, device=device) - 5
 
-    neighbors_ref = CFConvNeighbors(numAtoms=len(positions), cutoff=5)
+    neighbors_ref = CFConvNeighbors(numAtoms, cutoff)
 
     for _ in range(3):
         neighbors_ref.build(positions)
