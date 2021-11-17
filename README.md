@@ -80,6 +80,8 @@ from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
 from NNPOps.BatchedNN import TorchANIBatchedNN
 from NNPOps.EnergyShifter import TorchANIEnergyShifter
 
+from NNPOps import OptimizedTorchANI
+
 device = torch.device('cuda')
 
 # Load a molecule
@@ -96,6 +98,18 @@ nnp.energy_shifter = TorchANIEnergyShifter(nnp.species_converter, nnp.energy_shi
 
 # Compute energy and forces
 energy = nnp((species, positions)).energies
+energy.backward()
+forces = -positions.grad.clone()
+
+print(energy, forces)
+
+# Alternatively, all the optimizations can be applied with OptimizedTorchANI
+nnp2 = torchani.models.ANI2x(periodic_table_index=True).to(device)
+nnp2 = OptimizedTorchANI(nnp, species).to(device)
+
+# Compute energy and forces again
+energy = nnp2((species, positions)).energies
+positions.grad.zero_()
 energy.backward()
 forces = -positions.grad.clone()
 
