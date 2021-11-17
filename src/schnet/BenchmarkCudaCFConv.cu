@@ -84,7 +84,7 @@ void runBenchmark(int iterations, vector<float>& positions, vector<float>& perio
     // Allocate all the memory we will need.
 
     CudaCFConvNeighbors neighbors(numAtoms, cutoff, periodicBoxVectors.size() > 0);
-    CudaCFConv cfconv(numAtoms, width, numGaussians, cutoff, periodicBoxVectors.size() > 0, 0.2, w1.data(), b1.data(), w2.data(), b2.data());
+    CudaCFConv cfconv(numAtoms, width, numGaussians, cutoff, periodicBoxVectors.size() > 0, 0.2, CFConv::ShiftedSoftplus, w1.data(), b1.data(), w2.data(), b2.data());
     float *positionsData, *vectorsData, *input, *output, *inputDerivs, *outputDerivs, *positionDerivs;
     cudaMalloc(&positionsData, positions.size()*sizeof(float));
     cudaMalloc(&vectorsData, 9*sizeof(float));
