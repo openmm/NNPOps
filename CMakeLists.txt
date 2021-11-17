@@ -38,6 +38,7 @@ install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
 install(FILES src/pytorch/__init__.py
               src/pytorch/BatchedNN.py
               src/pytorch/EnergyShifter.py
+              src/pytorch/OptimizedTorchANI.py
               src/pytorch/SpeciesConverter.py
               src/pytorch/SymmetryFunctions.py
         DESTINATION ${Python_SITEARCH}/${NAME})
