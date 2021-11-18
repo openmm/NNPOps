@@ -39,80 +39,86 @@
 namespace NNPOps {
 namespace CFConvNeighbors {
 
+using std::string;
 class Holder;
-using std::vector;
 using HolderPtr = torch::intrusive_ptr<Holder>;
 using torch::Device;
 using torch::Tensor;
-using torch::optional;
-using Context = torch::autograd::AutogradContext;
-using torch::autograd::tensor_list;
 
 class Holder : public torch::CustomClassHolder {
 public:
 
-    // Constructor for an uninitialized object
-    // Note: this is need for serialization
-    Holder() : torch::CustomClassHolder() {};
+    Holder(int64_t numAtoms, double cutoff) : torch::CustomClassHolder(), numAtoms(numAtoms), cutoff(cutoff), device(torch::kCPU) {}
 
-    Holder(int64_t numAtoms,
-           double cutoff,
-           const Device& device) : torch::CustomClassHolder() {
+    void build(const Tensor& positions) {
 
-        // Construct an uninitialized object
-        // Note: this is needed for Python bindings
-        if (numAtoms == 0)
-            return;
+        if (!(positions.scalar_type() == torch::kFloat32))
+            throw std::runtime_error("The type of \"positions\" has to be float32");
 
-        tensorOptions = torch::TensorOptions().device(device); // Data type of float by default
+        if (positions.dim() != 2 || positions.size(0) != numAtoms || positions.size(1) != 3)
+            throw std::runtime_error("The shape of \"positions\" has to be (numAtoms, 3)");
 
-        if (device.is_cpu())
-            neighbors = std::make_shared<CpuCFConvNeighbors>(numAtoms, cutoff, false);
-        if (device.is_cuda()) {
-            // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
-            CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
-            neighbors = std::make_shared<CudaCFConvNeighbors>(numAtoms, cutoff, false);
+        if (!neighbors) {
+            device = positions.device();
+            if (device.is_cpu()) {
+                neighbors = std::make_shared<CpuCFConvNeighbors>(numAtoms, cutoff, false);
+            } else if (device.is_cuda()) {
+                // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
+                CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
+                neighbors = std::make_shared<CudaCFConvNeighbors>(numAtoms, cutoff, false);
+            } else
+                throw std::runtime_error("Unsupported device");
+
+            // cudaNeighbors = dynamic_cast<CudaCFConvNeighbors*>(neighbors.get());
         }
 
-        // cudaNeighbors = dynamic_cast<CudaCFConvNeighbors*>(neighbors.get());
-    };
-
-    void build(const Tensor& positions_) {
-
-        const Tensor positions = positions_.to(tensorOptions).clone();
+        if (positions.device() != device)
+            throw std::runtime_error("The device of \"positions\" has changed");
 
         // if (cudaNeighbors) {
-        //     const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
+        //     const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(positions.device().index());
         //     cudaNeighbors->setStream(stream.stream());
         // }
 
         neighbors->build(positions.data_ptr<float>(), nullptr);
-    };
+    }
 
-    bool is_initialized() {
-        return bool(neighbors);
-    };
+    static string serialize(const HolderPtr& self) {
+
+        std::stringstream stream;
+        stream << self->numAtoms << std::endl << self->cutoff;
+
+        return stream.str();
+    }
+
+    static HolderPtr deserialize(string state) {
+
+        int numAtoms;
+        float cutoff;
+
+        std::stringstream stream(state);
+        stream >> numAtoms;
+        stream >> cutoff;
+
+        return HolderPtr::make(numAtoms, cutoff);
+    }
 
 private:
-    torch::TensorOptions tensorOptions;
+    int numAtoms;
+    double cutoff;
     std::shared_ptr<::CFConvNeighbors> neighbors;
+    Device device;
     // CudaCFConvNeighbors* cudaNeighbors;
 };
 
 TORCH_LIBRARY(NNPOpsCFConvNeighbors, m) {
     m.class_<Holder>("Holder")
-        .def(torch::init<int64_t,          // nunAtoms
-                         double,           // cutoff
-                         const Device&>()) // device
+        .def(torch::init<int64_t,   // nunAtoms
+                         double>()) // cutoff
         .def("build", &Holder::build)
-        .def("is_initialized", &Holder::is_initialized)
         .def_pickle(
-            // __getstate__
-            // Note: nothing is done during serialization
-            [](const HolderPtr& self) -> int64_t { return 0; },
-            // __setstate__
-            // Note: a new uninitialized object is create during deserialization
-            [](int64_t state) -> HolderPtr { return HolderPtr::make(); }
+            [](const HolderPtr& self) -> string { return Holder::serialize(self); }, // __getstate__
+            [](string state) -> HolderPtr { return Holder::deserialize(state); }     // __setstate__
         );
 }
 

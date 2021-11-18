@@ -27,26 +27,15 @@ from torch import Tensor
 
 torch.classes.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 
-Holder = torch.classes.NNPOpsCFConvNeighbors.Holder
-
 class CFConvNeighbors(torch.nn.Module):
 
     def __init__(self, numAtoms: int, cutoff: float) -> None:
 
         super().__init__()
 
-        self.numAtoms = numAtoms
-        self.cutoff = cutoff
-
-        # Create an uninitialized holder
-        self.holder = Holder(0, 0.0, torch.device('cpu'))
-        assert not self.holder.is_initialized()
+        self.holder = torch.classes.NNPOpsCFConvNeighbors.Holder(numAtoms, cutoff)
 
     @torch.jit.export
     def build(self, positions: Tensor) -> None:
-
-        if not self.holder.is_initialized():
-            self.holder = Holder(self.numAtoms, self.cutoff, positions.device)
-            assert self.holder.is_initialized()
 
         self.holder.build(positions)
