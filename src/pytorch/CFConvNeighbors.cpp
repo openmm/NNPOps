@@ -23,10 +23,10 @@
 
 #include <stdexcept>
 #include <cuda_runtime.h>
-#include <torch/script.h>
 // #include <c10/cuda/CUDAStream.h>
 #include "CpuCFConv.h"
 #include "CudaCFConv.h"
+#include "CFConvNeighbors.h"
 
 #define int2 int[2]
 #define float3 float[3]
@@ -39,68 +39,48 @@
 namespace NNPOps {
 namespace CFConvNeighbors {
 
-using std::string;
-class Holder;
 using HolderPtr = torch::intrusive_ptr<Holder>;
-using torch::Device;
-using torch::Tensor;
 
-class Holder : public torch::CustomClassHolder {
-public:
+Holder::Holder(double cutoff) : torch::CustomClassHolder(), cutoff(cutoff), numAtoms(0), device(torch::kCPU), impl() {}
 
-    Holder(double cutoff) : torch::CustomClassHolder(), cutoff(cutoff), numAtoms(0), device(torch::kCPU), neighbors() {}
+void Holder::build(const Tensor& positions) {
 
-    void build(const Tensor& positions) {
+    if (!(positions.scalar_type() == torch::kFloat32))
+        throw std::runtime_error("The type of \"positions\" has to be float32");
 
-        if (!(positions.scalar_type() == torch::kFloat32))
-            throw std::runtime_error("The type of \"positions\" has to be float32");
+    if (positions.dim() != 2)
+        throw std::runtime_error("The shape of \"positions\" has to have 2 dimensions");
 
-        if (positions.dim() != 2)
-            throw std::runtime_error("The shape of \"positions\" has to have 2 dimensions");
+    if (positions.size(1) != 3)
+        throw std::runtime_error("The size of the 2nd dimension of \"positions\" has to be 3");
 
-        if (positions.size(1) != 3)
-            throw std::runtime_error("The size of the 2nd dimension of \"positions\" has to be 3");
-
-        if (!neighbors) {
-            numAtoms = positions.size(0);
-            device = positions.device();
-            if (device.is_cpu()) {
-                neighbors = std::make_shared<CpuCFConvNeighbors>(numAtoms, cutoff, false);
-            } else if (device.is_cuda()) {
-                // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
-                CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
-                neighbors = std::make_shared<CudaCFConvNeighbors>(numAtoms, cutoff, false);
-            } else
-                throw std::runtime_error("Unsupported device");
-
-            // cudaNeighbors = dynamic_cast<CudaCFConvNeighbors*>(neighbors.get());
-        }
-
-        if (positions.size(0) != numAtoms)
-            throw std::runtime_error("The size of the 2nd dimension of \"positions\" has changed");
-
-        if (positions.device() != device)
-            throw std::runtime_error("The device of \"positions\" has changed");
-
-        // if (cudaNeighbors) {
-        //     const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(positions.device().index());
-        //     cudaNeighbors->setStream(stream.stream());
-        // }
-
-        neighbors->build(positions.data_ptr<float>(), nullptr);
+    if (!impl) {
+        numAtoms = positions.size(0);
+        device = positions.device();
+        if (device.is_cpu()) {
+            impl = std::make_shared<::CpuCFConvNeighbors>(numAtoms, cutoff, false);
+        } else if (device.is_cuda()) {
+            // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
+            CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
+            impl = std::make_shared<::CudaCFConvNeighbors>(numAtoms, cutoff, false);
+        } else
+            throw std::runtime_error("Unsupported device");
     }
 
-    double getCutoff() const {
-        return cutoff;
-    }
+    if (positions.size(0) != numAtoms)
+        throw std::runtime_error("The size of the 2nd dimension of \"positions\" has changed");
 
-private:
-    double cutoff;
-    int numAtoms;
-    Device device;
-    std::shared_ptr<::CFConvNeighbors> neighbors;
-    // CudaCFConvNeighbors* cudaNeighbors;
-};
+    if (positions.device() != device)
+        throw std::runtime_error("The device of \"positions\" has changed");
+
+    // ::CudaCFConvNeighbors* cudaImpl = dynamic_cast<CudaCFConvNeighbors*>(impl.get());
+    // if (cudaImpl) {
+    //     const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(positions.device().index());
+    //     cudaImpl->setStream(stream.stream());
+    // }
+
+    impl->build(positions.data_ptr<float>(), nullptr);
+}
 
 TORCH_LIBRARY(NNPOpsCFConvNeighbors, m) {
     m.class_<Holder>("Holder")
