@@ -57,7 +57,6 @@ public:
            int64_t numAtoms,
            int64_t numFilters,
            int64_t numGausians,
-           double cutoff,
            double gaussianWidth,
            int64_t activation_,
            const Tensor& weights1_,
@@ -73,6 +72,7 @@ public:
 
         tensorOptions = torch::TensorOptions().device(positions.device()); // Data type of float by default
 
+        double cutoff = this->neighbors->getCutoff();
         const ::CFConv::ActivationFunction activation = static_cast<::CFConv::ActivationFunction>(activation_);
 
         // Note: weights and biases have to be in the CPU memory
@@ -185,7 +185,6 @@ TORCH_LIBRARY(NNPOpsCFConv, m) {
                          int64_t,          // nunAtoms
                          int64_t,          // numFilters
                          int64_t,          // numGausians
-                         double,           // cutoff
                          double,           // gaussianWidth
                          int64_t,          // activation
                          const Tensor&,    // linear1_weights

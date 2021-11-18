@@ -41,7 +41,6 @@ class CFConv(torch.nn.Module):
                  numAtoms: int,
                  numFilters: int,
                  numGaussians: int,
-                 cutoff: float,
                  gaussianWidth: float,
                  activation: str,
                  weights1: Tensor,
@@ -55,7 +54,6 @@ class CFConv(torch.nn.Module):
         self.numAtoms = numAtoms
         self.numFilters = numFilters
         self.numGaussians = numGaussians
-        self.cutoff = cutoff
         self.gaussianWidth = gaussianWidth
         self.activation = {'ssp': 0, 'tanh': 1}[activation]
         self.weights1 = weights1
@@ -64,7 +62,7 @@ class CFConv(torch.nn.Module):
         self.biases2 = biases2
 
         # Create an uninitialized holder
-        self.holder = Holder(self.neighbors.holder, 0, 0, 0, 0.0, 0.0 , 0, Tensor(), Tensor(), Tensor(), Tensor(), Tensor())
+        self.holder = Holder(self.neighbors.holder, 0, 0, 0, 0.0, 0, Tensor(), Tensor(), Tensor(), Tensor(), Tensor())
         assert not self.holder.is_initialized()
 
 
@@ -75,7 +73,6 @@ class CFConv(torch.nn.Module):
                                  self.numAtoms,
                                  self.numFilters,
                                  self.numGaussians,
-                                 self.cutoff,
                                  self.gaussianWidth,
                                  self.activation,
                                  self.weights1,
