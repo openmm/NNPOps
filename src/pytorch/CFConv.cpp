@@ -27,6 +27,7 @@
 // #include <c10/cuda/CUDAStream.h>
 #include "CpuCFConv.h"
 #include "CudaCFConv.h"
+#include "CFConvNeighbors.h"
 
 #define CHECK_CUDA_RESULT(result) \
     if (result != cudaSuccess) { \
@@ -39,6 +40,7 @@ namespace CFConv {
 class Holder;
 using std::vector;
 using HolderPtr = torch::intrusive_ptr<Holder>;
+using NeighborsPtr = torch::intrusive_ptr<NNPOps::CFConvNeighbors::Holder>;
 using torch::Tensor;
 using torch::optional;
 using Context = torch::autograd::AutogradContext;
@@ -79,16 +81,16 @@ public:
         const Tensor biases2 = biases2_.to(tensorOptions).cpu();
 
         const torch::Device& device = tensorOptions.device();
+
+        neighbors = NeighborsPtr::make(cutoff);
         if (device.is_cpu()) {
-            neighbors = std::make_shared<CpuCFConvNeighbors>(numAtoms, cutoff, false);
-            conv = std::make_shared<CpuCFConv>(numAtoms, numFilters, numGausians, cutoff, false, gaussianWidth, activation,
-                                               weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
+            conv = std::make_shared<::CpuCFConv>(numAtoms, numFilters, numGausians, cutoff, false, gaussianWidth, activation,
+                                                 weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
         } else if (device.is_cuda()) {
             // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
             CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
-            neighbors = std::make_shared<CudaCFConvNeighbors>(numAtoms, cutoff, false);
-            conv = std::make_shared<CudaCFConv>(numAtoms, numFilters, numGausians, cutoff, false, gaussianWidth, activation,
-                                                weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
+            conv = std::make_shared<::CudaCFConv>(numAtoms, numFilters, numGausians, cutoff, false, gaussianWidth, activation,
+                                                  weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
         } else
             throw std::runtime_error("Unsupported device");
 
@@ -109,8 +111,9 @@ public:
         //     cudaConv->setStream(stream.stream());
         // }
 
-        neighbors->build(positions.data_ptr<float>(), nullptr);
-        conv->compute(*neighbors.get(), positions.data_ptr<float>(), nullptr, positions.data_ptr<float>(), output.data_ptr<float>());
+        neighbors->build(positions);
+
+        conv->compute(neighbors->getImpl(), positions.data_ptr<float>(), nullptr, positions.data_ptr<float>(), output.data_ptr<float>());
 
         return output;
     };
@@ -124,7 +127,7 @@ public:
         //     cudaConv->setStream(stream.stream());
         // }
 
-        conv->backprop(*neighbors.get(), positions.data_ptr<float>(), nullptr, input.data_ptr<float>(),
+        conv->backprop(neighbors->getImpl(), positions.data_ptr<float>(), nullptr, input.data_ptr<float>(),
                        outputGrad.data_ptr<float>(), inputGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
 
         return {positionsGrad, inputGrad};
@@ -136,7 +139,7 @@ public:
 
 private:
     torch::TensorOptions tensorOptions;
-    std::shared_ptr<::CFConvNeighbors> neighbors;
+    NeighborsPtr neighbors;
     std::shared_ptr<::CFConv> conv;
     Tensor positions;
     Tensor input;
