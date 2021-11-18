@@ -33,7 +33,7 @@ def test_import():
     import NNPOps.CFConv
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
-def test_model(deviceString):
+def test_gradients(deviceString):
 
     if deviceString == 'cuda' and not torch.cuda.is_available():
         pytest.skip('CUDA is not available')
@@ -46,7 +46,7 @@ def test_model(deviceString):
     numFilters = 5
     numGaussians = 7
     cutoff = 5.0
-    gaussianWidth = 0.1
+    gaussianWidth = 1.0
     activation = 'ssp'
     weights1 = torch.rand(numGaussians, numFilters, dtype=torch.float32, device=device)
     biases1 = torch.rand(numFilters, dtype=torch.float32, device=device)
@@ -72,7 +72,9 @@ def test_model(deviceString):
     assert grad.dtype == torch.float32
     assert grad.shape == (numAtoms, 3)
 
-    # TODO test the result
+    # def func(pos):
+    #     return torch.sum(conv(pos, input))
+    # assert torch.autograd.gradcheck(func, positions)
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
 def test_model_serialization(deviceString):
@@ -88,7 +90,7 @@ def test_model_serialization(deviceString):
     numFilters = 5
     numGaussians = 7
     cutoff = 5.0
-    gaussianWidth = 0.1
+    gaussianWidth = 1.0
     activation = 'ssp'
     weights1 = torch.rand(numGaussians, numFilters, dtype=torch.float32, device=device)
     biases1 = torch.rand(numFilters, dtype=torch.float32, device=device)
