@@ -29,11 +29,11 @@ torch.classes.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyT
 
 class CFConvNeighbors(torch.nn.Module):
 
-    def __init__(self, numAtoms: int, cutoff: float) -> None:
+    def __init__(self, cutoff: float) -> None:
 
         super().__init__()
 
-        self.holder = torch.classes.NNPOpsCFConvNeighbors.Holder(numAtoms, cutoff)
+        self.holder = torch.classes.NNPOpsCFConvNeighbors.Holder(cutoff)
 
     @torch.jit.export
     def build(self, positions: Tensor) -> None:

@@ -48,17 +48,21 @@ using torch::Tensor;
 class Holder : public torch::CustomClassHolder {
 public:
 
-    Holder(int64_t numAtoms, double cutoff) : torch::CustomClassHolder(), numAtoms(numAtoms), cutoff(cutoff), device(torch::kCPU) {}
+    Holder(double cutoff) : torch::CustomClassHolder(), cutoff(cutoff), numAtoms(0), device(torch::kCPU), neighbors() {}
 
     void build(const Tensor& positions) {
 
         if (!(positions.scalar_type() == torch::kFloat32))
             throw std::runtime_error("The type of \"positions\" has to be float32");
 
-        if (positions.dim() != 2 || positions.size(0) != numAtoms || positions.size(1) != 3)
-            throw std::runtime_error("The shape of \"positions\" has to be (numAtoms, 3)");
+        if (positions.dim() != 2)
+            throw std::runtime_error("The shape of \"positions\" has to have 2 dimensions");
+
+        if (positions.size(1) != 3)
+            throw std::runtime_error("The size of the 2nd dimension of \"positions\" has to be 3");
 
         if (!neighbors) {
+            numAtoms = positions.size(0);
             device = positions.device();
             if (device.is_cpu()) {
                 neighbors = std::make_shared<CpuCFConvNeighbors>(numAtoms, cutoff, false);
@@ -72,6 +76,9 @@ public:
             // cudaNeighbors = dynamic_cast<CudaCFConvNeighbors*>(neighbors.get());
         }
 
+        if (positions.size(0) != numAtoms)
+            throw std::runtime_error("The size of the 2nd dimension of \"positions\" has changed");
+
         if (positions.device() != device)
             throw std::runtime_error("The device of \"positions\" has changed");
 
@@ -83,42 +90,25 @@ public:
         neighbors->build(positions.data_ptr<float>(), nullptr);
     }
 
-    static string serialize(const HolderPtr& self) {
-
-        std::stringstream stream;
-        stream << self->numAtoms << std::endl << self->cutoff;
-
-        return stream.str();
-    }
-
-    static HolderPtr deserialize(string state) {
-
-        int numAtoms;
-        float cutoff;
-
-        std::stringstream stream(state);
-        stream >> numAtoms;
-        stream >> cutoff;
-
-        return HolderPtr::make(numAtoms, cutoff);
+    double getCutoff() const {
+        return cutoff;
     }
 
 private:
-    int numAtoms;
     double cutoff;
-    std::shared_ptr<::CFConvNeighbors> neighbors;
+    int numAtoms;
     Device device;
+    std::shared_ptr<::CFConvNeighbors> neighbors;
     // CudaCFConvNeighbors* cudaNeighbors;
 };
 
 TORCH_LIBRARY(NNPOpsCFConvNeighbors, m) {
     m.class_<Holder>("Holder")
-        .def(torch::init<int64_t,   // nunAtoms
-                         double>()) // cutoff
+        .def(torch::init<double>())
         .def("build", &Holder::build)
         .def_pickle(
-            [](const HolderPtr& self) -> string { return Holder::serialize(self); }, // __getstate__
-            [](string state) -> HolderPtr { return Holder::deserialize(state); }     // __setstate__
+            [](const HolderPtr& self) -> double { return self->getCutoff(); }, // __getstate__
+            [](double cutoff) -> HolderPtr { return HolderPtr::make(cutoff); } // __setstate__
         );
 }
 

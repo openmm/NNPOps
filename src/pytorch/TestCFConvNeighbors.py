@@ -46,7 +46,7 @@ def test_build(deviceString):
     cutoff = 5
     positions = 10*torch.rand(numAtoms, 3, dtype=torch.float32, device=device) - 5
 
-    neighbors = CFConvNeighbors(numAtoms, cutoff)
+    neighbors = CFConvNeighbors(cutoff)
 
     for _ in range(3):
         neighbors.build(positions)
@@ -66,7 +66,7 @@ def test_model_serialization(deviceString):
     cutoff = 5
     positions = 10*torch.rand(numAtoms, 3, dtype=torch.float32, device=device) - 5
 
-    neighbors_ref = CFConvNeighbors(numAtoms, cutoff)
+    neighbors_ref = CFConvNeighbors(cutoff)
 
     for _ in range(3):
         neighbors_ref.build(positions)
