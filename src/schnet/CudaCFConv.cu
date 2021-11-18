@@ -268,6 +268,18 @@ static __device__ float cutoffDeriv(float r, float rc) {
     return -(0.5f*Pi/rc) * sinf(Pi*r/rc);
 }
 
+static __device__ int warpReduceMin(int x) {
+    for (int offset = 16; offset > 0; offset /= 2)
+        x = min(x, __shfl_down_sync(0xFFFFFFFF, x, offset));
+    return __shfl_sync(0xFFFFFFFF, x, 0);
+}
+
+static __device__ int warpReduceMax(int x) {
+    for (int offset = 16; offset > 0; offset /= 2)
+        x = max(x, __shfl_down_sync(0xFFFFFFFF, x, offset));
+    return __shfl_sync(0xFFFFFFFF, x, 0);
+}
+
 __global__ void computeCFConv(int numAtoms, int numGaussians, int width, float cutoff, float gaussianWidth, int activation,
             const int2* neighbors, const int* neighborCount, const float* neighborDistance, const float* input,
             float* output, const float* w1, const float* b1, const float* w2, const float* b2) {
@@ -290,18 +302,25 @@ __global__ void computeCFConv(int numAtoms, int numGaussians, int width, float c
 
         // Compute the Gaussian basis functions and store them in temp1.
 
+        int first = numGaussians, last = 0;
         for (int i = indexInWarp; i < numGaussians; i += 32) {
             float gaussianPos = i*cutoff/(numGaussians-1);
             float x = (r-gaussianPos)/gaussianWidth;
             temp1[i] = expf(-0.5f*x*x);
+            if (temp1[i] > 1e-15) {
+                if (first == numGaussians)
+                    first = i;
+                last = i;
+            }
         }
-        __syncwarp();
+        first = warpReduceMin(first);
+        last = warpReduceMax(last);
 
         // Apply the first dense layer, storing the result in temp2.
 
         for (int i = indexInWarp; i < width; i += 32) {
             float sum = b1[i];
-            for (int j = 0; j < numGaussians; j++)
+            for (int j = first; j <= last; j++)
                 sum += temp1[j]*w1[i+j*width];
             if (activation == 0)
                 temp2[i] = logf(0.5f*expf(sum) + 0.5f);
@@ -386,20 +405,27 @@ __global__ void backpropCFConv(int numAtoms, int numGaussians, int width, float 
 
         // Compute the Gaussian basis functions and store them in temp1.
 
+        int first = numGaussians, last = 0;
         for (int i = indexInWarp; i < numGaussians; i += 32) {
             float gaussianPos = i*cutoff/(numGaussians-1);
             float x = (r-gaussianPos)/gaussianWidth;
             float gaussian = expf(-0.5f*x*x);
             temp1[i] = gaussian;
             dtemp1[i] = -x*gaussian/gaussianWidth;
+            if (temp1[i] > 1e-15) {
+                if (first == numGaussians)
+                    first = i;
+                last = i;
+            }
         }
-        __syncwarp();
+        first = warpReduceMin(first);
+        last = warpReduceMax(last);
 
         // Apply the first dense layer, storing the result in temp2.
 
         for (int i = indexInWarp; i < width; i += 32) {
             float sum = b1[i], dSumdR = 0;
-            for (int j = 0; j < numGaussians; j++) {
+            for (int j = first; j <= last; j++) {
                 float w = w1[i+j*width];
                 sum += temp1[j]*w;
                 dSumdR += dtemp1[j]*w;
