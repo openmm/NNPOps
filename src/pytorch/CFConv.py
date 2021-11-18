@@ -26,6 +26,8 @@ from typing import List, Optional, Tuple
 import torch
 from torch import Tensor
 
+from NNPOps.CFConvNeighbors import CFConvNeighbors
+
 torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 torch.classes.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 
@@ -35,6 +37,7 @@ operation = torch.ops.NNPOpsCFConv.operation
 class CFConv(torch.nn.Module):
 
     def __init__(self,
+                 neighbors: CFConvNeighbors,
                  numAtoms: int,
                  numFilters: int,
                  numGaussians: int,
@@ -48,6 +51,7 @@ class CFConv(torch.nn.Module):
 
         super().__init__()
 
+        self.neighbors = neighbors
         self.numAtoms = numAtoms
         self.numFilters = numFilters
         self.numGaussians = numGaussians
@@ -60,14 +64,15 @@ class CFConv(torch.nn.Module):
         self.biases2 = biases2
 
         # Create an uninitialized holder
-        self.holder = Holder(0, 0, 0, 0.0, 0.0 , 0, Tensor(), Tensor(), Tensor(), Tensor(), Tensor())
+        self.holder = Holder(self.neighbors.holder, 0, 0, 0, 0.0, 0.0 , 0, Tensor(), Tensor(), Tensor(), Tensor(), Tensor())
         assert not self.holder.is_initialized()
 
 
     def forward(self, positions: Tensor, input: Tensor) -> Tensor:
 
         if not self.holder.is_initialized():
-            self.holder = Holder(self.numAtoms,
+            self.holder = Holder(self.neighbors.holder,
+                                 self.numAtoms,
                                  self.numFilters,
                                  self.numGaussians,
                                  self.cutoff,

@@ -38,13 +38,13 @@ namespace NNPOps {
 namespace CFConv {
 
 class Holder;
-using std::vector;
 using HolderPtr = torch::intrusive_ptr<Holder>;
-using NeighborsPtr = torch::intrusive_ptr<NNPOps::CFConvNeighbors::Holder>;
+using Neighbors = NNPOps::CFConvNeighbors::Holder;
+using torch::IValue;
 using torch::Tensor;
+using torch::autograd::tensor_list;
 using torch::optional;
 using Context = torch::autograd::AutogradContext;
-using torch::autograd::tensor_list;
 
 class Holder : public torch::CustomClassHolder {
 public:
@@ -53,7 +53,8 @@ public:
     // Note: this is need for serialization
     Holder() : torch::CustomClassHolder() {};
 
-    Holder(int64_t numAtoms,
+    Holder(const IValue& neighbors,
+           int64_t numAtoms,
            int64_t numFilters,
            int64_t numGausians,
            double cutoff,
@@ -63,7 +64,7 @@ public:
            const Tensor& biases1_,
            const Tensor& weights2_,
            const Tensor& biases2_,
-           const Tensor& positions) : torch::CustomClassHolder() {
+           const Tensor& positions) : torch::CustomClassHolder(), neighbors(neighbors.toCustomClass<Neighbors>()) {
 
         // Construct an uninitialized object
         // Note: this is needed for Python bindings
@@ -82,7 +83,6 @@ public:
 
         const torch::Device& device = tensorOptions.device();
 
-        neighbors = NeighborsPtr::make(cutoff);
         if (device.is_cpu()) {
             conv = std::make_shared<::CpuCFConv>(numAtoms, numFilters, numGausians, cutoff, false, gaussianWidth, activation,
                                                  weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
@@ -111,8 +111,6 @@ public:
         //     cudaConv->setStream(stream.stream());
         // }
 
-        neighbors->build(positions);
-
         conv->compute(neighbors->getImpl(), positions.data_ptr<float>(), nullptr, positions.data_ptr<float>(), output.data_ptr<float>());
 
         return output;
@@ -138,8 +136,8 @@ public:
     };
 
 private:
+    torch::intrusive_ptr<Neighbors> neighbors;
     torch::TensorOptions tensorOptions;
-    NeighborsPtr neighbors;
     std::shared_ptr<::CFConv> conv;
     Tensor positions;
     Tensor input;
@@ -153,9 +151,9 @@ class AutogradFunctions : public torch::autograd::Function<AutogradFunctions> {
 
 public:
     static Tensor forward(Context *ctx,
-                               const HolderPtr& holder,
-                               const Tensor& positions,
-                               const Tensor& input) {
+                          const HolderPtr& holder,
+                          const Tensor& positions,
+                          const Tensor& input) {
 
         ctx->saved_data["holder"] = holder;
 
@@ -175,15 +173,16 @@ public:
 };
 
 Tensor operation(const optional<HolderPtr>& holder,
-                      const Tensor& positions,
-                      const Tensor& input) {
+                 const Tensor& positions,
+                 const Tensor& input) {
 
     return AutogradFunctions::apply(*holder, positions, input);
 }
 
 TORCH_LIBRARY(NNPOpsCFConv, m) {
     m.class_<Holder>("Holder")
-        .def(torch::init<int64_t,          // nunAtoms
+        .def(torch::init<const IValue&,    // neighbors
+                         int64_t,          // nunAtoms
                          int64_t,          // numFilters
                          int64_t,          // numGausians
                          double,           // cutoff

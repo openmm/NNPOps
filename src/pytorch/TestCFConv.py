@@ -30,6 +30,7 @@ molecules = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'molecules'
 
 def test_import():
     import NNPOps
+    import NNPOps.CFConvNeighbors
     import NNPOps.CFConv
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
@@ -38,6 +39,7 @@ def test_gradients(deviceString):
     if deviceString == 'cuda' and not torch.cuda.is_available():
         pytest.skip('CUDA is not available')
 
+    from NNPOps.CFConvNeighbors import CFConvNeighbors
     from NNPOps.CFConv import CFConv
 
     device = torch.device(deviceString)
@@ -57,8 +59,10 @@ def test_gradients(deviceString):
     positions.requires_grad = True
     input = torch.rand(numAtoms, numFilters, dtype=torch.float32, device=device)
 
-    conv = CFConv(numAtoms, numFilters, numGaussians, cutoff, gaussianWidth, activation, weights1, biases1, weights2, biases2)
+    neighbors = CFConvNeighbors(cutoff)
+    conv = CFConv(neighbors, numAtoms, numFilters, numGaussians, cutoff, gaussianWidth, activation, weights1, biases1, weights2, biases2)
 
+    neighbors.build(positions)
     output = conv(positions, input)
     total = torch.sum(output)
     total.backward()
@@ -82,6 +86,7 @@ def test_model_serialization(deviceString):
     if deviceString == 'cuda' and not torch.cuda.is_available():
         pytest.skip('CUDA is not available')
 
+    from NNPOps.CFConvNeighbors import CFConvNeighbors
     from NNPOps.CFConv import CFConv
 
     device = torch.device(deviceString)
@@ -101,8 +106,10 @@ def test_model_serialization(deviceString):
     positions.requires_grad = True
     input = torch.rand(numAtoms, numFilters, dtype=torch.float32, device=device)
 
-    conv_ref = CFConv(numAtoms, numFilters, numGaussians, cutoff, gaussianWidth, activation, weights1, biases1, weights2, biases2)
+    neighbors_ref = CFConvNeighbors(cutoff)
+    conv_ref = CFConv(neighbors_ref, numAtoms, numFilters, numGaussians, cutoff, gaussianWidth, activation, weights1, biases1, weights2, biases2)
 
+    neighbors_ref.build(positions)
     output_ref = conv_ref(positions, input)
     total_ref = torch.sum(output_ref)
     total_ref.backward()
@@ -112,7 +119,9 @@ def test_model_serialization(deviceString):
 
         torch.jit.script(conv_ref).save(fd.name)
         conv = torch.jit.load(fd.name).to(device)
+        neighbors = conv.neighbors
 
+        neighbors.build(positions)
         output = conv(positions, input)
         total = torch.sum(output)
         positions.grad.zero_()
