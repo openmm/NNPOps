@@ -56,52 +56,62 @@ public:
     Holder(const IValue& neighbors,
            int64_t numAtoms,
            int64_t numFilters,
-           int64_t numGausians,
+           int64_t numGaussians,
            double gaussianWidth,
-           int64_t activation_,
-           const Tensor& weights1_,
-           const Tensor& biases1_,
-           const Tensor& weights2_,
-           const Tensor& biases2_,
-           const Tensor& positions) : torch::CustomClassHolder(), neighbors(neighbors.toCustomClass<Neighbors>()) {
+           int64_t activation,
+           const Tensor& weights1,
+           const Tensor& biases1,
+           const Tensor& weights2,
+           const Tensor& biases2) :
+
+        torch::CustomClassHolder(),
+        neighbors(neighbors.toCustomClass<Neighbors>()),
+        numAtoms(numAtoms),
+        numFilters(numFilters),
+        numGaussians(numGaussians),
+        cutoff(0),
+        gaussianWidth(gaussianWidth),
+        activation(static_cast<::CFConv::ActivationFunction>(activation)),
+        // Note: weights and biases have to be in the CPU memory
+        weights1(weights1.to(torch::kFloat32).cpu().clone()),
+        biases1(biases1.to(torch::kFloat32).cpu().clone()),
+        weights2(weights2.to(torch::kFloat32).cpu().clone()),
+        biases2(biases2.to(torch::kFloat32).cpu().clone())
+    {
 
         // Construct an uninitialized object
         // Note: this is needed for Python bindings
         if (numAtoms == 0)
             return;
 
-        tensorOptions = torch::TensorOptions().device(positions.device()); // Data type of float by default
-
-        double cutoff = this->neighbors->getCutoff();
-        const ::CFConv::ActivationFunction activation = static_cast<::CFConv::ActivationFunction>(activation_);
-
-        // Note: weights and biases have to be in the CPU memory
-        const Tensor weights1 = weights1_.to(tensorOptions).cpu();
-        const Tensor biases1 = biases1_.to(tensorOptions).cpu();
-        const Tensor weights2 = weights2_.to(tensorOptions).cpu();
-        const Tensor biases2 = biases2_.to(tensorOptions).cpu();
-
-        const torch::Device& device = tensorOptions.device();
-
-        if (device.is_cpu()) {
-            conv = std::make_shared<::CpuCFConv>(numAtoms, numFilters, numGausians, cutoff, false, gaussianWidth, activation,
-                                                 weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
-        } else if (device.is_cuda()) {
-            // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
-            CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
-            conv = std::make_shared<::CudaCFConv>(numAtoms, numFilters, numGausians, cutoff, false, gaussianWidth, activation,
-                                                  weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
-        } else
-            throw std::runtime_error("Unsupported device");
-
-        output = torch::empty({numAtoms, numFilters}, tensorOptions);
-        inputGrad = torch::empty({numAtoms, numFilters}, tensorOptions);
-        positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
-
-        // cudaConv = dynamic_cast<CudaCFConv*>(conv.get());
     };
 
     Tensor forward(const Tensor& positions_, const Tensor& input_) {
+
+        if(!conv) {
+
+            tensorOptions = torch::TensorOptions().device(positions_.device()); // Data type of float by default
+
+            cutoff = this->neighbors->getCutoff();
+            const torch::Device& device = tensorOptions.device();
+
+            if (device.is_cpu()) {
+                conv = std::make_shared<::CpuCFConv>(numAtoms, numFilters, numGaussians, cutoff, false, gaussianWidth, activation,
+                                                     weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
+            } else if (device.is_cuda()) {
+                // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
+                CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
+                conv = std::make_shared<::CudaCFConv>(numAtoms, numFilters, numGaussians, cutoff, false, gaussianWidth, this->activation,
+                                                      weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
+            } else
+                throw std::runtime_error("Unsupported device");
+
+            output = torch::empty({numAtoms, numFilters}, tensorOptions);
+            inputGrad = torch::empty({numAtoms, numFilters}, tensorOptions);
+            positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
+
+            // cudaConv = dynamic_cast<CudaCFConv*>(conv.get());
+        }
 
         positions = positions_.to(tensorOptions).clone();
         input = input_.to(tensorOptions).clone();
@@ -137,6 +147,11 @@ public:
 
 private:
     torch::intrusive_ptr<Neighbors> neighbors;
+    int64_t numAtoms, numFilters, numGaussians;
+    double cutoff, gaussianWidth;
+    ::CFConv::ActivationFunction activation;
+    Tensor weights1, biases1, weights2, biases2;
+
     torch::TensorOptions tensorOptions;
     std::shared_ptr<::CFConv> conv;
     Tensor positions;
@@ -184,14 +199,13 @@ TORCH_LIBRARY(NNPOpsCFConv, m) {
         .def(torch::init<const IValue&,    // neighbors
                          int64_t,          // nunAtoms
                          int64_t,          // numFilters
-                         int64_t,          // numGausians
+                         int64_t,          // numGaussians
                          double,           // gaussianWidth
                          int64_t,          // activation
-                         const Tensor&,    // linear1_weights
-                         const Tensor&,    // linear1_biases
-                         const Tensor&,    // linear2_weights
-                         const Tensor&,    // linear2_biases
-                         const Tensor&>()) // positions
+                         const Tensor&,    // weights1
+                         const Tensor&,    // biases1
+                         const Tensor&,    // weights2
+                         const Tensor&>()) // biases2
         .def("forward", &Holder::forward)
         .def("backward", &Holder::backward)
         .def("is_initialized", &Holder::is_initialized)
