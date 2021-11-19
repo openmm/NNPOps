@@ -43,16 +43,18 @@ using HolderPtr = torch::intrusive_ptr<Holder>;
 using Neighbors = NNPOps::CFConvNeighbors::Holder;
 using NeighborsPtr = torch::intrusive_ptr<Neighbors>;
 using torch::autograd::tensor_list;
+using torch::Device;
 using torch::IValue;
 using torch::optional;
 using torch::Tensor;
+using torch::TensorOptions;
 
 class Holder : public torch::CustomClassHolder {
 public:
 
     // Constructor for an uninitialized object
     // Note: this is need for serialization
-    Holder() : torch::CustomClassHolder() {};
+    Holder() : torch::CustomClassHolder(), device(torch::kCPU) {};
 
     Holder(int64_t numGaussians,
            double gaussianWidth,
@@ -70,15 +72,9 @@ public:
         weights1(weights1.to(torch::kFloat32).cpu().clone()),
         biases1(biases1.to(torch::kFloat32).cpu().clone()),
         weights2(weights2.to(torch::kFloat32).cpu().clone()),
-        biases2(biases2.to(torch::kFloat32).cpu().clone())
-    {
-
-        // // Construct an uninitialized object
-        // // Note: this is needed for Python bindings
-        // if (numGaussians == 0)
-        //     return;
-
-    };
+        biases2(biases2.to(torch::kFloat32).cpu().clone()),
+        device(torch::kCPU)
+    {};
 
     Tensor forward(const IValue& neighbors_, const Tensor& positions, const Tensor& input) {
 
@@ -93,6 +89,8 @@ public:
             throw std::runtime_error("The size of the 2nd dimension of \"positions\" has to be 3");
 
         this->input = input; // save for the backward pass
+        if (input.device() != positions.device())
+            throw std::runtime_error("The device of \"input\" and \"positions\" has to be the same");
         if (input.scalar_type() != torch::kFloat32)
             throw std::runtime_error("The type of \"input\" has to be float32");
         if (input.dim() != 2)
@@ -101,13 +99,10 @@ public:
             throw std::runtime_error("The size of the 1nd dimension of \"input\" has to be the same as the 1st dimension of \"positions\"");
 
         if(!conv) {
+            device = positions.device();
             numAtoms = positions.size(0);
             numFilters = input.size(1);
-
-            tensorOptions = torch::TensorOptions().device(positions.device()); // Data type of float by default
-
-            cutoff = this->neighbors->getCutoff();
-            const torch::Device& device = tensorOptions.device();
+            cutoff = neighbors->getCutoff();
 
             if (device.is_cpu()) {
                 conv = std::make_shared<::CpuCFConv>(numAtoms, numFilters, numGaussians, cutoff, false, gaussianWidth, activation,
@@ -120,24 +115,26 @@ public:
             } else
                 throw std::runtime_error("Unsupported device");
 
-            output = torch::empty({numAtoms, numFilters}, tensorOptions);
-            inputGrad = torch::empty({numAtoms, numFilters}, tensorOptions);
-            positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
+            // Create the output tensors
+            const TensorOptions options = torch::TensorOptions().device(device); // Data type of float by default
+            output = torch::empty({numAtoms, numFilters}, options);
+            inputGrad = torch::empty({numAtoms, numFilters}, options);
+            positionsGrad = torch::empty({numAtoms, 3}, options);
 
             // cudaConv = dynamic_cast<CudaCFConv*>(conv.get());
         }
 
         if (positions.size(0) != numAtoms)
             throw std::runtime_error("The size of the 1nd dimension of \"positions\" has changed");
-        // if (positions.device() != device)
-        //     throw std::runtime_error("The device of \"positions\" has changed");
+        if (positions.device() != device)
+            throw std::runtime_error("The device of \"positions\" has changed");
 
         if (input.size(0) != numAtoms)
             throw std::runtime_error("The size of the 1nd dimension of \"input\" has changed");
         if (input.size(1) != numFilters)
             throw std::runtime_error("The size of the 2nd dimension of \"input\" has changed");
-        // if (input.device() != device)
-        //     throw std::runtime_error("The device of \"input\" has changed");
+        if (input.device() != device)
+            throw std::runtime_error("The device of \"input\" has changed");
 
         // if (cudaConv) {
         //     const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
@@ -175,6 +172,7 @@ private:
     std::shared_ptr<::CFConv> conv;
     // CudaCFConv* cudaConv;
     double cutoff;
+    Device device;
     Tensor input;
     Tensor inputGrad;
     double gaussianWidth;
@@ -185,7 +183,6 @@ private:
     Tensor output;
     Tensor positions;
     Tensor positionsGrad;
-    torch::TensorOptions tensorOptions;
     Tensor weights1;
     Tensor weights2;
 };
