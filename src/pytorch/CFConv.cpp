@@ -56,8 +56,7 @@ public:
     // Note: this is need for serialization
     Holder() : torch::CustomClassHolder(), device(torch::kCPU) {};
 
-    Holder(int64_t numGaussians,
-           double gaussianWidth,
+    Holder(double gaussianWidth,
            int64_t activation,
            const Tensor& weights1,
            const Tensor& biases1,
@@ -65,7 +64,6 @@ public:
            const Tensor& biases2) :
 
         torch::CustomClassHolder(),
-        numGaussians(numGaussians),
         gaussianWidth(gaussianWidth),
         activation(static_cast<::CFConv::ActivationFunction>(activation)),
         // Note: weights and biases have to be in the CPU memory
@@ -96,13 +94,36 @@ public:
         if (input.dim() != 2)
             throw std::runtime_error("The shape of \"input\" has to have 2 dimensions");
         if (input.size(0) != positions.size(0))
-            throw std::runtime_error("The size of the 1nd dimension of \"input\" has to be the same as the 1st dimension of \"positions\"");
+            throw std::runtime_error("The size of the 1nd dimension of \"input\" has to be equal to the 1st dimension of \"positions\"");
 
         if(!conv) {
             device = positions.device();
             numAtoms = positions.size(0);
             numFilters = input.size(1);
             cutoff = neighbors->getCutoff();
+
+            if (weights1.dim() != 2)
+                throw std::runtime_error("The shape of \"weights1\" has to have 2 dimensions");
+            int64_t numGaussians = weights1.size(0);
+            if (weights1.size(1) != numFilters)
+                throw std::runtime_error("The size of the 2nd dimension of \"weights1\" has to be equal to the 2st dimension of \"input\"");
+
+            if (biases1.dim() != 1)
+                throw std::runtime_error("The shape of \"biases1\" has to have 1 dimension");
+            if (biases1.size(0) != numFilters)
+                throw std::runtime_error("The size of \"biases1\" has to be equal to the 2st dimension of \"input\"");
+
+            if (weights2.dim() != 2)
+                throw std::runtime_error("The shape of \"weights2\" has to have 2 dimensions");
+            if (weights2.size(0) != numFilters)
+                throw std::runtime_error("The size of the 1nd dimension of \"weights2\" has to be equal to the 2st dimension of \"input\"");
+            if (weights2.size(1) != numFilters)
+                throw std::runtime_error("The size of the 2nd dimension of \"weights2\" has to be equal to the 2st dimension of \"input\"");
+
+            if (biases2.dim() != 1)
+                throw std::runtime_error("The shape of \"biases2\" has to have 1 dimension");
+            if (biases2.size(0) != numFilters)
+                throw std::runtime_error("The size of \"biases2\" has to be equal to the 2st dimension of \"input\"");
 
             if (device.is_cpu()) {
                 conv = std::make_shared<::CpuCFConv>(numAtoms, numFilters, numGaussians, cutoff, false, gaussianWidth, activation,
@@ -178,7 +199,6 @@ private:
     double gaussianWidth;
     NeighborsPtr neighbors;
     int64_t numAtoms;
-    int64_t numGaussians;
     int64_t numFilters;
     Tensor output;
     Tensor positions;
@@ -224,8 +244,7 @@ Tensor operation(const optional<HolderPtr>& holder,
 
 TORCH_LIBRARY(NNPOpsCFConv, m) {
     m.class_<Holder>("Holder")
-        .def(torch::init<int64_t,          // numGaussians
-                         double,           // gaussianWidth
+        .def(torch::init<double,           // gaussianWidth
                          int64_t,          // activation
                          const Tensor&,    // weights1
                          const Tensor&,    // biases1
