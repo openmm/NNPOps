@@ -45,12 +45,10 @@ Holder::Holder(double cutoff) : torch::CustomClassHolder(), cutoff(cutoff), numA
 
 void Holder::build(const Tensor& positions) {
 
-    if (!(positions.scalar_type() == torch::kFloat32))
+    if (positions.scalar_type() != torch::kFloat32)
         throw std::runtime_error("The type of \"positions\" has to be float32");
-
     if (positions.dim() != 2)
         throw std::runtime_error("The shape of \"positions\" has to have 2 dimensions");
-
     if (positions.size(1) != 3)
         throw std::runtime_error("The size of the 2nd dimension of \"positions\" has to be 3");
 
@@ -69,7 +67,6 @@ void Holder::build(const Tensor& positions) {
 
     if (positions.size(0) != numAtoms)
         throw std::runtime_error("The size of the 2nd dimension of \"positions\" has changed");
-
     if (positions.device() != device)
         throw std::runtime_error("The device of \"positions\" has changed");
 

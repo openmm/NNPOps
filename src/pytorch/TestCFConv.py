@@ -60,7 +60,7 @@ def test_gradients(deviceString):
     input = torch.rand(numAtoms, numFilters, dtype=torch.float32, device=device)
 
     neighbors = CFConvNeighbors(cutoff)
-    conv = CFConv(neighbors, numAtoms, numFilters, numGaussians, gaussianWidth, activation, weights1, biases1, weights2, biases2)
+    conv = CFConv(neighbors, numGaussians, gaussianWidth, activation, weights1, biases1, weights2, biases2)
 
     neighbors.build(positions)
     output = conv(positions, input)
@@ -107,7 +107,7 @@ def test_model_serialization(deviceString):
     input = torch.rand(numAtoms, numFilters, dtype=torch.float32, device=device)
 
     neighbors_ref = CFConvNeighbors(cutoff)
-    conv_ref = CFConv(neighbors_ref, numAtoms, numFilters, numGaussians, gaussianWidth, activation, weights1, biases1, weights2, biases2)
+    conv_ref = CFConv(neighbors_ref, numGaussians, gaussianWidth, activation, weights1, biases1, weights2, biases2)
 
     neighbors_ref.build(positions)
     output_ref = conv_ref(positions, input)

@@ -38,14 +38,14 @@ namespace NNPOps {
 namespace CFConv {
 
 class Holder;
+using Context = torch::autograd::AutogradContext;
 using HolderPtr = torch::intrusive_ptr<Holder>;
 using Neighbors = NNPOps::CFConvNeighbors::Holder;
 using NeighborsPtr = torch::intrusive_ptr<Neighbors>;
-using torch::IValue;
-using torch::Tensor;
 using torch::autograd::tensor_list;
+using torch::IValue;
 using torch::optional;
-using Context = torch::autograd::AutogradContext;
+using torch::Tensor;
 
 class Holder : public torch::CustomClassHolder {
 public:
@@ -54,9 +54,7 @@ public:
     // Note: this is need for serialization
     Holder() : torch::CustomClassHolder() {};
 
-    Holder(int64_t numAtoms,
-           int64_t numFilters,
-           int64_t numGaussians,
+    Holder(int64_t numGaussians,
            double gaussianWidth,
            int64_t activation,
            const Tensor& weights1,
@@ -65,8 +63,6 @@ public:
            const Tensor& biases2) :
 
         torch::CustomClassHolder(),
-        numAtoms(numAtoms),
-        numFilters(numFilters),
         numGaussians(numGaussians),
         gaussianWidth(gaussianWidth),
         activation(static_cast<::CFConv::ActivationFunction>(activation)),
@@ -77,20 +73,38 @@ public:
         biases2(biases2.to(torch::kFloat32).cpu().clone())
     {
 
-        // Construct an uninitialized object
-        // Note: this is needed for Python bindings
-        if (numAtoms == 0)
-            return;
+        // // Construct an uninitialized object
+        // // Note: this is needed for Python bindings
+        // if (numGaussians == 0)
+        //     return;
 
     };
 
-    Tensor forward(const IValue& neighbors_, const Tensor& positions_, const Tensor& input_) {
+    Tensor forward(const IValue& neighbors_, const Tensor& positions, const Tensor& input) {
 
-        neighbors = neighbors_.toCustomClass<Neighbors>();
+        neighbors = neighbors_.toCustomClass<Neighbors>(); // save for the backward pass
+
+        this->positions = positions; // save for the backward pass
+        if (positions.scalar_type() != torch::kFloat32)
+            throw std::runtime_error("The type of \"positions\" has to be float32");
+        if (positions.dim() != 2)
+            throw std::runtime_error("The shape of \"positions\" has to have 2 dimensions");
+        if (positions.size(1) != 3)
+            throw std::runtime_error("The size of the 2nd dimension of \"positions\" has to be 3");
+
+        this->input = input; // save for the backward pass
+        if (input.scalar_type() != torch::kFloat32)
+            throw std::runtime_error("The type of \"input\" has to be float32");
+        if (input.dim() != 2)
+            throw std::runtime_error("The shape of \"input\" has to have 2 dimensions");
+        if (input.size(0) != positions.size(0))
+            throw std::runtime_error("The size of the 1nd dimension of \"input\" has to be the same as the 1st dimension of \"positions\"");
 
         if(!conv) {
+            numAtoms = positions.size(0);
+            numFilters = input.size(1);
 
-            tensorOptions = torch::TensorOptions().device(positions_.device()); // Data type of float by default
+            tensorOptions = torch::TensorOptions().device(positions.device()); // Data type of float by default
 
             cutoff = this->neighbors->getCutoff();
             const torch::Device& device = tensorOptions.device();
@@ -113,8 +127,17 @@ public:
             // cudaConv = dynamic_cast<CudaCFConv*>(conv.get());
         }
 
-        positions = positions_.to(tensorOptions).clone();
-        input = input_.to(tensorOptions).clone();
+        if (positions.size(0) != numAtoms)
+            throw std::runtime_error("The size of the 1nd dimension of \"positions\" has changed");
+        // if (positions.device() != device)
+        //     throw std::runtime_error("The device of \"positions\" has changed");
+
+        if (input.size(0) != numAtoms)
+            throw std::runtime_error("The size of the 1nd dimension of \"input\" has changed");
+        if (input.size(1) != numFilters)
+            throw std::runtime_error("The size of the 2nd dimension of \"input\" has changed");
+        // if (input.device() != device)
+        //     throw std::runtime_error("The device of \"input\" has changed");
 
         // if (cudaConv) {
         //     const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
@@ -146,20 +169,25 @@ public:
     };
 
 private:
-    int64_t numAtoms, numFilters, numGaussians;
-    double cutoff, gaussianWidth;
     ::CFConv::ActivationFunction activation;
-    Tensor weights1, biases1, weights2, biases2;
-
-    torch::intrusive_ptr<Neighbors> neighbors;
-    torch::TensorOptions tensorOptions;
+    Tensor biases1;
+    Tensor biases2;
     std::shared_ptr<::CFConv> conv;
-    Tensor positions;
-    Tensor input;
-    Tensor output;
-    Tensor positionsGrad;
-    Tensor inputGrad;
     // CudaCFConv* cudaConv;
+    double cutoff;
+    Tensor input;
+    Tensor inputGrad;
+    double gaussianWidth;
+    NeighborsPtr neighbors;
+    int64_t numAtoms;
+    int64_t numGaussians;
+    int64_t numFilters;
+    Tensor output;
+    Tensor positions;
+    Tensor positionsGrad;
+    torch::TensorOptions tensorOptions;
+    Tensor weights1;
+    Tensor weights2;
 };
 
 class AutogradFunctions : public torch::autograd::Function<AutogradFunctions> {
@@ -199,9 +227,7 @@ Tensor operation(const optional<HolderPtr>& holder,
 
 TORCH_LIBRARY(NNPOpsCFConv, m) {
     m.class_<Holder>("Holder")
-        .def(torch::init<int64_t,          // nunAtoms
-                         int64_t,          // numFilters
-                         int64_t,          // numGaussians
+        .def(torch::init<int64_t,          // numGaussians
                          double,           // gaussianWidth
                          int64_t,          // activation
                          const Tensor&,    // weights1
