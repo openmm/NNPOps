@@ -62,15 +62,13 @@ class CFConv(torch.nn.Module):
         self.biases2 = biases2
 
         # Create an uninitialized holder
-        self.holder = Holder(self.neighbors.holder, 0, 0, 0, 0.0, 0, Tensor(), Tensor(), Tensor(), Tensor())
+        self.holder = Holder(0, 0, 0, 0.0, 0, Tensor(), Tensor(), Tensor(), Tensor())
         assert not self.holder.is_initialized()
-
 
     def forward(self, positions: Tensor, input: Tensor) -> Tensor:
 
         if not self.holder.is_initialized():
-            self.holder = Holder(self.neighbors.holder,
-                                 self.numAtoms,
+            self.holder = Holder(self.numAtoms,
                                  self.numFilters,
                                  self.numGaussians,
                                  self.gaussianWidth,
@@ -80,4 +78,4 @@ class CFConv(torch.nn.Module):
                                  self.weights2,
                                  self.biases2)
 
-        return operation(self.holder, positions, input)
+        return operation(self.holder, self.neighbors.holder, positions, input)

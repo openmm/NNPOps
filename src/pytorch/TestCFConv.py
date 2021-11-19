@@ -119,9 +119,8 @@ def test_model_serialization(deviceString):
 
         torch.jit.script(conv_ref).save(fd.name)
         conv = torch.jit.load(fd.name).to(device)
-        neighbors = conv.neighbors
 
-        neighbors.build(positions)
+        conv.neighbors.build(positions)
         output = conv(positions, input)
         total = torch.sum(output)
         positions.grad.zero_()
