@@ -38,6 +38,7 @@ namespace NNPOps {
 namespace CFConv {
 
 class Holder;
+using Activation = ::CFConv::ActivationFunction;
 using Context = torch::autograd::AutogradContext;
 using HolderPtr = torch::intrusive_ptr<Holder>;
 using Neighbors = NNPOps::CFConvNeighbors::Holder;
@@ -65,7 +66,7 @@ public:
 
         torch::CustomClassHolder(),
         gaussianWidth(gaussianWidth),
-        activation(static_cast<::CFConv::ActivationFunction>(activation)),
+        activation(static_cast<Activation>(activation)),
         // Note: weights and biases have to be in the CPU memory
         weights1(weights1.to(torch::kFloat32).cpu().clone()),
         biases1(biases1.to(torch::kFloat32).cpu().clone()),
@@ -145,6 +146,9 @@ public:
             // cudaConv = dynamic_cast<CudaCFConv*>(conv.get());
         }
 
+        if (neighbors->getCutoff() != cutoff)
+            throw std::runtime_error("The cutoff of \"neighbors\" has changed");
+
         if (positions.size(0) != numAtoms)
             throw std::runtime_error("The size of the 1nd dimension of \"positions\" has changed");
         if (positions.device() != device)
@@ -187,7 +191,7 @@ public:
     };
 
 private:
-    ::CFConv::ActivationFunction activation;
+    Activation activation;
     Tensor biases1;
     Tensor biases2;
     std::shared_ptr<::CFConv> conv;
