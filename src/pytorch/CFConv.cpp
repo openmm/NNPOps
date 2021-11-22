@@ -24,6 +24,7 @@
 #include <stdexcept>
 #include <cuda_runtime.h>
 #include <torch/script.h>
+#include <torch/serialize/archive.h>
 // #include <c10/cuda/CUDAStream.h>
 #include "CpuCFConv.h"
 #include "CudaCFConv.h"
@@ -43,6 +44,7 @@ using Context = torch::autograd::AutogradContext;
 using HolderPtr = torch::intrusive_ptr<Holder>;
 using Neighbors = NNPOps::CFConvNeighbors::Holder;
 using NeighborsPtr = torch::intrusive_ptr<Neighbors>;
+using std::string;
 using torch::autograd::tensor_list;
 using torch::Device;
 using torch::IValue;
@@ -186,9 +188,41 @@ public:
         return {positionsGrad, inputGrad};
     };
 
-    bool is_initialized() {
+    bool is_initialized() const {
         return bool(conv);
     };
+
+    static const string serialize(const HolderPtr& self) {
+
+        torch::serialize::OutputArchive archive;
+        archive.write("gaussianWidth", self->gaussianWidth);
+        archive.write("activation", static_cast<int64_t>(self->activation));
+        archive.write("weights1", self->weights1);
+        archive.write("biases1", self->biases1);
+        archive.write("weights2", self->weights2);
+        archive.write("biases2", self->biases2);
+
+        std::stringstream stream;
+        archive.save_to(stream);
+        return stream.str();
+    };
+
+    static HolderPtr deserialize(const string& state) {
+
+        std::stringstream stream(state);
+        torch::serialize::InputArchive archive;
+        archive.load_from(stream, torch::kCPU);
+
+        IValue gaussianWidth, activation;
+        Tensor weights1, biases1, weights2, biases2;
+        archive.read("gaussianWidth", gaussianWidth);
+        archive.read("activation", activation);
+        archive.read("weights1", weights1);
+        archive.read("biases1", biases1);
+        archive.read("weights2", weights2);
+        archive.read("biases2", biases2);
+        return HolderPtr::make(gaussianWidth.toDouble(), activation.toInt(), weights1, biases1, weights2, biases2);
+    }
 
 private:
     Activation activation;
@@ -258,12 +292,8 @@ TORCH_LIBRARY(NNPOpsCFConv, m) {
         .def("backward", &Holder::backward)
         .def("is_initialized", &Holder::is_initialized)
         .def_pickle(
-            // __getstate__
-            // Note: nothing is done during serialization
-            [](const HolderPtr& self) -> int64_t { return 0; },
-            // __setstate__
-            // Note: a new uninitialized object is create during deserialization
-            [](int64_t state) -> HolderPtr { return HolderPtr::make(); }
+            [](const HolderPtr& self) -> const string { return Holder::serialize(self); }, // __getstate__
+            [](const string& state) -> HolderPtr { return Holder::deserialize(state); }    // __setstate__
         );
     m.def("operation", operation);
 }
