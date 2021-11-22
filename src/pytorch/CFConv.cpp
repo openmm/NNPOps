@@ -55,7 +55,7 @@ using torch::TensorOptions;
 class Holder : public torch::CustomClassHolder {
 public:
     Holder(double gaussianWidth,
-           int64_t activation,
+           const string& activation,
            const Tensor& weights1,
            const Tensor& biases1,
            const Tensor& weights2,
@@ -63,7 +63,7 @@ public:
 
         torch::CustomClassHolder(),
         gaussianWidth(gaussianWidth),
-        activation(static_cast<Activation>(activation)),
+        activation(activation),
         // Note: weights and biases have to be in the CPU memory
         weights1(weights1.to(torch::kFloat32).cpu().clone()),
         biases1(biases1.to(torch::kFloat32).cpu().clone()),
@@ -100,6 +100,14 @@ public:
             numFilters = input.size(1);
             cutoff = neighbors->getCutoff();
 
+            Activation activation_;
+            if (activation == "ssp")
+                activation_ == ::CFConv::ShiftedSoftplus;
+            else if (activation == "tanh")
+                activation_ == ::CFConv::Tanh;
+            else
+                throw std::invalid_argument("Invalid value of \"activation\"");
+
             if (weights1.dim() != 2)
                 throw std::runtime_error("The shape of \"weights1\" has to have 2 dimensions");
             int64_t numGaussians = weights1.size(0);
@@ -124,12 +132,12 @@ public:
                 throw std::runtime_error("The size of \"biases2\" has to be equal to the 2st dimension of \"input\"");
 
             if (device.is_cpu()) {
-                conv = std::make_shared<::CpuCFConv>(numAtoms, numFilters, numGaussians, cutoff, false, gaussianWidth, activation,
+                conv = std::make_shared<::CpuCFConv>(numAtoms, numFilters, numGaussians, cutoff, false, gaussianWidth, activation_,
                                                      weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
             } else if (device.is_cuda()) {
                 // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
                 CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
-                conv = std::make_shared<::CudaCFConv>(numAtoms, numFilters, numGaussians, cutoff, false, gaussianWidth, this->activation,
+                conv = std::make_shared<::CudaCFConv>(numAtoms, numFilters, numGaussians, cutoff, false, gaussianWidth, activation_,
                                                       weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
             } else
                 throw std::runtime_error("Unsupported device");
@@ -187,7 +195,7 @@ public:
 
         torch::serialize::OutputArchive archive;
         archive.write("gaussianWidth", self->gaussianWidth);
-        archive.write("activation", static_cast<int64_t>(self->activation));
+        archive.write("activation", self->activation);
         archive.write("weights1", self->weights1);
         archive.write("biases1", self->biases1);
         archive.write("weights2", self->weights2);
@@ -212,11 +220,11 @@ public:
         archive.read("biases1", biases1);
         archive.read("weights2", weights2);
         archive.read("biases2", biases2);
-        return HolderPtr::make(gaussianWidth.toDouble(), activation.toInt(), weights1, biases1, weights2, biases2);
+        return HolderPtr::make(gaussianWidth.toDouble(), activation.toStringRef(), weights1, biases1, weights2, biases2);
     }
 
 private:
-    Activation activation;
+    string activation;
     Tensor biases1;
     Tensor biases2;
     std::shared_ptr<::CFConv> conv;
@@ -274,7 +282,7 @@ Tensor operation(const optional<HolderPtr>& holder,
 TORCH_LIBRARY(NNPOpsCFConv, m) {
     m.class_<Holder>("Holder")
         .def(torch::init<double,           // gaussianWidth
-                         int64_t,          // activation
+                         const string&,    // activation
                          const Tensor&,    // weights1
                          const Tensor&,    // biases1
                          const Tensor&,    // weights2

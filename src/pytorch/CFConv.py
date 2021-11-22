@@ -42,8 +42,8 @@ class CFConv(torch.nn.Module):
 
         super().__init__()
 
-        activation = {'ssp': 0, 'tanh': 1}[activation]
         self.holder = CFConv.Holder(gaussianWidth, activation, weights1, biases1, weights2, biases2)
 
     def forward(self, neighbors: CFConvNeighbors, positions: Tensor, input: Tensor) -> Tensor:
+
         return CFConv.operation(self.holder, neighbors.holder, positions, input)
