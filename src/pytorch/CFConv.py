@@ -37,7 +37,6 @@ operation = torch.ops.NNPOpsCFConv.operation
 class CFConv(torch.nn.Module):
 
     def __init__(self,
-                 neighbors: CFConvNeighbors,
                  gaussianWidth: float,
                  activation: str,
                  weights1: Tensor,
@@ -47,20 +46,8 @@ class CFConv(torch.nn.Module):
 
         super().__init__()
 
-        self.neighbors = neighbors
-        self.gaussianWidth = gaussianWidth
-        self.activation = {'ssp': 0, 'tanh': 1}[activation]
-        self.weights1 = weights1
-        self.biases1 = biases1
-        self.weights2 = weights2
-        self.biases2 = biases2
+        activation = {'ssp': 0, 'tanh': 1}[activation]
+        self.holder = Holder(gaussianWidth, activation, weights1, biases1, weights2, biases2)
 
-        self.holder = Holder(self.gaussianWidth,
-                             self.activation,
-                             self.weights1,
-                             self.biases1,
-                             self.weights2,
-                             self.biases2)
-
-    def forward(self, positions: Tensor, input: Tensor) -> Tensor:
-        return operation(self.holder, self.neighbors.holder, positions, input)
+    def forward(self, neighbors: CFConvNeighbors, positions: Tensor, input: Tensor) -> Tensor:
+        return operation(self.holder, neighbors.holder, positions, input)

@@ -54,11 +54,6 @@ using torch::TensorOptions;
 
 class Holder : public torch::CustomClassHolder {
 public:
-
-    // Constructor for an uninitialized object
-    // Note: this is need for serialization
-    Holder() : torch::CustomClassHolder(), device(torch::kCPU) {};
-
     Holder(double gaussianWidth,
            int64_t activation,
            const Tensor& weights1,
@@ -188,10 +183,6 @@ public:
         return {positionsGrad, inputGrad};
     };
 
-    bool is_initialized() const {
-        return bool(conv);
-    };
-
     static const string serialize(const HolderPtr& self) {
 
         torch::serialize::OutputArchive archive;
@@ -290,7 +281,6 @@ TORCH_LIBRARY(NNPOpsCFConv, m) {
                          const Tensor&>()) // biases2
         .def("forward", &Holder::forward)
         .def("backward", &Holder::backward)
-        .def("is_initialized", &Holder::is_initialized)
         .def_pickle(
             [](const HolderPtr& self) -> const string { return Holder::serialize(self); }, // __getstate__
             [](const string& state) -> HolderPtr { return Holder::deserialize(state); }    // __setstate__

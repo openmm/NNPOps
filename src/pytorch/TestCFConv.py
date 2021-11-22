@@ -60,10 +60,10 @@ def test_gradients(deviceString):
     input = torch.rand(numAtoms, numFilters, dtype=torch.float32, device=device)
 
     neighbors = CFConvNeighbors(cutoff)
-    conv = CFConv(neighbors, gaussianWidth, activation, weights1, biases1, weights2, biases2)
+    conv = CFConv(gaussianWidth, activation, weights1, biases1, weights2, biases2)
 
     neighbors.build(positions)
-    output = conv(positions, input)
+    output = conv(neighbors, positions, input)
     total = torch.sum(output)
     total.backward()
     grad = positions.grad
@@ -107,21 +107,24 @@ def test_model_serialization(deviceString):
     input = torch.rand(numAtoms, numFilters, dtype=torch.float32, device=device)
 
     neighbors_ref = CFConvNeighbors(cutoff)
-    conv_ref = CFConv(neighbors_ref, gaussianWidth, activation, weights1, biases1, weights2, biases2)
+    conv_ref = CFConv(gaussianWidth, activation, weights1, biases1, weights2, biases2)
 
     neighbors_ref.build(positions)
-    output_ref = conv_ref(positions, input)
+    output_ref = conv_ref(neighbors_ref, positions, input)
     total_ref = torch.sum(output_ref)
     total_ref.backward()
     grad_ref = positions.grad.clone()
 
-    with tempfile.NamedTemporaryFile() as fd:
+    with tempfile.NamedTemporaryFile() as fd1, tempfile.NamedTemporaryFile() as fd2:
 
-        torch.jit.script(conv_ref).save(fd.name)
-        conv = torch.jit.load(fd.name).to(device)
+        torch.jit.script(neighbors_ref).save(fd1.name)
+        neighbors = torch.jit.load(fd1.name).to(device)
 
-        conv.neighbors.build(positions)
-        output = conv(positions, input)
+        torch.jit.script(conv_ref).save(fd2.name)
+        conv = torch.jit.load(fd2.name).to(device)
+
+        neighbors.build(positions)
+        output = conv(neighbors, positions, input)
         total = torch.sum(output)
         positions.grad.zero_()
         total.backward()
