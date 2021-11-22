@@ -94,7 +94,7 @@ public:
         if (input.size(0) != positions.size(0))
             throw std::runtime_error("The size of the 1nd dimension of \"input\" has to be equal to the 1st dimension of \"positions\"");
 
-        if(!conv) {
+        if(!impl) {
             device = positions.device();
             numAtoms = positions.size(0);
             numFilters = input.size(1);
@@ -132,12 +132,12 @@ public:
                 throw std::runtime_error("The size of \"biases2\" has to be equal to the 2st dimension of \"input\"");
 
             if (device.is_cpu()) {
-                conv = std::make_shared<::CpuCFConv>(numAtoms, numFilters, numGaussians, cutoff, false, gaussianWidth, activation_,
+                impl = std::make_shared<::CpuCFConv>(numAtoms, numFilters, numGaussians, cutoff, false, gaussianWidth, activation_,
                                                      weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
             } else if (device.is_cuda()) {
                 // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
                 CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
-                conv = std::make_shared<::CudaCFConv>(numAtoms, numFilters, numGaussians, cutoff, false, gaussianWidth, activation_,
+                impl = std::make_shared<::CudaCFConv>(numAtoms, numFilters, numGaussians, cutoff, false, gaussianWidth, activation_,
                                                       weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
             } else
                 throw std::runtime_error("Unsupported device");
@@ -148,7 +148,7 @@ public:
             inputGrad = torch::empty({numAtoms, numFilters}, options);
             positionsGrad = torch::empty({numAtoms, 3}, options);
 
-            // cudaConv = dynamic_cast<CudaCFConv*>(conv.get());
+            // cudaImpl = dynamic_cast<CudaCFConv*>(Impl.get());
         }
 
         if (neighbors->getCutoff() != cutoff)
@@ -166,29 +166,29 @@ public:
         if (input.device() != device)
             throw std::runtime_error("The device of \"input\" has changed");
 
-        // if (cudaConv) {
+        // if (cudaImpl) {
         //     const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
-        //     cudaConv->setStream(stream.stream());
+        //     cudaImpl->setStream(stream.stream());
         // }
 
-        conv->compute(neighbors->getImpl(), positions.data_ptr<float>(), nullptr, positions.data_ptr<float>(), output.data_ptr<float>());
+        impl->compute(neighbors->getImpl(), positions.data_ptr<float>(), nullptr, positions.data_ptr<float>(), output.data_ptr<float>());
 
         return output;
     };
 
-    tensor_list backward(const Tensor& outputGrad_) {
+    tensor_list backward(const tensor_list& grads) {
 
-        const Tensor outputGrad = outputGrad_.clone();
+        const Tensor outputGrad = grads[0].clone(); // check if actually is needed to clone
 
-        // if (cudaConv) {
+        // if (cudaImpl) {
         //     const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
-        //     cudaConv->setStream(stream.stream());
+        //     cudaImpl->setStream(stream.stream());
         // }
 
-        conv->backprop(neighbors->getImpl(), positions.data_ptr<float>(), nullptr, input.data_ptr<float>(),
+        impl->backprop(neighbors->getImpl(), positions.data_ptr<float>(), nullptr, input.data_ptr<float>(),
                        outputGrad.data_ptr<float>(), inputGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
 
-        return {positionsGrad, inputGrad};
+        return {Tensor(), Tensor(), positionsGrad, inputGrad}; // empty grad for the holder and neighbors
     };
 
     static const string serialize(const HolderPtr& self) {
@@ -227,8 +227,8 @@ private:
     string activation;
     Tensor biases1;
     Tensor biases2;
-    std::shared_ptr<::CFConv> conv;
-    // CudaCFConv* cudaConv;
+    std::shared_ptr<::CFConv> impl;
+    // CudaCFConv* cudaImpl;
     double cutoff;
     Device device;
     Tensor input;
@@ -261,13 +261,9 @@ public:
     static tensor_list backward(Context *ctx, const tensor_list& grads) {
 
         const HolderPtr holder = ctx->saved_data["holder"].toCustomClass<Holder>();
-        tensor_list output = holder->backward(grads[0]);
         ctx->saved_data.erase("holder");
 
-        return { Tensor(),   // holder
-                 Tensor(),   // neighbors
-                 output[0],  // positions
-                 output[1]}; // input
+        return holder->backward(grads);
     };
 };
 
