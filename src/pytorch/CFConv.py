@@ -31,23 +31,19 @@ from NNPOps.CFConvNeighbors import CFConvNeighbors
 torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 torch.classes.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 
-Holder = torch.classes.NNPOpsCFConv.Holder
-operation = torch.ops.NNPOpsCFConv.operation
-
 class CFConv(torch.nn.Module):
 
-    def __init__(self,
-                 gaussianWidth: float,
-                 activation: str,
-                 weights1: Tensor,
-                 biases1: Tensor,
-                 weights2: Tensor,
-                 biases2: Tensor) -> None:
+    Holder = torch.classes.NNPOpsCFConv.Holder
+    operation = torch.ops.NNPOpsCFConv.operation
+
+    def __init__(self, gaussianWidth: float, activation: str,
+                 weights1: Tensor, biases1: Tensor,
+                 weights2: Tensor, biases2: Tensor) -> None:
 
         super().__init__()
 
         activation = {'ssp': 0, 'tanh': 1}[activation]
-        self.holder = Holder(gaussianWidth, activation, weights1, biases1, weights2, biases2)
+        self.holder = CFConv.Holder(gaussianWidth, activation, weights1, biases1, weights2, biases2)
 
     def forward(self, neighbors: CFConvNeighbors, positions: Tensor, input: Tensor) -> Tensor:
-        return operation(self.holder, neighbors.holder, positions, input)
+        return CFConv.operation(self.holder, neighbors.holder, positions, input)
