@@ -28,6 +28,25 @@ import torch
 
 molecules = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'molecules')
 
+def getCFConv(numFilters, device):
+
+    from NNPOps.CFConvNeighbors import CFConvNeighbors
+    from NNPOps.CFConv import CFConv
+
+    numGaussians = 3
+    cutoff = 5.0
+    gaussianWidth = 1.0
+    activation = 'ssp'
+    weights1 = torch.rand(numGaussians, numFilters, dtype=torch.float32, device=device)
+    biases1 = torch.rand(numFilters, dtype=torch.float32, device=device)
+    weights2 = torch.rand(numFilters, numFilters, dtype=torch.float32, device=device)
+    biases2 = torch.rand(numFilters, dtype=torch.float32, device=device)
+
+    neighbors = CFConvNeighbors(cutoff)
+    conv = CFConv(gaussianWidth, activation, weights1, biases1, weights2, biases2)
+
+    return neighbors, conv
+
 def test_import():
     import NNPOps
     import NNPOps.CFConvNeighbors
@@ -39,28 +58,14 @@ def test_gradients(deviceString):
     if deviceString == 'cuda' and not torch.cuda.is_available():
         pytest.skip('CUDA is not available')
 
-    from NNPOps.CFConvNeighbors import CFConvNeighbors
-    from NNPOps.CFConv import CFConv
-
     device = torch.device(deviceString)
-
-    numAtoms = 3
+    numAtoms = 7
     numFilters = 5
-    numGaussians = 7
-    cutoff = 5.0
-    gaussianWidth = 1.0
-    activation = 'ssp'
-    weights1 = torch.rand(numGaussians, numFilters, dtype=torch.float32, device=device)
-    biases1 = torch.rand(numFilters, dtype=torch.float32, device=device)
-    weights2 = torch.rand(numFilters, numFilters, dtype=torch.float32, device=device)
-    biases2 = torch.rand(numFilters, dtype=torch.float32, device=device)
 
+    neighbors, conv = getCFConv(numFilters, device)
     positions = (10*torch.rand(numAtoms, 3, dtype=torch.float32, device=device) - 5).detach()
     positions.requires_grad = True
     input = torch.rand(numAtoms, numFilters, dtype=torch.float32, device=device)
-
-    neighbors = CFConvNeighbors(cutoff)
-    conv = CFConv(gaussianWidth, activation, weights1, biases1, weights2, biases2)
 
     neighbors.build(positions)
     output = conv(neighbors, positions, input)
@@ -77,7 +82,7 @@ def test_gradients(deviceString):
     assert grad.shape == (numAtoms, 3)
 
     # def func(pos):
-    #     return torch.sum(conv(pos, input))
+    #     return torch.sum(conv(neighbors, pos, input))
     # assert torch.autograd.gradcheck(func, positions)
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
@@ -86,28 +91,14 @@ def test_model_serialization(deviceString):
     if deviceString == 'cuda' and not torch.cuda.is_available():
         pytest.skip('CUDA is not available')
 
-    from NNPOps.CFConvNeighbors import CFConvNeighbors
-    from NNPOps.CFConv import CFConv
-
     device = torch.device(deviceString)
-
-    numAtoms = 3
+    numAtoms = 7
     numFilters = 5
-    numGaussians = 7
-    cutoff = 5.0
-    gaussianWidth = 1.0
-    activation = 'ssp'
-    weights1 = torch.rand(numGaussians, numFilters, dtype=torch.float32, device=device)
-    biases1 = torch.rand(numFilters, dtype=torch.float32, device=device)
-    weights2 = torch.rand(numFilters, numFilters, dtype=torch.float32, device=device)
-    biases2 = torch.rand(numFilters, dtype=torch.float32, device=device)
 
+    neighbors_ref, conv_ref = getCFConv(numFilters, device)
     positions = (10*torch.rand(numAtoms, 3, dtype=torch.float32, device=device) - 5).detach()
     positions.requires_grad = True
     input = torch.rand(numAtoms, numFilters, dtype=torch.float32, device=device)
-
-    neighbors_ref = CFConvNeighbors(cutoff)
-    conv_ref = CFConv(gaussianWidth, activation, weights1, biases1, weights2, biases2)
 
     neighbors_ref.build(positions)
     output_ref = conv_ref(neighbors_ref, positions, input)
@@ -130,5 +121,5 @@ def test_model_serialization(deviceString):
         total.backward()
         grad = positions.grad.clone()
 
-    assert torch.allclose(output, output_ref, rtol=1e-07, atol=0)
-    assert torch.allclose(grad, grad_ref, rtol=1e-07, atol=0)
+    assert torch.allclose(output, output_ref, rtol=1e-07)
+    assert torch.allclose(grad, grad_ref, rtol=1e-07)
