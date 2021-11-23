@@ -122,4 +122,7 @@ def test_model_serialization(deviceString):
         grad = positions.grad.clone()
 
     assert torch.allclose(output, output_ref, rtol=1e-07)
-    assert torch.allclose(grad, grad_ref, rtol=1e-07)
+    if deviceString == 'cuda':
+        assert torch.allclose(grad, grad_ref, rtol=1e-07, atol=1e-6) # Numerical noise
+    else:
+        assert torch.allclose(grad, grad_ref, rtol=1e-07)
