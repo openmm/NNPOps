@@ -171,7 +171,7 @@ public:
         //     cudaImpl->setStream(stream.stream());
         // }
 
-        impl->compute(neighbors->getImpl(), positions.data_ptr<float>(), nullptr, positions.data_ptr<float>(), output.data_ptr<float>());
+        impl->compute(neighbors->getImpl(), positions.data_ptr<float>(), nullptr, input.data_ptr<float>(), output.data_ptr<float>());
 
         return output;
     };
