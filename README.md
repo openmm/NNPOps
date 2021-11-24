@@ -105,7 +105,7 @@ print(energy, forces)
 
 # Alternatively, all the optimizations can be applied with OptimizedTorchANI
 nnp2 = torchani.models.ANI2x(periodic_table_index=True).to(device)
-nnp2 = OptimizedTorchANI(nnp, species).to(device)
+nnp2 = OptimizedTorchANI(nnp2, species).to(device)
 
 # Compute energy and forces again
 energy = nnp2((species, positions)).energies
