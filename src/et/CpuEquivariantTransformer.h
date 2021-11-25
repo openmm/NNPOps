@@ -109,6 +109,7 @@ public:
      * @param numAtoms  the number of atoms in the system
      * @param width     the number of elements in the input and output vectors
      * @param numHeads  the number of attention heads
+     * @param numRBF    the number of radial basis functions
      * @param rbfMus    the mu parameters of the radial basis functions
      * @param rbfBetas  the beta parameters of the radial basis functions
      * @param qw        an array of shape [width][width] containing the weights of the Q transform
@@ -126,7 +127,7 @@ public:
      * @param dvw       an array of shape [3*width][numRBF] containing the weights of the DV transform
      * @param dvb       an array of length [3*width] containing the biases of the DV transform
      */
-    CpuEquivariantTransformerLayer(int numAtoms, int width, int numHeads, const std::vector<float>& rbfMus, const std::vector<float>& rbfBetas,
+    CpuEquivariantTransformerLayer(int numAtoms, int width, int numHeads, int numRBF, const float* rbfMus, const float* rbfBetas,
               const float* qw, const float* qb, const float* kw, const float* kb, const float* vw, const float* vb,
               const float* ow, const float* ob, const float* uw, const float* ub, const float* dkw, const float* dkb,
               const float* dvw, const float* dvb);
@@ -181,7 +182,7 @@ private:
      * @param cutoff  the cutoff distance
      */
     float cutoffDeriv(float r, float cutoff);
-    std::vector<float> qw, qb, kw, kb, vw, vb, ow, ob, uw, ub, dkw, dkb, dvw, dvb;
+    std::vector<float> rbfMus, rbfBetas, qw, qb, kw, kb, vw, vb, ow, ob, uw, ub, dkw, dkb, dvw, dvb;
 };
 
 #endif

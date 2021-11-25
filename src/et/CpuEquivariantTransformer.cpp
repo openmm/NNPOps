@@ -102,7 +102,7 @@ void CpuEquivariantTransformerNeighbors::findNeighbors(const float* positions, c
     // we are currently targeting.  If we want to scale to larger systems, a voxel based algorithm would
     // be more efficient.
 
-    float cutoff2 = getCutoff()*getCutoff();
+    float cutoff2 = getUpperCutoff()*getUpperCutoff();
     for (int atom1 = 0; atom1 < getNumAtoms(); atom1++) {
         for (int atom2 = atom1+1; atom2 < getNumAtoms(); atom2++) {
             float delta[3];
@@ -116,10 +116,14 @@ void CpuEquivariantTransformerNeighbors::findNeighbors(const float* positions, c
     }
 }
 
-CpuEquivariantTransformerLayer::CpuEquivariantTransformerLayer(int numAtoms, int width, int numHeads, const vector<float>& rbfMus,
-            const vector<float>& rbfBetas, const float* qw, const float* qb, const float* kw, const float* kb, const float* vw, const float* vb,
+CpuEquivariantTransformerLayer::CpuEquivariantTransformerLayer(int numAtoms, int width, int numHeads, int numRBF, const float* rbfMus,
+            const float* rbfBetas, const float* qw, const float* qb, const float* kw, const float* kb, const float* vw, const float* vb,
             const float* ow, const float* ob, const float* uw, const float* ub, const float* dkw, const float* dkb, const float* dvw, const float* dvb) :
-            EquivariantTransformerLayer(numAtoms, width, numHeads, rbfMus, rbfBetas) {
+            EquivariantTransformerLayer(numAtoms, width, numHeads, numRBF) {
+    for (int i = 0; i < numRBF; i++) {
+        this->rbfMus.push_back(rbfMus[i]);
+        this->rbfBetas.push_back(rbfBetas[i]);
+    }
     for (int i = 0; i < width*width; i++) {
         this->qw.push_back(qw[i]);
         this->kw.push_back(kw[i]);
@@ -129,7 +133,6 @@ CpuEquivariantTransformerLayer::CpuEquivariantTransformerLayer(int numAtoms, int
         this->ow.push_back(ow[i]);
         this->uw.push_back(uw[i]);
     }
-    int numRBF = rbfMus.size();
     for (int i = 0; i < width*numRBF; i++)
         this->dkw.push_back(dkw[i]);
     for (int i = 0; i < 3*width*numRBF; i++)
@@ -146,17 +149,55 @@ CpuEquivariantTransformerLayer::CpuEquivariantTransformerLayer(int numAtoms, int
         this->dvb.push_back(dvb[i]);
     }
 }
-
+#include <cstdio>
 void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
                  const float* x, const float* vec, float* dx, float* dvec) {
     const CpuEquivariantTransformerNeighbors& cpuNeighbors = dynamic_cast<const CpuEquivariantTransformerNeighbors&>(neighbors);
     int numRBF = rbfMus.size();
-    vector<float> rbf(numRBF), q(width), k(width), v(3*width), o(3*width), u(3*width), dk(width), dv(3*width);
+    vector<float> rbf(numRBF);
+    vector<vector<float> > q(numAtoms, vector<float>(width));
+    vector<vector<float> > k(numAtoms, vector<float>(width));
+    vector<vector<float> > v(numAtoms, vector<float>(3*width));
+    vector<vector<float> > o(numAtoms, vector<float>(3*width));
+    vector<vector<float> > u(numAtoms, vector<float>(3*width));
+    vector<vector<float> > dk(numAtoms, vector<float>(width));
+    vector<vector<float> > dv(numAtoms, vector<float>(3*width));
 
     // Clear the output arrays.
 
     memset(dx, 0, getNumAtoms()*width*sizeof(float));
     memset(dvec, 0, 3*getNumAtoms()*width*sizeof(float));
+
+    // Apply the various transforms.
+
+    for (int atom = 0; atom < numAtoms; atom++) {
+        for (int i = 0; i < width; i++) {
+            q[atom][i] = qb[i];
+            k[atom][i] = kb[i];
+            dk[atom][i] = dkb[i];
+            for (int j = 0; j < width; j++) {
+                q[atom][i] += qw[i*width+j]*x[atom*width+j];
+                k[atom][i] += kw[i*width+j]*x[atom*width+j];
+            }
+            for (int j = 0; j < numRBF; j++)
+                dk[atom][i] += dkw[i*numRBF+j]*rbf[j];
+            dk[atom][i] = dk[atom][i]/(1+exp(dk[atom][i]));
+        }
+        for (int i = 0; i < 3*width; i++) {
+            v[atom][i] = vb[i];
+            u[atom][i] = ub[i];
+            dv[atom][i] = dvb[i];
+            for (int j = 0; j < width; j++)
+                v[atom][i] += vw[i*width+j]*x[atom*width+j];
+            for (int j = 0; j < 3*width; j++)
+                u[atom][i] += uw[i*3*width+j]*vec[atom*3*width+j];
+            for (int j = 0; j < numRBF; j++)
+                dv[atom][i] += dvw[i*numRBF+j]*rbf[j];
+            dv[atom][i] = dv[atom][i]/(1+exp(dv[atom][i]));
+        }
+        for (int i = 0; i < u[atom].size(); i++)
+            printf("%g\n", u[atom][i]);
+    }
 
     // Loop over pairs of atoms from the neighbor list.
 
@@ -175,49 +216,22 @@ void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbo
                 rbf[i] = cutoffScale*exp(-rbfBetas[i]*expDiff*expDiff);
             }
 
-            // Apply the various transforms.
-
-            for (int i = 0; i < width; i++) {
-                q[i] = qb[i];
-                k[i] = kb[i];
-                dk[i] = dkb[i];
-                for (int j = 0; j < width; j++) {
-                    q[i] += qw[i*width+j]*x[atom2*width+j];
-                    k[i] += kw[i*width+j]*x[atom2*width+j];
-                }
-                for (int j = 0; j < numRBF; j++)
-                    dk[i] += dkw[i*numRBF+j]*rbf[j];
-                dk[i] = dk[i]/(1+exp(dk[i]));
-            }
-            for (int i = 0; i < 3*width; i++) {
-                v[i] = vb[i];
-                u[i] = ub[i];
-                dv[i] = dvb[i];
-                for (int j = 0; j < width; j++) {
-                    v[i] += vw[i*width+j]*vec[atom2*3*width+j];
-                    u[i] += uw[i*width+j]*vec[atom2*3*width+j];
-                }
-                for (int j = 0; j < numRBF; j++)
-                    dv[i] += dvw[i*numRBF+j]*rbf[j];
-                dv[i] = dv[i]/(1+exp(dv[i]));
-            }
-
             // Apply the second dense layer.
 
-            float cutoffScale = cutoffFunction(r);
-            for (int i = 0; i < width; i++) {
-                float sum = b2[i];
-                for (int j = 0; j < width; j++)
-                    sum += y1[j]*w2[i*width+j];
-                y2[i] = cutoffScale*sum;
-            }
+            // float cutoffScale = cutoffFunction(r);
+            // for (int i = 0; i < width; i++) {
+            //     float sum = b2[i];
+            //     for (int j = 0; j < width; j++)
+            //         sum += y1[j]*w2[i*width+j];
+            //     y2[i] = cutoffScale*sum;
+            // }
 
             // Add it to the output.
 
-            for (int i = 0; i < width; i++) {
-                output[atom1*width+i] += y2[i]*input[atom2*width+i];
-                output[atom2*width+i] += y2[i]*input[atom1*width+i];
-            }
+            // for (int i = 0; i < width; i++) {
+            //     output[atom1*width+i] += y2[i]*input[atom2*width+i];
+            //     output[atom2*width+i] += y2[i]*input[atom1*width+i];
+            // }
         }
     }
 }
@@ -246,95 +260,95 @@ void CpuEquivariantTransformerLayer::backprop(const EquivariantTransformerNeighb
 template <bool PERIODIC, bool TRICLINIC>
 void CpuEquivariantTransformerLayer::backpropImpl(const CpuEquivariantTransformerNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
                              const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv) {
-    int numRBF = rbfMus.size();
-    vector<float> rbf(numRBF), dRBFdR(numRBF);
-    vector<float> y1(width), dY1dR(width);
-    vector<float> y2(width), dY2dR(width);
-    float invBoxSize[3];
-    if (PERIODIC) {
-        invBoxSize[0] = 1/periodicBoxVectors[0];
-        invBoxSize[1] = 1/periodicBoxVectors[4];
-        invBoxSize[2] = 1/periodicBoxVectors[8];
-    }
+    // int numRBF = rbfMus.size();
+    // vector<float> rbf(numRBF), dRBFdR(numRBF);
+    // vector<float> y1(width), dY1dR(width);
+    // vector<float> y2(width), dY2dR(width);
+    // float invBoxSize[3];
+    // if (PERIODIC) {
+    //     invBoxSize[0] = 1/periodicBoxVectors[0];
+    //     invBoxSize[1] = 1/periodicBoxVectors[4];
+    //     invBoxSize[2] = 1/periodicBoxVectors[8];
+    // }
 
-    // Clear the output arrays.
+    // // Clear the output arrays.
 
-    memset(inputDeriv, 0, getNumAtoms()*width*sizeof(float));
-    memset(positionDeriv, 0, getNumAtoms()*3*sizeof(float));
+    // memset(inputDeriv, 0, getNumAtoms()*width*sizeof(float));
+    // memset(positionDeriv, 0, getNumAtoms()*3*sizeof(float));
 
-    // Loop over pairs of atoms from the neighbor list.
+    // // Loop over pairs of atoms from the neighbor list.
 
-    for (int atom1 = 0; atom1 < getNumAtoms(); atom1++) {
-        for (int atom2 : neighbors.getNeighbors()[atom1]) {
-            // Compute the displacement.
+    // for (int atom1 = 0; atom1 < getNumAtoms(); atom1++) {
+    //     for (int atom2 : neighbors.getNeighbors()[atom1]) {
+    //         // Compute the displacement.
 
-            float delta[3];
-            float r2;
-            computeDisplacement<PERIODIC, TRICLINIC>(&positions[3*atom1], &positions[3*atom2], delta, r2, periodicBoxVectors, invBoxSize);
-            float r = sqrtf(r2);
-            float rInv = 1/r;
+    //         float delta[3];
+    //         float r2;
+    //         computeDisplacement<PERIODIC, TRICLINIC>(&positions[3*atom1], &positions[3*atom2], delta, r2, periodicBoxVectors, invBoxSize);
+    //         float r = sqrtf(r2);
+    //         float rInv = 1/r;
 
-            // Compute the radial basis functions.
+    //         // Compute the radial basis functions.
 
-            float alpha = 5.0f/(neighbors.getUpperCutoff()-neighbors.getLowerCutoff());
-            float cutoffScale = cutoffFunction(r, neighbors.getUpperCutoff());
-            for (int i = 0; i < numRBF; i++) {
-                float expTerm = exp(-alpha*(r-neighbors.getLowerCutoff());
-                float expDiff = expTerm-rbfMus[i];
-                rbf[i] = cutoffScale*exp(-rbfBetas[i]*expDiff*expDiff);
-                dRBFdR[i] = rbf[i]*2*rbfBetas[i]*expDiff*expTerm*alpha;
-            }
+    //         float alpha = 5.0f/(neighbors.getUpperCutoff()-neighbors.getLowerCutoff());
+    //         float cutoffScale = cutoffFunction(r, neighbors.getUpperCutoff());
+    //         for (int i = 0; i < numRBF; i++) {
+    //             float expTerm = exp(-alpha*(r-neighbors.getLowerCutoff());
+    //             float expDiff = expTerm-rbfMus[i];
+    //             rbf[i] = cutoffScale*exp(-rbfBetas[i]*expDiff*expDiff);
+    //             dRBFdR[i] = rbf[i]*2*rbfBetas[i]*expDiff*expTerm*alpha;
+    //         }
 
-            // Apply the first dense layer.
+    //         // Apply the first dense layer.
 
-            for (int i = 0; i < width; i++) {
-                float sum = b1[i], dSumdR = 0;
-                for (int j = 0; j < numRBF; j++) {
-                    sum += rbf[j]*w1[i*numRBF+j];
-                    dSumdR += dRBFdR[j]*w1[i*numRBF+j];
-                }
-                if (getActivation() == ShiftedSoftplus) {
-                    float expSum = expf(sum);
-                    y1[i] = logf(0.5f*expSum + 0.5f);
-                    dY1dR[i] = dSumdR*expSum/(expSum + 1);
-                }
-                else {
-                    float th = tanhf(sum);
-                    y1[i] = th;
-                    dY1dR[i] = dSumdR*(1-th*th);
-                }
-            }
+    //         for (int i = 0; i < width; i++) {
+    //             float sum = b1[i], dSumdR = 0;
+    //             for (int j = 0; j < numRBF; j++) {
+    //                 sum += rbf[j]*w1[i*numRBF+j];
+    //                 dSumdR += dRBFdR[j]*w1[i*numRBF+j];
+    //             }
+    //             if (getActivation() == ShiftedSoftplus) {
+    //                 float expSum = expf(sum);
+    //                 y1[i] = logf(0.5f*expSum + 0.5f);
+    //                 dY1dR[i] = dSumdR*expSum/(expSum + 1);
+    //             }
+    //             else {
+    //                 float th = tanhf(sum);
+    //                 y1[i] = th;
+    //                 dY1dR[i] = dSumdR*(1-th*th);
+    //             }
+    //         }
 
-            // Apply the second dense layer.
+    //         // Apply the second dense layer.
 
-            float cutoffScale = cutoffFunction(r);
-            float dCutoffdR = cutoffDeriv(r);
-            for (int i = 0; i < width; i++) {
-                float sum = b2[i], dSumdR = 0;
-                for (int j = 0; j < width; j++) {
-                    sum += y1[j]*w2[i*width+j];
-                    dSumdR += dY1dR[j]*w2[i*width+j];
-                }
-                y2[i] = cutoffScale*sum;
-                dY2dR[i] = dCutoffdR*sum + cutoffScale*dSumdR;
-            }
+    //         float cutoffScale = cutoffFunction(r);
+    //         float dCutoffdR = cutoffDeriv(r);
+    //         for (int i = 0; i < width; i++) {
+    //             float sum = b2[i], dSumdR = 0;
+    //             for (int j = 0; j < width; j++) {
+    //                 sum += y1[j]*w2[i*width+j];
+    //                 dSumdR += dY1dR[j]*w2[i*width+j];
+    //             }
+    //             y2[i] = cutoffScale*sum;
+    //             dY2dR[i] = dCutoffdR*sum + cutoffScale*dSumdR;
+    //         }
 
-            // Add it to the output.
+    //         // Add it to the output.
 
-            for (int i = 0; i < width; i++) {
-                int index1 = atom1*width+i;
-                int index2 = atom2*width+i;
-                inputDeriv[index1] += y2[i]*outputDeriv[index2];
-                inputDeriv[index2] += y2[i]*outputDeriv[index1];
-                float scale = rInv*dY2dR[i]*(input[index2]*outputDeriv[index1] + input[index1]*outputDeriv[index2]);
-                for (int j = 0; j < 3; j++) {
-                    float dVdX = scale * delta[j];
-                    positionDeriv[atom1*3+j] -= dVdX;
-                    positionDeriv[atom2*3+j] += dVdX;
-                }
-            }
-        }
-    }
+    //         for (int i = 0; i < width; i++) {
+    //             int index1 = atom1*width+i;
+    //             int index2 = atom2*width+i;
+    //             inputDeriv[index1] += y2[i]*outputDeriv[index2];
+    //             inputDeriv[index2] += y2[i]*outputDeriv[index1];
+    //             float scale = rInv*dY2dR[i]*(input[index2]*outputDeriv[index1] + input[index1]*outputDeriv[index2]);
+    //             for (int j = 0; j < 3; j++) {
+    //                 float dVdX = scale * delta[j];
+    //                 positionDeriv[atom1*3+j] -= dVdX;
+    //                 positionDeriv[atom2*3+j] += dVdX;
+    //             }
+    //         }
+    //     }
+    // }
 }
 
 float CpuEquivariantTransformerLayer::cutoffFunction(float r, float cutoff) {

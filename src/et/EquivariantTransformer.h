@@ -122,11 +122,10 @@ public:
      * @param numAtoms  the number of atoms in the system
      * @param width     the number of elements in the input and output vectors
      * @param numHeads  the number of attention heads
-     * @param rbfMus    the mu parameters of the radial basis functions
-     * @param rbfBetas  the beta parameters of the radial basis functions
+     * @param numRBF    the number of radial basis functions
      */
-    EquivariantTransformerLayer(int numAtoms, int width, int numHeads, const std::vector<float>& rbfMus, const std::vector<float>& rbfBetas) :
-            numAtoms(numAtoms), width(width), numHeads(numHeads), rbfMus(rbfMus), rbfBetas(rbfBetas) {
+    EquivariantTransformerLayer(int numAtoms, int width, int numHeads, int numRBF) :
+            numAtoms(numAtoms), width(width), numHeads(numHeads), numRBF(numRBF) {
     }
     virtual ~EquivariantTransformerLayer() {
     }
@@ -180,20 +179,13 @@ public:
         return numHeads;
     }
     /**
-     * Get the mu parameters of the radial basis functions.
+     * Get the number of radial basis functions.
      */
-    const std::vector<float>& getRBFMus() const {
-        return rbfMus;
-    }
-    /**
-     * Get the beta parameters of the radial basis functions.
-     */
-    const std::vector<float>& getRBFBetas() const {
-        return rbfBetas;
+    int getNumRBF() const {
+        return numRBF;
     }
 protected:
-    const int numAtoms, width, numHeads;
-    const std::vector<float> rbfMus, rbfBetas;
+    const int numAtoms, width, numHeads, numRBF;
 };
 
 #endif
