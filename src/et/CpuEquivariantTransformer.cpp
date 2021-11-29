@@ -154,14 +154,12 @@ void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbo
                  const float* x, const float* vec, float* dx, float* dvec) {
     const CpuEquivariantTransformerNeighbors& cpuNeighbors = dynamic_cast<const CpuEquivariantTransformerNeighbors&>(neighbors);
     int numRBF = rbfMus.size();
-    vector<float> rbf(numRBF);
+    vector<float> rbf(numRBF), dk(width), dv(3*width);
     vector<vector<float> > q(numAtoms, vector<float>(width));
     vector<vector<float> > k(numAtoms, vector<float>(width));
     vector<vector<float> > v(numAtoms, vector<float>(3*width));
     vector<vector<float> > o(numAtoms, vector<float>(3*width));
-    vector<vector<float> > u(numAtoms, vector<float>(3*width));
-    vector<vector<float> > dk(numAtoms, vector<float>(width));
-    vector<vector<float> > dv(numAtoms, vector<float>(3*width));
+    vector<vector<float> > u(numAtoms, vector<float>(9*width));
 
     // Clear the output arrays.
 
@@ -174,29 +172,23 @@ void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbo
         for (int i = 0; i < width; i++) {
             q[atom][i] = qb[i];
             k[atom][i] = kb[i];
-            dk[atom][i] = dkb[i];
             for (int j = 0; j < width; j++) {
                 q[atom][i] += qw[i*width+j]*x[atom*width+j];
                 k[atom][i] += kw[i*width+j]*x[atom*width+j];
             }
-            for (int j = 0; j < numRBF; j++)
-                dk[atom][i] += dkw[i*numRBF+j]*rbf[j];
-            dk[atom][i] = dk[atom][i]/(1+exp(dk[atom][i]));
         }
         for (int i = 0; i < 3*width; i++) {
             v[atom][i] = vb[i];
-            u[atom][i] = ub[i];
-            dv[atom][i] = dvb[i];
             for (int j = 0; j < width; j++)
                 v[atom][i] += vw[i*width+j]*x[atom*width+j];
-            for (int j = 0; j < 3*width; j++)
-                u[atom][i] += uw[i*3*width+j]*vec[atom*3*width+j];
-            for (int j = 0; j < numRBF; j++)
-                dv[atom][i] += dvw[i*numRBF+j]*rbf[j];
-            dv[atom][i] = dv[atom][i]/(1+exp(dv[atom][i]));
         }
-        for (int i = 0; i < u[atom].size(); i++)
-            printf("%g\n", u[atom][i]);
+        for (int i = 0; i < 3*width; i++) {
+            for (int k = 0; k < 3; k++) {
+                u[atom][i+3*width*k] = ub[i];
+                for (int j = 0; j < width; j++)
+                    u[atom][i+3*width*k] += uw[i*width+j]*vec[atom*3*width+k*width+j];
+            }
+        }
     }
 
     // Loop over pairs of atoms from the neighbor list.
@@ -214,6 +206,21 @@ void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbo
                 float expTerm = exp(-alpha*(r-neighbors.getLowerCutoff()));
                 float expDiff = expTerm-rbfMus[i];
                 rbf[i] = cutoffScale*exp(-rbfBetas[i]*expDiff*expDiff);
+            }
+
+            // Compute the filters.
+
+            for (int i = 0; i < width; i++) {
+                dk[i] = dkb[i];
+                for (int j = 0; j < numRBF; j++)
+                    dk[i] += dkw[i*numRBF+j]*rbf[j];
+                dk[i] = dk[i]/(1+exp(-dk[i]));
+            }
+            for (int i = 0; i < 3*width; i++) {
+                dv[i] = dvb[i];
+                for (int j = 0; j < numRBF; j++)
+                    dv[i] += dvw[i*numRBF+j]*rbf[j];
+                dv[i] = dv[i]/(1+exp(-dv[i]));
             }
 
             // Apply the second dense layer.
