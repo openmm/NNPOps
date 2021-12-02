@@ -104,13 +104,17 @@ void CpuEquivariantTransformerNeighbors::findNeighbors(const float* positions, c
 
     float cutoff2 = getUpperCutoff()*getUpperCutoff();
     for (int atom1 = 0; atom1 < getNumAtoms(); atom1++) {
+        neighbors[atom1].push_back(atom1);
+        neighborDistances[atom1].push_back(0);
         for (int atom2 = atom1+1; atom2 < getNumAtoms(); atom2++) {
             float delta[3];
             float r2;
             computeDisplacement<PERIODIC, TRICLINIC>(&positions[3*atom1], &positions[3*atom2], delta, r2, periodicBoxVectors, invBoxSize);
             if (r2 < cutoff2) {
                 neighbors[atom1].push_back(atom2);
+                neighbors[atom2].push_back(atom1);
                 neighborDistances[atom1].push_back(sqrtf(r2));
+                neighborDistances[atom2].push_back(sqrtf(r2));
             }
         }
     }
@@ -154,17 +158,19 @@ void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbo
                  const float* x, const float* vec, float* dx, float* dvec) {
     const CpuEquivariantTransformerNeighbors& cpuNeighbors = dynamic_cast<const CpuEquivariantTransformerNeighbors&>(neighbors);
     int numRBF = rbfMus.size();
-    vector<float> rbf(numRBF), dk(width), dv(3*width);
+    int headWidth = width/numHeads;
+    vector<float> rbf(numRBF), dk(width), dv(3*width), attention(numHeads);
     vector<vector<float> > q(numAtoms, vector<float>(width));
     vector<vector<float> > k(numAtoms, vector<float>(width));
     vector<vector<float> > v(numAtoms, vector<float>(3*width));
     vector<vector<float> > o(numAtoms, vector<float>(3*width));
     vector<vector<float> > u(numAtoms, vector<float>(9*width));
+    vector<vector<float> > vecDot(numAtoms, vector<float>(width));
 
     // Clear the output arrays.
 
-    memset(dx, 0, getNumAtoms()*width*sizeof(float));
-    memset(dvec, 0, 3*getNumAtoms()*width*sizeof(float));
+    memset(dx, 0, numAtoms*width*sizeof(float));
+    memset(dvec, 0, 3*numAtoms*width*sizeof(float));
 
     // Apply the various transforms.
 
@@ -189,14 +195,20 @@ void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbo
                     u[atom][i+3*width*k] += uw[i*width+j]*vec[atom*3*width+k*width+j];
             }
         }
+        for (int i = 0; i < width; i++)
+            vecDot[atom][i] = u[atom][i]*u[atom][i+width] + u[atom][i+3*width]*u[atom][i+4*width] + u[atom][i+6*width]*u[atom][i+7*width];
     }
 
     // Loop over pairs of atoms from the neighbor list.
 
-    for (int atom1 = 0; atom1 < getNumAtoms(); atom1++) {
+    for (int atom1 = 0; atom1 < numAtoms; atom1++) {
         for (int neighborIndex = 0; neighborIndex < cpuNeighbors.getNeighbors()[atom1].size(); neighborIndex++) {
             int atom2 = cpuNeighbors.getNeighbors()[atom1][neighborIndex];
             float r = cpuNeighbors.getNeighborDistances()[atom1][neighborIndex];
+            float rInv = (r > 0 ? 1/r : 0);
+            float delta[3] = {(positions[3*atom2]-positions[3*atom1])*rInv,
+                              (positions[3*atom2+1]-positions[3*atom1+1])*rInv,
+                              (positions[3*atom2+2]-positions[3*atom1+2])*rInv};
 
             // Compute the radial basis functions.
 
@@ -222,6 +234,27 @@ void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbo
                     dv[i] += dvw[i*numRBF+j]*rbf[j];
                 dv[i] = dv[i]/(1+exp(-dv[i]));
             }
+
+            // Compute the attention weights.
+
+            for (int head = 0; head < numHeads; head++) {
+                attention[head] = 0;
+                for (int i = 0; i < headWidth; i++)
+                    attention[head] += q[atom1][headWidth*head+i]*k[atom2][headWidth*head+i]*dk[headWidth*head+i];
+                attention[head] = cutoffScale*attention[head]/(1+exp(-attention[head]));
+            }
+
+            // Compute contributions to the output values.
+
+            for (int j = 0; j < 3; j++) {
+                for (int head = 0; head < numHeads; head++)
+                    for (int i = 0; i < headWidth; i++) {
+                        dx[atom1*width+headWidth*head+i] += v[atom2][3*head*headWidth+i]*dv[3*head*headWidth+i]*attention[head];
+                        float vec1 = v[atom2][(3*head+1)*headWidth+i]*dv[(3*head+1)*headWidth+i];
+                        float vec2 = v[atom2][(3*head+2)*headWidth+i]*dv[(3*head+2)*headWidth+i];
+                        dvec[3*width*atom1+width*j+headWidth*head+i] += vec1*vec[3*width*atom2+width*j+headWidth*head+i] + vec2*delta[j];
+                    }
+                }
 
             // Apply the second dense layer.
 
