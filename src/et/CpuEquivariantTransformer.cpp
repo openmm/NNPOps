@@ -165,7 +165,8 @@ void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbo
     vector<vector<float> > v(numAtoms, vector<float>(3*width));
     vector<vector<float> > o(numAtoms, vector<float>(3*width));
     vector<vector<float> > u(numAtoms, vector<float>(9*width));
-    vector<vector<float> > vecDot(numAtoms, vector<float>(width));
+    vector<vector<float> > s3(numAtoms, vector<float>(width, 0));
+    vector<vector<float> > s(numAtoms, vector<float>(3*width, 0));
 
     // Clear the output arrays.
 
@@ -195,8 +196,6 @@ void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbo
                     u[atom][i+3*width*k] += uw[i*width+j]*vec[atom*3*width+k*width+j];
             }
         }
-        for (int i = 0; i < width; i++)
-            vecDot[atom][i] = u[atom][i]*u[atom][i+width] + u[atom][i+3*width]*u[atom][i+4*width] + u[atom][i+6*width]*u[atom][i+7*width];
     }
 
     // Loop over pairs of atoms from the neighbor list.
@@ -246,32 +245,33 @@ void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbo
 
             // Compute contributions to the output values.
 
+            for (int head = 0; head < numHeads; head++)
+                for (int i = 0; i < headWidth; i++)
+                    s3[atom1][headWidth*head+i] += v[atom2][3*head*headWidth+i]*dv[3*head*headWidth+i]*attention[head];
             for (int j = 0; j < 3; j++) {
                 for (int head = 0; head < numHeads; head++)
                     for (int i = 0; i < headWidth; i++) {
-                        dx[atom1*width+headWidth*head+i] += v[atom2][3*head*headWidth+i]*dv[3*head*headWidth+i]*attention[head];
                         float vec1 = v[atom2][(3*head+1)*headWidth+i]*dv[(3*head+1)*headWidth+i];
                         float vec2 = v[atom2][(3*head+2)*headWidth+i]*dv[(3*head+2)*headWidth+i];
-                        dvec[3*width*atom1+width*j+headWidth*head+i] += vec1*vec[3*width*atom2+width*j+headWidth*head+i] + vec2*delta[j];
+                        s[atom1][width*j+headWidth*head+i] += vec1*vec[3*width*atom2+width*j+headWidth*head+i] + vec2*delta[j];
                     }
                 }
+        }
+    }
 
-            // Apply the second dense layer.
+    // Compute the final outputs.
 
-            // float cutoffScale = cutoffFunction(r);
-            // for (int i = 0; i < width; i++) {
-            //     float sum = b2[i];
-            //     for (int j = 0; j < width; j++)
-            //         sum += y1[j]*w2[i*width+j];
-            //     y2[i] = cutoffScale*sum;
-            // }
-
-            // Add it to the output.
-
-            // for (int i = 0; i < width; i++) {
-            //     output[atom1*width+i] += y2[i]*input[atom2*width+i];
-            //     output[atom2*width+i] += y2[i]*input[atom1*width+i];
-            // }
+    for (int atom = 0; atom < numAtoms; atom++) {
+        for (int i = 0; i < 3*width; i++) {
+            o[atom][i] = ob[i];
+            for (int j = 0; j < width; j++)
+                o[atom][i] += ow[i*width+j]*s3[atom][j];
+        }
+        for (int i = 0; i < width; i++) {
+            float vecDot = u[atom][i]*u[atom][i+width] + u[atom][i+3*width]*u[atom][i+4*width] + u[atom][i+6*width]*u[atom][i+7*width];
+            dx[width*atom+i] = vecDot*o[atom][width+i] + o[atom][2*width+i];
+            for (int j = 0; j < 3; j++)
+                dvec[3*width*atom+width*j+i] = u[atom][width*(3*j+2)+i]*o[atom][i] + s[atom][width*j+i];
         }
     }
 }
