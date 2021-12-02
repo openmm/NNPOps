@@ -22,8 +22,8 @@
  */
 
 #include <stdexcept>
-#include <cuda_runtime.h>
 #include <torch/script.h>
+#include <c10/cuda/CUDAStream.h>
 #include "CpuANISymmetryFunctions.h"
 #include "CudaANISymmetryFunctions.h"
 
@@ -96,6 +96,8 @@ public:
         radial  = torch::empty({numAtoms, numSpecies * (int)radialFunctions.size()}, tensorOptions);
         angular = torch::empty({numAtoms, numSpecies * (numSpecies + 1) / 2 * (int)angularFunctions.size()}, tensorOptions);
         positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
+
+        cudaSymFunc = dynamic_cast<CudaANISymmetryFunctions*>(symFunc.get());
     };
 
     tensor_list forward(const Tensor& positions_, const optional<Tensor>& periodicBoxVectors_) {
@@ -109,6 +111,11 @@ public:
             float* periodicBoxVectorsPtr = periodicBoxVectors.data_ptr<float>();
         }
 
+        if (cudaSymFunc) {
+            const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
+            cudaSymFunc->setStream(stream.stream());
+        }
+
         symFunc->computeSymmetryFunctions(positions.data_ptr<float>(), periodicBoxVectorsPtr, radial.data_ptr<float>(), angular.data_ptr<float>());
 
         return {radial, angular};
@@ -118,6 +125,11 @@ public:
 
         const Tensor radialGrad = grads[0].clone();
         const Tensor angularGrad = grads[1].clone();
+
+        if (cudaSymFunc) {
+            const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
+            cudaSymFunc->setStream(stream.stream());
+        }
 
         symFunc->backprop(radialGrad.data_ptr<float>(), angularGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
 
@@ -134,6 +146,7 @@ private:
     Tensor radial;
     Tensor angular;
     Tensor positionsGrad;
+    CudaANISymmetryFunctions* cudaSymFunc;
 };
 
 class AutogradFunctions : public torch::autograd::Function<AutogradFunctions> {
