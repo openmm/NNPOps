@@ -40,11 +40,10 @@ public:
      * Create an object for computing neighbor lists on a CPU.
      * 
      * @param numAtoms     the number of atoms in the system being modeled
-     * @param lowerCutoff  the lower cutoff distance
-     * @param upperCutoff  the upper cutoff distance
+     * @param cutoff       the cutoff distance
      * @param periodic     whether to use periodic boundary conditions.
      */
-    CpuEquivariantTransformerNeighbors(int numAtoms, float lowerCutoff, float upperCutoff, bool periodic);
+    CpuEquivariantTransformerNeighbors(int numAtoms, float cutoff, bool periodic);
     /**
      * Rebuild the neighbor list based on a new set of positions.
      * 
@@ -86,20 +85,6 @@ private:
  * A CPU implementation of an update layer for an equivariant transformer model.
  * Create an instance of this class at the same time you create the model and then reuse it
  * for every calculation on that model.
- * 
- * For each pair of atoms, it performs the following calculations:
- * 
- * 1. Compute a set of Gaussian basis functions describing the distance between them.
- * 2. Pass them through a dense layer.
- * 3. Apply an activation function.
- * 4. Pass the result through a second dense layer.
- * 5. Apply a cosine cutoff function to make interactions smoothly go to zero at the cutoff.
- * 
- * For each atom, the output is the sum over all neighbors of the above calculation multiplied
- * by the neighbor's input vector.
- * 
- * This calculation is designed to match the behavior of SchNetPack.  It is similar but not
- * identical to that described in the original SchNet publication.
  */
 class CpuEquivariantTransformerLayer : public EquivariantTransformerLayer {
 public:
@@ -155,17 +140,20 @@ public:
      * @param positions           an array of shape [numAtoms][3] containing the positions of each atom
      * @param periodicBoxVectors  an array of shape [3][3] containing the periodic box vectors.  If periodic boundary conditions are
      *                            not used, this is ignored and may be NULL.
-     * @param input               an array of shape [numAtoms][width] containing the input vectors
-     * @param outputDeriv         an array of shape [numAtoms][width] containing the derivative of E with respect to each output value
-     * @param inputDeriv          an array of shape [numAtoms][width] to store the derivative of E with respect to each input value into
+     * @param x                   an array of shape [numAtoms][width] containing the input scalar features
+     * @param vec                 an array of shape [numAtoms][3][width] containing the input vector features
+     * @param dxDeriv             an array of shape [numAtoms][width] containing the derivative of E with respect to the output scalar features
+     * @param dvecDeriv           an array of shape [numAtoms][3][width] containing the derivative of E with respect to the output vector features
+     * @param xDeriv              an array of shape [numAtoms][width] to store the derivative of E with respect to each input scalar feature into
+     * @param vecDeriv            an array of shape [numAtoms][3][width] to store the derivative of E with respect to each input vector feature into
      * @param positionDeriv       an array of shape [numAtoms][3] to store the derivative of E with respect to the atom positions into
      */
     void backprop(const EquivariantTransformerNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                  const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv);
+                  const float* x, const float* vec, const float* dxDeriv, const float* dvecDeriv, float* xDeriv, float* vecDeriv, float* positionDeriv);
 private:
     template <bool PERIODIC, bool TRICLINIC>
     void backpropImpl(const CpuEquivariantTransformerNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                      const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv);
+                      const float* x, const float* vec, const float* dxDeriv, const float* dvecDeriv, float* xDeriv, float* vecDeriv, float* positionDeriv);
     /**
      * Compute the value of the cutoff function.  The implementation assumes the caller has already
      * verified that r <= cutoff.

@@ -1,7 +1,7 @@
 #include "CpuEquivariantTransformer.h"
 
-EquivariantTransformerNeighbors* createNeighbors(int numAtoms, float lowerCutoff, float upperCutoff, bool periodic) {
-    return new CpuEquivariantTransformerNeighbors(numAtoms, lowerCutoff, upperCutoff, periodic);
+EquivariantTransformerNeighbors* createNeighbors(int numAtoms, float cutoff, bool periodic) {
+    return new CpuEquivariantTransformerNeighbors(numAtoms, cutoff, periodic);
 }
 
 EquivariantTransformerLayer* createLayer(int numAtoms, int width, int numHeads, int numRBF, const float* rbfMus, const float* rbfBetas,

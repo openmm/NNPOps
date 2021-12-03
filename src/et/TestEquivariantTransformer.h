@@ -260,7 +260,7 @@ void testWater(float* periodicVectors, float* dxExpected, float* dvecExpected) {
         {-0.03055537,  0.30942032,  0.06588218, -0.00436250,  0.12685412,  0.12943467,  0.01371006, -0.47929314, -0.00753810, -0.19204396, -0.05259481,  0.00761145, -0.03778685, -0.09134781, -0.00952652,  0.28729597, -0.00533450, -0.00094773, -0.00485033, -0.00007758,  0.00634247,  0.00090239, -0.00037197, -0.00653294}
     };
     vector<float> dx(3*8), dvec(3*24);
-    EquivariantTransformerNeighbors* neighbors = createNeighbors(numAtoms, 0.0, 2.0, (periodicVectors != NULL));
+    EquivariantTransformerNeighbors* neighbors = createNeighbors(numAtoms, 2.0, (periodicVectors != NULL));
     neighbors->build((float*) positions, periodicVectors);
     EquivariantTransformerLayer* layer = createLayer(numAtoms, 8, 2, rbfMus.size(), rbfMus.data(), rbfBetas.data(),
             (float*) qw, qb.data(), (float*) kw, kb.data(), (float*) vw, vb.data(), (float*) ow, ob.data(),

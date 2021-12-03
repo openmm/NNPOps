@@ -53,8 +53,8 @@ static void computeDisplacement(const float* pos1, const float* pos2, float* del
     r2 = delta[0]*delta[0] + delta[1]*delta[1] + delta[2]*delta[2];
 }
 
-CpuEquivariantTransformerNeighbors::CpuEquivariantTransformerNeighbors(int numAtoms, float lowerCutoff, float upperCutoff, bool periodic) :
-            EquivariantTransformerNeighbors(numAtoms, lowerCutoff, upperCutoff, periodic) {
+CpuEquivariantTransformerNeighbors::CpuEquivariantTransformerNeighbors(int numAtoms, float cutoff, bool periodic) :
+            EquivariantTransformerNeighbors(numAtoms, cutoff, periodic) {
     neighbors.resize(numAtoms);
     neighborDistances.resize(numAtoms);
 }
@@ -102,7 +102,7 @@ void CpuEquivariantTransformerNeighbors::findNeighbors(const float* positions, c
     // we are currently targeting.  If we want to scale to larger systems, a voxel based algorithm would
     // be more efficient.
 
-    float cutoff2 = getUpperCutoff()*getUpperCutoff();
+    float cutoff2 = getCutoff()*getCutoff();
     for (int atom1 = 0; atom1 < getNumAtoms(); atom1++) {
         neighbors[atom1].push_back(atom1);
         neighborDistances[atom1].push_back(0);
@@ -153,7 +153,7 @@ CpuEquivariantTransformerLayer::CpuEquivariantTransformerLayer(int numAtoms, int
         this->dvb.push_back(dvb[i]);
     }
 }
-#include <cstdio>
+
 void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
                  const float* x, const float* vec, float* dx, float* dvec) {
     const CpuEquivariantTransformerNeighbors& cpuNeighbors = dynamic_cast<const CpuEquivariantTransformerNeighbors&>(neighbors);
@@ -167,11 +167,6 @@ void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbo
     vector<vector<float> > u(numAtoms, vector<float>(9*width));
     vector<vector<float> > s3(numAtoms, vector<float>(width, 0));
     vector<vector<float> > s(numAtoms, vector<float>(3*width, 0));
-
-    // Clear the output arrays.
-
-    memset(dx, 0, numAtoms*width*sizeof(float));
-    memset(dvec, 0, 3*numAtoms*width*sizeof(float));
 
     // Apply the various transforms.
 
@@ -211,10 +206,10 @@ void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbo
 
             // Compute the radial basis functions.
 
-            float alpha = 5.0f/(neighbors.getUpperCutoff()-neighbors.getLowerCutoff());
-            float cutoffScale = cutoffFunction(r, neighbors.getUpperCutoff());
+            float alpha = 5.0f/neighbors.getCutoff();
+            float cutoffScale = cutoffFunction(r, neighbors.getCutoff());
             for (int i = 0; i < numRBF; i++) {
-                float expTerm = exp(-alpha*(r-neighbors.getLowerCutoff()));
+                float expTerm = exp(-alpha*r);
                 float expDiff = expTerm-rbfMus[i];
                 rbf[i] = cutoffScale*exp(-rbfBetas[i]*expDiff*expDiff);
             }
@@ -277,10 +272,11 @@ void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbo
 }
 
 void CpuEquivariantTransformerLayer::backprop(const EquivariantTransformerNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                         const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv) {
+                  const float* x, const float* vec, const float* dxDeriv, const float* dvecDeriv, float* xDeriv, float* vecDeriv, float* positionDeriv) {
     // Clear the output array.
 
-    memset(inputDeriv, 0, numAtoms*width*sizeof(float));
+    memset(xDeriv, 0, numAtoms*width*sizeof(float));
+    memset(vecDeriv, 0, numAtoms*3*width*sizeof(float));
     memset(positionDeriv, 0, numAtoms*3*sizeof(float));
 
     // Backpropagate through the symmetry functions.
@@ -288,18 +284,18 @@ void CpuEquivariantTransformerLayer::backprop(const EquivariantTransformerNeighb
     const CpuEquivariantTransformerNeighbors& cpuNeighbors = dynamic_cast<const CpuEquivariantTransformerNeighbors&>(neighbors);
     if (neighbors.getPeriodic()) {
         if (neighbors.getTriclinic())
-            backpropImpl<true, true>(cpuNeighbors, positions, periodicBoxVectors, input, outputDeriv, inputDeriv, positionDeriv);
+            backpropImpl<true, true>(cpuNeighbors, positions, periodicBoxVectors, x, vec, dxDeriv, dvecDeriv, xDeriv, vecDeriv, positionDeriv);
         else
-            backpropImpl<true, false>(cpuNeighbors, positions, periodicBoxVectors, input, outputDeriv, inputDeriv, positionDeriv);
+            backpropImpl<true, false>(cpuNeighbors, positions, periodicBoxVectors, x, vec, dxDeriv, dvecDeriv, xDeriv, vecDeriv, positionDeriv);
     }
     else {
-        backpropImpl<false, false>(cpuNeighbors, positions, periodicBoxVectors, input, outputDeriv, inputDeriv, positionDeriv);
+        backpropImpl<false, false>(cpuNeighbors, positions, periodicBoxVectors, x, vec, dxDeriv, dvecDeriv, xDeriv, vecDeriv, positionDeriv);
     }
 }
 
 template <bool PERIODIC, bool TRICLINIC>
 void CpuEquivariantTransformerLayer::backpropImpl(const CpuEquivariantTransformerNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
-                             const float* input, const float* outputDeriv, float* inputDeriv, float* positionDeriv) {
+                      const float* x, const float* vec, const float* dxDeriv, const float* dvecDeriv, float* xDeriv, float* vecDeriv, float* positionDeriv) {
     // int numRBF = rbfMus.size();
     // vector<float> rbf(numRBF), dRBFdR(numRBF);
     // vector<float> y1(width), dY1dR(width);
