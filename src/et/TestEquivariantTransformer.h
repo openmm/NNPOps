@@ -14,68 +14,78 @@ void assertEqual(float v1, float v2, float atol, float rtol) {
         throw runtime_error(string("Assertion failure: expected ")+to_string(v1)+" found "+to_string(v2));
 }
 
-void validateDerivatives(EquivariantTransformerNeighbors& neighbors, EquivariantTransformerLayer& layer, float* positions, float* periodicVectors, vector<float>& x) {
-    // int numAtoms = layer.getNumAtoms();
-    // int width = layer.getWidth();
-    // vector<float> y(numAtoms*width);
-    // vector<float> inputDeriv(numAtoms*width), positionDeriv(numAtoms*3), outputDeriv(numAtoms*width, 0);
-    // vector<float> offsetx(numAtoms*width), offsetPositions(numAtoms*3);
-    // float step = 1e-3;
-    // for (int i = 0; i < y.size(); i++) {
-    //     // Use backprop to compute the gradient of one symmetry function.
+void validateDerivatives(EquivariantTransformerNeighbors& neighbors, EquivariantTransformerLayer& layer, float* positions, float* periodicVectors, float* x, float* vec) {
+    int numAtoms = layer.getNumAtoms();
+    int width = layer.getWidth();
+    vector<float> dx(numAtoms*width), dvec(numAtoms*width*3);
+    vector<float> xDeriv(numAtoms*width), vecDeriv(numAtoms*width*3), positionDeriv(numAtoms*3), dxDeriv(numAtoms*width, 0), dvecDeriv(numAtoms*width*3, 0);
+    vector<float> offsetx(numAtoms*width), offsetPositions(numAtoms*3);
+    float step = 1e-3;
+    for (int i = 0; i < offsetPositions.size(); i++)
+        offsetPositions[i] = positions[i];
+    for (int i = 0; i < dx.size()+dvec.size(); i++) {
+        // Use backprop to compute the gradient with respect to one output.
 
-    //     neighbors.build(positions, periodicVectors);
-    //     layer.compute(neighbors, positions, periodicVectors, x.data(), y.data());
-    //     outputDeriv[i] = 1;
-    //     layer.backprop(neighbors, positions, periodicVectors, x.data(), outputDeriv.data(), inputDeriv.data(), positionDeriv.data());
-    //     outputDeriv[i] = 0;
+        neighbors.build(positions, periodicVectors);
+        layer.compute(neighbors, positions, periodicVectors, x, vec, dx.data(), dvec.data());
+        if (i < dx.size())
+            dxDeriv[i] = 1;
+        else
+            dvecDeriv[i-dx.size()] = 1;
+        layer.backprop(neighbors, positions, periodicVectors, x, vec, dxDeriv.data(), dvecDeriv.data(), xDeriv.data(), vecDeriv.data(), positionDeriv.data());
+        if (i < dx.size())
+            dxDeriv[i] = 0;
+        else
+            dvecDeriv[i-dx.size()] = 0;
 
-    //     // Displace the inputs along the gradient direction, compute the symmetry functions,
-    //     // and calculate a finite difference approximation to the gradient magnitude from them.
+        // Displace the inputs along the gradient direction, compute the symmetry functions,
+        // and calculate a finite difference approximation to the gradient magnitude from them.
 
-    //     float norm = 0;
-    //     for (int j = 0; j < inputDeriv.size(); j++)
-    //         norm += inputDeriv[j]*inputDeriv[j];
-    //     norm = sqrt(norm);
-    //     float delta = step/norm;
-    //     for (int j = 0; j < offsetx.size(); j++)
-    //         offsetx[j] = x[j] - delta*inputDeriv[j];
-    //     layer.compute(neighbors, positions, periodicVectors, offsetx.data(), y.data());
-    //     float value1 = y[i];
-    //     for (int j = 0; j < offsetx.size(); j++)
-    //         offsetx[j] = x[j] + delta*inputDeriv[j];
-    //     layer.compute(neighbors, positions, periodicVectors, offsetx.data(), y.data());
-    //     float value2 = y[i];
-    //     float estimate = (value2-value1)/(2*step);
+        float norm = 0;
+        // for (int j = 0; j < inputDeriv.size(); j++)
+        //     norm += inputDeriv[j]*inputDeriv[j];
+        // norm = sqrt(norm);
+        // float delta = step/norm;
+        // for (int j = 0; j < offsetx.size(); j++)
+        //     offsetx[j] = x[j] - delta*inputDeriv[j];
+        // layer.compute(neighbors, positions, periodicVectors, offsetx.data(), y.data());
+        // float value1 = y[i];
+        // for (int j = 0; j < offsetx.size(); j++)
+        //     offsetx[j] = x[j] + delta*inputDeriv[j];
+        // layer.compute(neighbors, positions, periodicVectors, offsetx.data(), y.data());
+        // float value2 = y[i];
+        // float estimate = (value2-value1)/(2*step);
 
-    //     // Verify that they match.
+        // Verify that they match.
 
-    //     assertEqual(norm, estimate, 1e-5, 5e-3);
+        // assertEqual(norm, estimate, 1e-5, 5e-3);
 
-    //     // Displace the atom positions along the gradient direction, compute the symmetry functions,
-    //     // and calculate a finite difference approximation to the gradient magnitude from them.
+        // Displace the atom positions along the gradient direction, compute the outputs,
+        // and calculate a finite difference approximation to the gradient magnitude from them.
 
-    //     norm = 0;
-    //     for (int j = 0; j < positionDeriv.size(); j++)
-    //         norm += positionDeriv[j]*positionDeriv[j];
-    //     norm = sqrt(norm);
-    //     delta = step/norm;
-    //     for (int j = 0; j < offsetPositions.size(); j++)
-    //         offsetPositions[j] = positions[j] - delta*positionDeriv[j];
-    //     neighbors.build(offsetPositions.data(), periodicVectors);
-    //     layer.compute(neighbors, offsetPositions.data(), periodicVectors, x.data(), y.data());
-    //     value1 = y[i];
-    //     for (int j = 0; j < offsetPositions.size(); j++)
-    //         offsetPositions[j] = positions[j] + delta*positionDeriv[j];
-    //     neighbors.build(offsetPositions.data(), periodicVectors);
-    //     layer.compute(neighbors, offsetPositions.data(), periodicVectors, x.data(), y.data());
-    //     value2 = y[i];
-    //     estimate = (value2-value1)/(2*step);
+        norm = 0;
+        for (int j = 0; j < positionDeriv.size(); j++)
+            printf("  %g\n", positionDeriv[j]);
+        for (int j = 0; j < positionDeriv.size(); j++)
+            norm += positionDeriv[j]*positionDeriv[j];
+        norm = sqrt(norm);
+        float delta = step/norm;
+        for (int j = 0; j < offsetPositions.size(); j++)
+            offsetPositions[j] = positions[j] - delta*positionDeriv[j];
+        neighbors.build(offsetPositions.data(), periodicVectors);
+        layer.compute(neighbors, offsetPositions.data(), periodicVectors, x, vec, dx.data(), dvec.data());
+        float value1 = (i < dx.size() ? dx[i] : dvec[i-dx.size()]);
+        for (int j = 0; j < offsetPositions.size(); j++)
+            offsetPositions[j] = positions[j] + delta*positionDeriv[j];
+        neighbors.build(offsetPositions.data(), periodicVectors);
+        layer.compute(neighbors, offsetPositions.data(), periodicVectors, x, vec, dx.data(), dvec.data());
+        float value2 = (i < dx.size() ? dx[i] : dvec[i-dx.size()]);
+        float estimate = (value2-value1)/(2*step);
 
-    //     // Verify that they match.
+        // Verify that they match.
 
-    //     assertEqual(norm, estimate, 1e-5, 5e-3);
-    // }
+        assertEqual(norm, estimate, 1e-5, 5e-3);
+    }
 }
 
 void testWater(float* periodicVectors, float* dxExpected, float* dvecExpected) {
@@ -270,7 +280,7 @@ void testWater(float* periodicVectors, float* dxExpected, float* dvecExpected) {
         assertEqual(dxExpected[i], dx[i], 1e-4, 1e-3);
     for (int i = 0; i < dvec.size(); i++)
         assertEqual(dvecExpected[i], dvec[i], 1e-4, 1e-3);
-    // validateDerivatives(*neighbors, *layer, (float*) positions, periodicVectors, x);
+    validateDerivatives(*neighbors, *layer, (float*) positions, periodicVectors, (float*) x, (float*) vec);
     delete neighbors;
     delete layer;
 }

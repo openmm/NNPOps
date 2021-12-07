@@ -152,22 +152,26 @@ CpuEquivariantTransformerLayer::CpuEquivariantTransformerLayer(int numAtoms, int
         this->ub.push_back(ub[i]);
         this->dvb.push_back(dvb[i]);
     }
+    q.resize(numAtoms);
+    k.resize(numAtoms);
+    v.resize(numAtoms);
+    o.resize(numAtoms);
+    u.resize(numAtoms);
+    s3.resize(numAtoms);
+    s.resize(numAtoms);
+    for (int i = 0; i < numAtoms; i++) {
+        q[i].resize(width);
+        k[i].resize(width);
+        v[i].resize(3*width);
+        o[i].resize(3*width);
+        u[i].resize(9*width);
+        s3[i].resize(width);
+        s[i].resize(3*width);
+    }
 }
 
 void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
                  const float* x, const float* vec, float* dx, float* dvec) {
-    const CpuEquivariantTransformerNeighbors& cpuNeighbors = dynamic_cast<const CpuEquivariantTransformerNeighbors&>(neighbors);
-    int numRBF = rbfMus.size();
-    int headWidth = width/numHeads;
-    vector<float> rbf(numRBF), dk(width), dv(3*width), attention(numHeads);
-    vector<vector<float> > q(numAtoms, vector<float>(width));
-    vector<vector<float> > k(numAtoms, vector<float>(width));
-    vector<vector<float> > v(numAtoms, vector<float>(3*width));
-    vector<vector<float> > o(numAtoms, vector<float>(3*width));
-    vector<vector<float> > u(numAtoms, vector<float>(9*width));
-    vector<vector<float> > s3(numAtoms, vector<float>(width, 0));
-    vector<vector<float> > s(numAtoms, vector<float>(3*width, 0));
-
     // Apply the various transforms.
 
     for (int atom = 0; atom < numAtoms; atom++) {
@@ -191,6 +195,19 @@ void CpuEquivariantTransformerLayer::compute(const EquivariantTransformerNeighbo
                     u[atom][i+3*width*k] += uw[i*width+j]*vec[atom*3*width+k*width+j];
             }
         }
+    }
+
+    // Prepare for the loop over interactions.
+
+    const CpuEquivariantTransformerNeighbors& cpuNeighbors = dynamic_cast<const CpuEquivariantTransformerNeighbors&>(neighbors);
+    int numRBF = rbfMus.size();
+    int headWidth = width/numHeads;
+    vector<float> rbf(numRBF), dk(width), dv(3*width), attention(numHeads);
+    for (int atom = 0; atom < numAtoms; atom++) {
+        for (int i = 0; i < width; i++)
+            s3[atom][i] = 0;
+        for (int i = 0; i < 3*width; i++)
+            s[atom][i] = 0;
     }
 
     // Loop over pairs of atoms from the neighbor list.
@@ -279,7 +296,7 @@ void CpuEquivariantTransformerLayer::backprop(const EquivariantTransformerNeighb
     memset(vecDeriv, 0, numAtoms*3*width*sizeof(float));
     memset(positionDeriv, 0, numAtoms*3*sizeof(float));
 
-    // Backpropagate through the symmetry functions.
+    // Backpropagate through the layer.
 
     const CpuEquivariantTransformerNeighbors& cpuNeighbors = dynamic_cast<const CpuEquivariantTransformerNeighbors&>(neighbors);
     if (neighbors.getPeriodic()) {
@@ -296,6 +313,175 @@ void CpuEquivariantTransformerLayer::backprop(const EquivariantTransformerNeighb
 template <bool PERIODIC, bool TRICLINIC>
 void CpuEquivariantTransformerLayer::backpropImpl(const CpuEquivariantTransformerNeighbors& neighbors, const float* positions, const float* periodicBoxVectors,
                       const float* x, const float* vec, const float* dxDeriv, const float* dvecDeriv, float* xDeriv, float* vecDeriv, float* positionDeriv) {
+    const CpuEquivariantTransformerNeighbors& cpuNeighbors = dynamic_cast<const CpuEquivariantTransformerNeighbors&>(neighbors);
+    int numRBF = rbfMus.size();
+    int headWidth = width/numHeads;
+
+    // Backprop through the final outputs.
+
+    vector<vector<float> > dEdO(numAtoms, vector<float>(3*width));
+    vector<vector<float> > dEdU(numAtoms, vector<float>(9*width));
+    vector<vector<float> > dEdS3(numAtoms, vector<float>(width, 0));
+    vector<vector<float> > dEdS(numAtoms, vector<float>(3*width));
+    for (int atom = 0; atom < numAtoms; atom++) {
+        for (int i = 0; i < width; i++) {
+            float vecDot = u[atom][i]*u[atom][i+width] + u[atom][i+3*width]*u[atom][i+4*width] + u[atom][i+6*width]*u[atom][i+7*width];
+            // dx[width*atom+i] = vecDot*o[atom][width+i] + o[atom][2*width+i];
+            float dEdDX = dxDeriv[width*atom+i];
+            dEdO[atom][width+i] = dEdDX*vecDot;
+            dEdO[atom][2*width+i] = dEdDX;
+            float dEdDot = dEdDX*o[atom][width+i];
+            dEdU[atom][i] = dEdDot*u[atom][i+width];
+            dEdU[atom][i+width] = dEdDot*u[atom][i];
+            dEdU[atom][i+3*width] = dEdDot*u[atom][i+4*width];
+            dEdU[atom][i+4*width] = dEdDot*u[atom][i+3*width];
+            dEdU[atom][i+6*width] = dEdDot*u[atom][i+7*width];
+            dEdU[atom][i+7*width] = dEdDot*u[atom][i+6*width];
+            for (int j = 0; j < 3; j++) {
+                // dvec[3*width*atom+width*j+i] = u[atom][width*(3*j+2)+i]*o[atom][i] + s[atom][width*j+i];
+                float dEdDVEC = dvecDeriv[3*width*atom+width*j+i];
+                dEdO[atom][i] = dEdDVEC*u[atom][width*(3*j+2)+i];
+                dEdU[atom][width*(3*j+2)+i] = dEdDVEC*o[atom][i];
+                dEdS[atom][width*j+i] = dEdDVEC;
+            }
+        }
+    }
+    for (int atom = 0; atom < numAtoms; atom++) {
+        for (int i = 0; i < 3*width; i++) {
+            for (int j = 0; j < width; j++)
+                // o[atom][i] += ow[i*width+j]*s3[atom][j];
+                dEdS3[atom][j] = dEdO[atom][i]*ow[i*width+j];
+        }
+    }
+
+    // Backprop through the list of interactions from the neighbor list.
+
+    vector<float> rbf(numRBF), dk(width), dv(3*width), attention(numHeads);
+    vector<float> dRBFdR(numRBF), dDKdR(width), dDVdR(3*width), dATTENTIONdR(numHeads);
+    for (int atom1 = 0; atom1 < numAtoms; atom1++) {
+        for (int neighborIndex = 0; neighborIndex < cpuNeighbors.getNeighbors()[atom1].size(); neighborIndex++) {
+            int atom2 = cpuNeighbors.getNeighbors()[atom1][neighborIndex];
+            float r = cpuNeighbors.getNeighborDistances()[atom1][neighborIndex];
+            float rInv = (r > 0 ? 1/r : 0);
+            float delta[3] = {(positions[3*atom2]-positions[3*atom1])*rInv,
+                              (positions[3*atom2+1]-positions[3*atom1+1])*rInv,
+                              (positions[3*atom2+2]-positions[3*atom1+2])*rInv};
+
+            // Compute the radial basis functions.
+
+            float alpha = 5.0f/neighbors.getCutoff();
+            float cutoffScale = cutoffFunction(r, neighbors.getCutoff());
+            for (int i = 0; i < numRBF; i++) {
+                float expTerm = exp(-alpha*r);
+                float expDiff = expTerm-rbfMus[i];
+                rbf[i] = cutoffScale*exp(-rbfBetas[i]*expDiff*expDiff);
+                dRBFdR[i] = rbf[i]*2*rbfBetas[i]*expDiff*expTerm*alpha;
+            }
+
+            // Compute the filters.
+
+            for (int i = 0; i < width; i++) {
+                dk[i] = dkb[i];
+                dDKdR[i] = 0;
+                for (int j = 0; j < numRBF; j++) {
+                    dk[i] += dkw[i*numRBF+j]*rbf[j];
+                    dDKdR[i] += dkw[i*numRBF+j]*dRBFdR[j];
+                }
+                float expTerm = exp(-dk[i]);
+                float scale = 1/(1+expTerm);
+                dk[i] = dk[i]*scale;
+                dDKdR[i] = (1 + dk[i]*expTerm)*scale*dDKdR[i];
+            }
+            for (int i = 0; i < 3*width; i++) {
+                dv[i] = dvb[i];
+                dDVdR[i] = 0;
+                for (int j = 0; j < numRBF; j++) {
+                    dv[i] += dvw[i*numRBF+j]*rbf[j];
+                    dDVdR[i] += dvw[i*numRBF+j]*dRBFdR[j];
+                }
+                float expTerm = exp(-dv[i]);
+                float scale = 1/(1+expTerm);
+                dv[i] = dv[i]*scale;
+                dDVdR[i] = (1 + dv[i]*expTerm)*scale*dDVdR[i];
+            }
+
+            // Compute the attention weights.
+
+            for (int head = 0; head < numHeads; head++) {
+                attention[head] = 0;
+                dATTENTIONdR[head] = 0;
+                for (int i = 0; i < headWidth; i++) {
+                    attention[head] += q[atom1][headWidth*head+i]*k[atom2][headWidth*head+i]*dk[headWidth*head+i];
+                    dATTENTIONdR[head] += q[atom1][headWidth*head+i]*k[atom2][headWidth*head+i]*dDKdR[headWidth*head+i];
+                }
+                float expTerm = exp(-attention[head]);
+                float scale = 1/(1+expTerm);
+                attention[head] = cutoffScale*attention[head]*scale;
+                dATTENTIONdR[head] = (cutoffScale + attention[head]*expTerm)*scale*dATTENTIONdR[head];
+            }
+
+            // Compute contributions to the output values.
+
+            float dEdR = 0;
+            for (int head = 0; head < numHeads; head++)
+                for (int i = 0; i < headWidth; i++) {
+                    // s3[atom1][headWidth*head+i] += v[atom2][3*head*headWidth+i]*dv[3*head*headWidth+i]*attention[head];
+                    dEdR += dEdS3[atom1][headWidth*head+i]*v[atom2][3*head*headWidth+i]*(dv[3*head*headWidth+i]*dATTENTIONdR[head] + dDVdR[3*head*headWidth+i]*attention[head]);
+                }
+            for (int j = 0; j < 3; j++) {
+                for (int head = 0; head < numHeads; head++)
+                    for (int i = 0; i < headWidth; i++) {
+                        float vec1 = v[atom2][(3*head+1)*headWidth+i]*dv[(3*head+1)*headWidth+i];
+                        float vec2 = v[atom2][(3*head+2)*headWidth+i]*dv[(3*head+2)*headWidth+i];
+                        float dVEC1dR = v[atom2][(3*head+1)*headWidth+i]*dDVdR[(3*head+1)*headWidth+i];
+                        float dVEC2dR = v[atom2][(3*head+2)*headWidth+i]*dDVdR[(3*head+2)*headWidth+i];
+                        // s[atom1][width*j+headWidth*head+i] += vec1*vec[3*width*atom2+width*j+headWidth*head+i] + vec2*delta[j];
+                        dEdR += dEdS[atom1][width*j+headWidth*head+i]*(dVEC1dR*vec[3*width*atom2+width*j+headWidth*head+i] + dVEC2dR*delta[j]);
+                        positionDeriv[atom1*3+j] -= dEdS[atom1][width*j+headWidth*head+i]*vec2;
+                        positionDeriv[atom2*3+j] += dEdS[atom1][width*j+headWidth*head+i]*vec2;
+                    }
+                float dVdX = dEdR*delta[j];
+                positionDeriv[atom1*3+j] -= dVdX;
+                positionDeriv[atom2*3+j] += dVdX;
+            }
+        }
+    }
+
+
+
+
+    // vector<vector<float> > q(numAtoms, vector<float>(width));
+    // vector<vector<float> > k(numAtoms, vector<float>(width));
+    // vector<vector<float> > v(numAtoms, vector<float>(3*width));
+
+    // // Apply the various transforms.
+
+    // for (int atom = 0; atom < numAtoms; atom++) {
+    //     for (int i = 0; i < width; i++) {
+    //         q[atom][i] = qb[i];
+    //         k[atom][i] = kb[i];
+    //         for (int j = 0; j < width; j++) {
+    //             q[atom][i] += qw[i*width+j]*x[atom*width+j];
+    //             k[atom][i] += kw[i*width+j]*x[atom*width+j];
+    //         }
+    //     }
+    //     for (int i = 0; i < 3*width; i++) {
+    //         v[atom][i] = vb[i];
+    //         for (int j = 0; j < width; j++)
+    //             v[atom][i] += vw[i*width+j]*x[atom*width+j];
+    //     }
+    //     for (int i = 0; i < 3*width; i++) {
+    //         for (int k = 0; k < 3; k++) {
+    //             u[atom][i+3*width*k] = ub[i];
+    //             for (int j = 0; j < width; j++)
+    //                 u[atom][i+3*width*k] += uw[i*width+j]*vec[atom*3*width+k*width+j];
+    //         }
+    //     }
+    // }
+
+
+
+
     // int numRBF = rbfMus.size();
     // vector<float> rbf(numRBF), dRBFdR(numRBF);
     // vector<float> y1(width), dY1dR(width);

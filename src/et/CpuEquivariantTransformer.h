@@ -135,6 +135,9 @@ public:
      * Given the derivatives of some function E (typically energy) with respect to the outputs, backpropagate them
      * to find the derivates of E with respect to the inputs and atom positions.
      *
+     * This method reuses values that were calculated in compute().  You must have already called compute() before
+     * calling this, and identical values must have been passed for all arguments that are shared between the two methods.
+     *
      * @param neighbors           a neighbor list for accelerating the calculation.  You must have already called
      *                            build() on the neighbor list with the same positions and box vectors.
      * @param positions           an array of shape [numAtoms][3] containing the positions of each atom
@@ -171,6 +174,7 @@ private:
      */
     float cutoffDeriv(float r, float cutoff);
     std::vector<float> rbfMus, rbfBetas, qw, qb, kw, kb, vw, vb, ow, ob, uw, ub, dkw, dkb, dvw, dvb;
+    std::vector<std::vector<float> > q, k, v, o, u, s3, s;
 };
 
 #endif
