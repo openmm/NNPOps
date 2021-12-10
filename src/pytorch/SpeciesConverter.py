@@ -15,10 +15,11 @@
 
 import torch
 from torch import Tensor
-from torchani.nn import SpeciesCoordinates, SpeciesConverter
 from typing import Optional, Tuple
 
 class TorchANISpeciesConverter(torch.nn.Module):
+
+    from torchani.nn import SpeciesConverter
 
     def __init__(self, converter: SpeciesConverter, atomicNumbers: Tensor) -> None:
 
@@ -32,8 +33,8 @@ class TorchANISpeciesConverter(torch.nn.Module):
 
     def forward(self, species_coordinates: Tuple[Tensor, Tensor],
                 cell: Optional[Tensor] = None,
-                pbc: Optional[Tensor] = None) -> SpeciesCoordinates:
+                pbc: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         _, coordinates = species_coordinates
 
-        return SpeciesCoordinates(self.species, coordinates)
+        return self.species, coordinates
