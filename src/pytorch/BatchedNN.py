@@ -58,15 +58,15 @@ class _BatchedNN(torch.nn.Module):
         for ilayer in [0, 2, 4, 6]:
             layers = [[model[species][ilayer] for species in species_list] for model in models]
             weights, biases = self.batchLinearLayers(layers)
-            self.register_parameter(f'layer{ilayer}_weights', weights)
-            self.register_parameter(f'layer{ilayer}_biases', biases)
+            self.register_buffer(f'layer{ilayer}_weights', weights)
+            self.register_buffer(f'layer{ilayer}_biases', biases)
 
         # Disable autograd for the parameters
         for parameter in self.parameters():
             parameter.requires_grad = False
 
     @staticmethod
-    def batchLinearLayers(layers: List[List[nn.Linear]]) -> Tuple[nn.Parameter, nn.Parameter]:
+    def batchLinearLayers(layers: List[List[nn.Linear]]) -> Tuple[Tensor, Tensor]:
 
         num_models = len(layers)
         num_atoms = len(layers[0])
@@ -85,7 +85,7 @@ class _BatchedNN(torch.nn.Module):
                 weights[0, iatom, imodel, :num_out, :num_in] = layer.weight
                 biases [0, iatom, imodel, :num_out,       0] = layer.bias
 
-        return nn.Parameter(weights), nn.Parameter(biases)
+        return weights, biases
 
     def _atomic_energies(self, species_aev: Tuple[Tensor, Tensor]) -> Tensor:
         return self._ensemble[0]._atomic_energies(species_aev)
