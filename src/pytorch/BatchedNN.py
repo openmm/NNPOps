@@ -25,7 +25,6 @@ import os
 import torch
 from torch import nn
 from torch import Tensor
-from torch.nn import ModuleList
 from torch.nn import functional as F
 from typing import List, NamedTuple, Tuple, Union
 
@@ -49,7 +48,7 @@ class _BatchedNN(torch.nn.Module):
         species_list = converter((atomicNumbers, torch.empty(0))).species[0].tolist()
 
         # Handle the case when the ensemble is just one model
-        self._ensemble = ensemble if isinstance(ensemble, ModuleList) else [ensemble]
+        self._ensemble = ensemble if isinstance(ensemble, torch.nn.ModuleList) else [ensemble]
 
         # Convert models to the list of linear layers
         models = [list(model.values()) for model in self._ensemble]
