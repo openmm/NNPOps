@@ -25,16 +25,21 @@ import os
 import torch
 from torch import nn
 from torch import Tensor
+from torch.nn import ModuleList
 from torch.nn import functional as F
-import torchani
-from torchani.nn import ANIModel, Ensemble, SpeciesConverter, SpeciesEnergies
-from typing import List, Optional, Tuple, Union
+from typing import List, NamedTuple, Tuple, Union
 
 torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 batchedLinear = torch.ops.NNPOpsBatchedNN.BatchedLinear
 
 
+class SpeciesEnergies(NamedTuple):
+    species: Tensor
+    energies: Tensor
+
 class _BatchedNN(torch.nn.Module):
+
+    from torchani.nn import ANIModel, Ensemble, SpeciesConverter # https://github.com/openmm/NNPOps/issues/44
 
     def __init__(self, converter: SpeciesConverter, ensemble: Union[ANIModel, Ensemble], atomicNumbers: Tensor):
 
@@ -44,7 +49,7 @@ class _BatchedNN(torch.nn.Module):
         species_list = converter((atomicNumbers, torch.empty(0))).species[0].tolist()
 
         # Handle the case when the ensemble is just one model
-        self._ensemble = [ensemble] if type(ensemble) == ANIModel else ensemble
+        self._ensemble = ensemble if isinstance(ensemble, ModuleList) else [ensemble]
 
         # Convert models to the list of linear layers
         models = [list(model.values()) for model in self._ensemble]
@@ -108,6 +113,8 @@ class _BatchedNN(torch.nn.Module):
 
 
 class TorchANIBatchedNN(torch.nn.ModuleList):
+
+    from torchani.nn import ANIModel, Ensemble, SpeciesConverter # https://github.com/openmm/NNPOps/issues/44
 
     def __init__(self, converter: SpeciesConverter, ensemble: Union[ANIModel, Ensemble], atomicNumbers: Tensor):
         super().__init__([_BatchedNN(converter, ensemble, atomicNumbers)])
