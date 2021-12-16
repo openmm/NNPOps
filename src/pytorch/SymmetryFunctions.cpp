@@ -38,6 +38,7 @@ namespace ANISymmetryFunctions {
 class Holder;
 using std::vector;
 using HolderPtr = torch::intrusive_ptr<Holder>;
+using torch::Device;
 using torch::Tensor;
 using torch::optional;
 using Context = torch::autograd::AutogradContext;
@@ -48,9 +49,9 @@ public:
 
     // Constructor for an uninitialized object
     // Note: this is need for serialization
-    Holder() : torch::CustomClassHolder() {};
+    Holder() : torch::CustomClassHolder(), device(torch::kCPU) {};
 
-    Holder(int64_t numSpecies_,
+    Holder(int64_t numSpecies,
            double Rcr,
            double Rca,
            const vector<double>& EtaR,
@@ -60,17 +61,22 @@ public:
            const vector<double>& ShfA,
            const vector<double>& ShfZ,
            const vector<int64_t>& atomSpecies_,
-           const Tensor& positions) : torch::CustomClassHolder() {
+           const Tensor& positions) :
+
+        torch::CustomClassHolder(),
+        numSpecies(numSpecies),
+        Rcr(Rcr), Rca(Rca),
+        EtaR(EtaR), ShfR(ShfR), EtaA(EtaA), Zeta(Zeta), ShfA(ShfA), ShfZ(ShfZ),
+        atomSpecies(atomSpecies_.begin(), atomSpecies_.end()),
+        device(torch::kCPU) {
 
         // Construct an uninitialized object
         // Note: this is needed for Python bindings
-        if (numSpecies_ == 0)
+        if (numSpecies == 0)
             return;
 
         tensorOptions = torch::TensorOptions().device(positions.device()); // Data type of float by default
-        int numAtoms = atomSpecies_.size();
-        int numSpecies = numSpecies_;
-        const vector<int> atomSpecies(atomSpecies_.begin(), atomSpecies_.end());
+        int numAtoms = atomSpecies.size();
 
         vector<RadialFunction> radialFunctions;
         for (const float eta: EtaR)
@@ -84,20 +90,20 @@ public:
                     for (const float thetas: ShfZ)
                         angularFunctions.push_back({eta, rs, zeta, thetas});
 
-        const torch::Device& device = tensorOptions.device();
+        device = tensorOptions.device();
         if (device.is_cpu())
-            symFunc = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
+            impl = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
         if (device.is_cuda()) {
             // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
             CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
-            symFunc = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
+            impl = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
         }
 
         radial  = torch::empty({numAtoms, numSpecies * (int)radialFunctions.size()}, tensorOptions);
         angular = torch::empty({numAtoms, numSpecies * (numSpecies + 1) / 2 * (int)angularFunctions.size()}, tensorOptions);
         positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
 
-        cudaSymFunc = dynamic_cast<CudaANISymmetryFunctions*>(symFunc.get());
+        cudaImpl = dynamic_cast<CudaANISymmetryFunctions*>(impl.get());
     };
 
     tensor_list forward(const Tensor& positions_, const optional<Tensor>& periodicBoxVectors_) {
@@ -111,12 +117,12 @@ public:
             float* periodicBoxVectorsPtr = periodicBoxVectors.data_ptr<float>();
         }
 
-        if (cudaSymFunc) {
-            const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
-            cudaSymFunc->setStream(stream.stream());
+        if (cudaImpl) {
+            const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(device.index());
+            cudaImpl->setStream(stream.stream());
         }
 
-        symFunc->computeSymmetryFunctions(positions.data_ptr<float>(), periodicBoxVectorsPtr, radial.data_ptr<float>(), angular.data_ptr<float>());
+        impl->computeSymmetryFunctions(positions.data_ptr<float>(), periodicBoxVectorsPtr, radial.data_ptr<float>(), angular.data_ptr<float>());
 
         return {radial, angular};
     };
@@ -126,27 +132,32 @@ public:
         const Tensor radialGrad = grads[0].clone();
         const Tensor angularGrad = grads[1].clone();
 
-        if (cudaSymFunc) {
-            const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
-            cudaSymFunc->setStream(stream.stream());
+        if (cudaImpl) {
+            const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(device.index());
+            cudaImpl->setStream(stream.stream());
         }
 
-        symFunc->backprop(radialGrad.data_ptr<float>(), angularGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
+        impl->backprop(radialGrad.data_ptr<float>(), angularGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
 
         return positionsGrad;
     };
 
     bool is_initialized() {
-        return bool(symFunc);
+        return bool(impl);
     };
 
 private:
+    int numSpecies;
+    double Rcr, Rca;
+    vector<double> EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ;
+    vector<int> atomSpecies;
     torch::TensorOptions tensorOptions;
-    std::shared_ptr<::ANISymmetryFunctions> symFunc;
+    Device device;
+    std::shared_ptr<::ANISymmetryFunctions> impl;
     Tensor radial;
     Tensor angular;
     Tensor positionsGrad;
-    CudaANISymmetryFunctions* cudaSymFunc;
+    CudaANISymmetryFunctions* cudaImpl;
 };
 
 class AutogradFunctions : public torch::autograd::Function<AutogradFunctions> {
