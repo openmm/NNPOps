@@ -36,13 +36,14 @@ namespace NNPOps {
 namespace ANISymmetryFunctions {
 
 class Holder;
-using std::vector;
+using Context = torch::autograd::AutogradContext;
 using HolderPtr = torch::intrusive_ptr<Holder>;
+using std::vector;
+using torch::autograd::tensor_list;
 using torch::Device;
 using torch::Tensor;
+using torch::TensorOptions;
 using torch::optional;
-using Context = torch::autograd::AutogradContext;
-using torch::autograd::tensor_list;
 
 class Holder : public torch::CustomClassHolder {
 public:
@@ -75,40 +76,45 @@ public:
         if (numSpecies == 0)
             return;
 
-        tensorOptions = torch::TensorOptions().device(positions.device()); // Data type of float by default
-        int numAtoms = atomSpecies.size();
-
-        vector<RadialFunction> radialFunctions;
-        for (const float eta: EtaR)
-            for (const float rs: ShfR)
-                radialFunctions.push_back({eta, rs});
-
-        vector<AngularFunction> angularFunctions;
-        for (const float eta: EtaA)
-            for (const float zeta: Zeta)
-                for (const float rs: ShfA)
-                    for (const float thetas: ShfZ)
-                        angularFunctions.push_back({eta, rs, zeta, thetas});
-
-        device = tensorOptions.device();
-        if (device.is_cpu())
-            impl = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
-        if (device.is_cuda()) {
-            // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
-            CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
-            impl = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
-        }
-
-        radial  = torch::empty({numAtoms, numSpecies * (int)radialFunctions.size()}, tensorOptions);
-        angular = torch::empty({numAtoms, numSpecies * (numSpecies + 1) / 2 * (int)angularFunctions.size()}, tensorOptions);
-        positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
-
-        cudaImpl = dynamic_cast<CudaANISymmetryFunctions*>(impl.get());
+        device = positions.device();
     };
 
     tensor_list forward(const Tensor& positions_, const optional<Tensor>& periodicBoxVectors_) {
 
+        const TensorOptions tensorOptions = TensorOptions().device(device); // Data type of float by default
+
         const Tensor positions = positions_.to(tensorOptions);
+
+        if (!impl) {
+
+            int numAtoms = atomSpecies.size();
+
+            vector<RadialFunction> radialFunctions;
+            for (const float eta: EtaR)
+                for (const float rs: ShfR)
+                    radialFunctions.push_back({eta, rs});
+
+            vector<AngularFunction> angularFunctions;
+            for (const float eta: EtaA)
+                for (const float zeta: Zeta)
+                    for (const float rs: ShfA)
+                        for (const float thetas: ShfZ)
+                            angularFunctions.push_back({eta, rs, zeta, thetas});
+
+            if (device.is_cpu())
+                impl = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
+            if (device.is_cuda()) {
+                // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
+                CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
+                impl = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
+            }
+
+            radial  = torch::empty({numAtoms, numSpecies * (int)radialFunctions.size()}, tensorOptions);
+            angular = torch::empty({numAtoms, numSpecies * (numSpecies + 1) / 2 * (int)angularFunctions.size()}, tensorOptions);
+            positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
+
+            cudaImpl = dynamic_cast<CudaANISymmetryFunctions*>(impl.get());
+        }
 
         Tensor periodicBoxVectors;
         float* periodicBoxVectorsPtr = nullptr;

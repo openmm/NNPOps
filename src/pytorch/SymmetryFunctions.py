@@ -126,7 +126,6 @@ class TorchANISymmetryFunctions(torch.nn.Module):
                                  self.EtaR, self.ShfR,
                                  self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
                                  species_, positions)
-            assert self.holder.is_initialized()
 
         radial, angular = operation(self.holder, positions[0], cell)
         features = torch.cat((radial, angular), dim=1).unsqueeze(0)
