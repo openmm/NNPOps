@@ -25,8 +25,6 @@ import os.path
 from typing import List, Optional, Tuple
 import torch
 from torch import Tensor
-import torchani
-from torchani.aev import SpeciesAEV
 
 torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 torch.classes.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
@@ -65,7 +63,10 @@ class TorchANISymmetryFunctions(torch.nn.Module):
 
         >>> print(energy, forces)
     """
-    def __init__(self, symmFunc: torchani.AEVComputer):
+
+    from torchani import AEVComputer # https://github.com/openmm/NNPOps/pull/38
+
+    def __init__(self, symmFunc: AEVComputer):
         """
         Arguments:
             symmFunc: the instance of torchani.AEVComputer (https://aiqm.github.io/torchani/api.html#torchani.AEVComputer)
@@ -90,7 +91,7 @@ class TorchANISymmetryFunctions(torch.nn.Module):
 
     def forward(self, speciesAndPositions: Tuple[Tensor, Tensor],
                       cell: Optional[Tensor] = None,
-                      pbc: Optional[Tensor] = None) -> SpeciesAEV:
+                      pbc: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
         """Compute the atomic environment vectors
 
         The signature of the method is identical to torchani.AEVComputer.forward (https://aiqm.github.io/torchani/api.html?highlight=speciesaev#torchani.AEVComputer.forward)
@@ -130,4 +131,4 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         radial, angular = operation(self.holder, positions[0], cell)
         features = torch.cat((radial, angular), dim=1).unsqueeze(0)
 
-        return SpeciesAEV(species, features)
+        return species, features
