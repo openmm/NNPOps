@@ -77,6 +77,7 @@ import torchani
 
 from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
 from NNPOps.BatchedNN import TorchANIBatchedNN
+from NNPOps.EnergyShifter import TorchANIEnergyShifter
 
 device = torch.device('cuda')
 
@@ -89,6 +90,7 @@ positions = torch.tensor(molecule.xyz * 10, dtype=torch.float32, requires_grad=T
 nnp = torchani.models.ANI2x(periodic_table_index=True).to(device)
 nnp.aev_computer = TorchANISymmetryFunctions(nnp.aev_computer).to(device)
 nnp.neural_networks = TorchANIBatchedNN(nnp.species_converter, nnp.neural_networks, species).to(device)
+nnp.energy_shifter = TorchANIEnergyShifter(nnp.species_converter, nnp.energy_shifter, species).to(device)
 
 # Compute energy and forces
 energy = nnp((species, positions)).energies
