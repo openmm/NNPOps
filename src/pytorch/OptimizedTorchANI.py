@@ -23,16 +23,16 @@
 
 import torch
 from torch import Tensor
-from torchani.models import BuiltinModel
-from torchani.utils import SpeciesEnergies
 from typing import Optional, Tuple
 
 from NNPOps.BatchedNN import TorchANIBatchedNN
-from NNPOps.EnergyShifter import TorchANIEnergyShifter
+from NNPOps.EnergyShifter import TorchANIEnergyShifter, SpeciesEnergies
 from NNPOps.SpeciesConverter import TorchANISpeciesConverter
 from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
 
 class OptimizedTorchANI(torch.nn.Module):
+
+    from torchani.models import BuiltinModel
 
     def __init__(self, model: BuiltinModel, atomicNumbers: Tensor) -> None:
 
