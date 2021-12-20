@@ -23,6 +23,7 @@
 
 #include <stdexcept>
 #include <torch/script.h>
+#include <torch/serialize/archive.h>
 #include <c10/cuda/CUDAStream.h>
 #include "CpuANISymmetryFunctions.h"
 #include "CudaANISymmetryFunctions.h"
@@ -38,20 +39,17 @@ namespace ANISymmetryFunctions {
 class Holder;
 using Context = torch::autograd::AutogradContext;
 using HolderPtr = torch::intrusive_ptr<Holder>;
+using std::string;
 using std::vector;
 using torch::autograd::tensor_list;
 using torch::Device;
+using torch::IValue;
+using torch::optional;
 using torch::Tensor;
 using torch::TensorOptions;
-using torch::optional;
 
 class Holder : public torch::CustomClassHolder {
 public:
-
-    // Constructor for an uninitialized object
-    // Note: this is need for serialization
-    Holder() : torch::CustomClassHolder(), device(torch::kCPU) {};
-
     Holder(int64_t numSpecies,
            double Rcr,
            double Rca,
@@ -61,20 +59,14 @@ public:
            const vector<double>& Zeta,
            const vector<double>& ShfA,
            const vector<double>& ShfZ,
-           const vector<int64_t>& atomSpecies_) :
+           const vector<int64_t>& atomSpecies) :
 
         torch::CustomClassHolder(),
         numSpecies(numSpecies),
         Rcr(Rcr), Rca(Rca),
         EtaR(EtaR), ShfR(ShfR), EtaA(EtaA), Zeta(Zeta), ShfA(ShfA), ShfZ(ShfZ),
-        atomSpecies(atomSpecies_.begin(), atomSpecies_.end()),
-        device(torch::kCPU) {
-
-        // Construct an uninitialized object
-        // Note: this is needed for Python bindings
-        if (numSpecies == 0)
-            return;
-    };
+        atomSpecies(atomSpecies),
+        device(torch::kCPU) {};
 
     tensor_list forward(const Tensor& positions_, const optional<Tensor>& periodicBoxVectors_) {
 
@@ -87,6 +79,7 @@ public:
         if (!impl) {
 
             int numAtoms = atomSpecies.size();
+            const vector<int> atomSpecies_(atomSpecies.begin(), atomSpecies.end()); // vector<int64_t> --> vector<int>
 
             vector<RadialFunction> radialFunctions;
             for (const float eta: EtaR)
@@ -101,11 +94,11 @@ public:
                             angularFunctions.push_back({eta, rs, zeta, thetas});
 
             if (device.is_cpu())
-                impl = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
+                impl = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies_, radialFunctions, angularFunctions, true);
             if (device.is_cuda()) {
                 // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
                 CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
-                impl = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
+                impl = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies_, radialFunctions, angularFunctions, true);
             }
 
             radial  = torch::empty({numAtoms, numSpecies * (int)radialFunctions.size()}, tensorOptions);
@@ -151,11 +144,54 @@ public:
         return bool(impl);
     };
 
+    static const string serialize(const HolderPtr& self) {
+
+        torch::serialize::OutputArchive archive;
+        archive.write("numSpecies", self->numSpecies);
+        archive.write("Rcr", self->Rcr);
+        archive.write("Rca", self->Rca);
+        archive.write("EtaR", self->EtaR);
+        archive.write("ShfR", self->ShfR);
+        archive.write("EtaA", self->EtaA);
+        archive.write("Zeta", self->Zeta);
+        archive.write("ShfA", self->ShfA);
+        archive.write("ShfZ", self->ShfZ);
+        archive.write("atomSpecies", self->atomSpecies);
+
+        std::stringstream stream;
+        archive.save_to(stream);
+        return stream.str();
+    };
+
+    static HolderPtr deserialize(const string& state) {
+
+        std::stringstream stream(state);
+        torch::serialize::InputArchive archive;
+        archive.load_from(stream, torch::kCPU);
+
+        IValue numSpecies, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, atomSpecies;
+        archive.read("numSpecies", numSpecies);
+        archive.read("Rcr", Rcr);
+        archive.read("Rca", Rca);
+        archive.read("EtaR", EtaR);
+        archive.read("ShfR", ShfR);
+        archive.read("EtaA", EtaA);
+        archive.read("Zeta", Zeta);
+        archive.read("ShfA", ShfA);
+        archive.read("ShfZ", ShfZ);
+        archive.read("atomSpecies", atomSpecies);
+
+        return HolderPtr::make(numSpecies.toInt(), Rcr.toDouble(), Rca.toDouble(),
+                               EtaR.toDoubleVector(), ShfR.toDoubleVector(), EtaA.toDoubleVector(),
+                               Zeta.toDoubleVector(), ShfA.toDoubleVector(), ShfZ.toDoubleVector(),
+                               atomSpecies.toIntVector());
+    }
+
 private:
     int numSpecies;
     double Rcr, Rca;
     vector<double> EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ;
-    vector<int> atomSpecies;
+    vector<int64_t> atomSpecies;
     torch::TensorOptions tensorOptions;
     Device device;
     std::shared_ptr<::ANISymmetryFunctions> impl;
@@ -210,12 +246,8 @@ TORCH_LIBRARY(NNPOpsANISymmetryFunctions, m) {
         .def("backward", &Holder::backward)
         .def("is_initialized", &Holder::is_initialized)
         .def_pickle(
-            // __getstate__
-            // Note: nothing is during serialization
-            [](const HolderPtr& self) -> int64_t { return 0; },
-            // __setstate__
-            // Note: a new uninitialized object is create during deserialization
-            [](int64_t state) -> HolderPtr { return HolderPtr::make(); }
+            [](const HolderPtr& self) -> const string { return Holder::serialize(self); }, // __getstate__
+            [](const string& state) -> HolderPtr { return Holder::deserialize(state); }    // __setstate__
         );
     m.def("operation", operation);
 }
