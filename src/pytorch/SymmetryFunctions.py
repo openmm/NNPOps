@@ -76,24 +76,21 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         """
         super().__init__()
 
-        self.num_species = symmFunc.num_species
-        self.Rcr = symmFunc.Rcr
-        self.Rca = symmFunc.Rca
-        self.EtaR = symmFunc.EtaR[:, 0].tolist()
-        self.ShfR = symmFunc.ShfR[0, :].tolist()
-        self.EtaA = symmFunc.EtaA[:, 0, 0, 0].tolist()
-        self.Zeta = symmFunc.Zeta[0, :, 0, 0].tolist()
-        self.ShfA = symmFunc.ShfA[0, 0, :, 0].tolist()
-        self.ShfZ = symmFunc.ShfZ[0, 0, 0, :].tolist()
+        num_species = symmFunc.num_species
+        Rcr = symmFunc.Rcr
+        Rca = symmFunc.Rca
+        EtaR = symmFunc.EtaR[:, 0].tolist()
+        ShfR = symmFunc.ShfR[0, :].tolist()
+        EtaA = symmFunc.EtaA[:, 0, 0, 0].tolist()
+        Zeta = symmFunc.Zeta[0, :, 0, 0].tolist()
+        ShfA = symmFunc.ShfA[0, 0, :, 0].tolist()
+        ShfZ = symmFunc.ShfZ[0, 0, 0, :].tolist()
 
         # Convert atomic numbers to species
-        self.species = converter((atomicNumbers, torch.empty(0))).species[0].tolist()
+        species = converter((atomicNumbers, torch.empty(0))).species[0].tolist()
 
         # Create a holder
-        self.holder = Holder(self.num_species, self.Rcr, self.Rca,
-                             self.EtaR, self.ShfR,
-                             self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
-                             self.species)
+        self.holder = Holder(num_species, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, species)
 
         self.triu_index = torch.tensor([0]) # A dummy variable to make TorchScript happy ;)
 
