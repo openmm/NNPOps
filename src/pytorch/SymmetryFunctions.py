@@ -84,7 +84,7 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         self.ShfZ = symmFunc.ShfZ[0, 0, 0, :].tolist()
 
         # Create an uninitialized holder
-        self.holder = Holder(0, 0, 0, [], [] , [] , [], [] , [], [], Tensor())
+        self.holder = Holder(0, 0, 0, [], [] , [] , [], [] , [], [])
         assert not self.holder.is_initialized()
 
         self.triu_index = torch.tensor([0]) # A dummy variable to make TorchScript happy ;)
@@ -125,7 +125,7 @@ class TorchANISymmetryFunctions(torch.nn.Module):
             self.holder = Holder(self.num_species, self.Rcr, self.Rca,
                                  self.EtaR, self.ShfR,
                                  self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
-                                 species_, positions)
+                                 species_)
 
         radial, angular = operation(self.holder, positions[0], cell)
         features = torch.cat((radial, angular), dim=1).unsqueeze(0)

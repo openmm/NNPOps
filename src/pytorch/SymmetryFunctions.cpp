@@ -61,8 +61,7 @@ public:
            const vector<double>& Zeta,
            const vector<double>& ShfA,
            const vector<double>& ShfZ,
-           const vector<int64_t>& atomSpecies_,
-           const Tensor& positions) :
+           const vector<int64_t>& atomSpecies_) :
 
         torch::CustomClassHolder(),
         numSpecies(numSpecies),
@@ -75,11 +74,11 @@ public:
         // Note: this is needed for Python bindings
         if (numSpecies == 0)
             return;
-
-        device = positions.device();
     };
 
     tensor_list forward(const Tensor& positions_, const optional<Tensor>& periodicBoxVectors_) {
+
+        device = positions_.device();
 
         const TensorOptions tensorOptions = TensorOptions().device(device); // Data type of float by default
 
@@ -133,7 +132,7 @@ public:
         return {radial, angular};
     };
 
-    Tensor backward(const tensor_list& grads) {
+    tensor_list backward(const tensor_list& grads) {
 
         const Tensor radialGrad = grads[0].clone();
         const Tensor angularGrad = grads[1].clone();
@@ -145,7 +144,7 @@ public:
 
         impl->backprop(radialGrad.data_ptr<float>(), angularGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
 
-        return positionsGrad;
+        return { Tensor(), positionsGrad, Tensor() }; // empty grad for the holder and periodicBoxVectors
     };
 
     bool is_initialized() {
@@ -182,12 +181,9 @@ public:
     static tensor_list backward(Context *ctx, const tensor_list& grads) {
 
         const auto holder = ctx->saved_data["holder"].toCustomClass<Holder>();
-        Tensor positionsGrad = holder->backward(grads);
         ctx->saved_data.erase("holder");
 
-        return { Tensor(),      // holder
-                 positionsGrad, // positions
-                 Tensor() };    // periodicBoxVectors
+        return holder->backward(grads);
     };
 };
 
@@ -200,17 +196,16 @@ tensor_list operation(const optional<HolderPtr>& holder,
 
 TORCH_LIBRARY(NNPOpsANISymmetryFunctions, m) {
     m.class_<Holder>("Holder")
-        .def(torch::init<int64_t,                // numSpecies
-                         double,                 // Rcr
-                         double,                 // Rca
-                         const vector<double>&,  // EtaR
-                         const vector<double>&,  // ShfR
-                         const vector<double>&,  // EtaA
-                         const vector<double>&,  // Zeta
-                         const vector<double>&,  // ShfA
-                         const vector<double>&,  // ShfZ
-                         const vector<int64_t>&, // atomSpecies
-                         const Tensor&>())       // positions
+        .def(torch::init<int64_t,                   // numSpecies
+                         double,                    // Rcr
+                         double,                    // Rca
+                         const vector<double>&,     // EtaR
+                         const vector<double>&,     // ShfR
+                         const vector<double>&,     // EtaA
+                         const vector<double>&,     // Zeta
+                         const vector<double>&,     // ShfA
+                         const vector<double>&,     // ShfZ
+                         const vector<int64_t>&>()) // atomSpecies
         .def("forward", &Holder::forward)
         .def("backward", &Holder::backward)
         .def("is_initialized", &Holder::is_initialized)
