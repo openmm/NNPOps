@@ -80,7 +80,7 @@ jobs:
         conda activate nnpops
         mkdir build && cd build
         cmake .. \
-              -DENABLE_CUDA=${{ 'ON' if matrix.enable_cuda else 'OFF' }} \
+              -DENABLE_CUDA=${{ matrix.enable_cuda }} \
               -DTorch_DIR=$CONDA_PREFIX/lib/python${{ matrix.python }}/site-packages/torch/share/cmake/Torch \
               -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
         make install
