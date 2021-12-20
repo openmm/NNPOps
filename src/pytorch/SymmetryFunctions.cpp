@@ -94,8 +94,9 @@ public:
             // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
             CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
             symFunc = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
+        }
 #endif
-        } else
+        else
             throw std::runtime_error("Unsupported device: " + device.str());
 
         radial  = torch::empty({numAtoms, numSpecies * (int)radialFunctions.size()}, tensorOptions);
