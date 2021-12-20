@@ -69,15 +69,38 @@ public:
         device(torch::kCPU)
     {};
 
-    tensor_list forward(const Tensor& positions_, const optional<Tensor>& periodicBoxVectors_) {
+    tensor_list forward(const Tensor& positions, const optional<Tensor>& cellOpt) {
 
-        device = positions_.device();
+        if (positions.scalar_type() != torch::kFloat32)
+            throw std::runtime_error("The type of \"positions\" has to be float32");
+        if (positions.dim() != 2)
+            throw std::runtime_error("The shape of \"positions\" has to have 2 dimensions");
+        if (positions.size(0) != atomSpecies.size())
+            throw std::runtime_error("The size of the 1nd dimension of \"positions\" has to be " + std::to_string(atomSpecies.size()));
+        if (positions.size(1) != 3)
+            throw std::runtime_error("The size of the 2nd dimension of \"positions\" has to be 3");
 
-        const TensorOptions tensorOptions = TensorOptions().device(device); // Data type of float by default
+        Tensor cell;
+        float* cellPtr = nullptr;
+        if (cellOpt) {
+            cell = *cellOpt;
 
-        const Tensor positions = positions_.to(tensorOptions);
+            if (cell.scalar_type() != torch::kFloat32)
+                throw std::runtime_error("The type of \"cell\" has to be float32");
+            if (cell.dim() != 2)
+                throw std::runtime_error("The shape of \"cell\" has to have 2 dimensions");
+            if (cell.size(0) != 3)
+                throw std::runtime_error("The size of the 1nd dimension of \"cell\" has to be 3");
+            if (cell.size(1) != 3)
+                throw std::runtime_error("\"cell\" has to be on the same device as \"positions\"");
+            if (cell.device() != positions.device())
+                throw std::runtime_error("The device of \"cell\" has changed");
+
+            cellPtr = cell.data_ptr<float>();
+        }
 
         if (!impl) {
+            device = positions.device();
 
             int numAtoms = atomSpecies.size();
             const vector<int> atomSpecies_(atomSpecies.begin(), atomSpecies.end()); // vector<int64_t> --> vector<int>
@@ -102,6 +125,7 @@ public:
                 impl = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies_, radialFunctions, angularFunctions, true);
             }
 
+            const TensorOptions tensorOptions = TensorOptions().device(device); // Data type of float by default
             radial  = torch::empty({numAtoms, numSpecies * (int)radialFunctions.size()}, tensorOptions);
             angular = torch::empty({numAtoms, numSpecies * (numSpecies + 1) / 2 * (int)angularFunctions.size()}, tensorOptions);
             positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
@@ -109,19 +133,15 @@ public:
             cudaImpl = dynamic_cast<CudaANISymmetryFunctions*>(impl.get());
         }
 
-        Tensor periodicBoxVectors;
-        float* periodicBoxVectorsPtr = nullptr;
-        if (periodicBoxVectors_) {
-            periodicBoxVectors = periodicBoxVectors_->to(tensorOptions);
-            float* periodicBoxVectorsPtr = periodicBoxVectors.data_ptr<float>();
-        }
+        if (positions.device() != device)
+            throw std::runtime_error("The device of \"positions\" has changed");
 
         if (cudaImpl) {
             const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(device.index());
             cudaImpl->setStream(stream.stream());
         }
 
-        impl->computeSymmetryFunctions(positions.data_ptr<float>(), periodicBoxVectorsPtr, radial.data_ptr<float>(), angular.data_ptr<float>());
+        impl->computeSymmetryFunctions(positions.data_ptr<float>(), cellPtr, radial.data_ptr<float>(), angular.data_ptr<float>());
 
         return {radial, angular};
     };

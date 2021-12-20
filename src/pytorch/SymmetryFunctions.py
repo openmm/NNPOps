@@ -76,7 +76,7 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         """
         super().__init__()
 
-        num_species = symmFunc.num_species
+        self.num_species = symmFunc.num_species
         Rcr = symmFunc.Rcr
         Rca = symmFunc.Rca
         EtaR = symmFunc.EtaR[:, 0].tolist()
@@ -90,11 +90,11 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         species = converter((atomicNumbers, torch.empty(0))).species[0].tolist()
 
         # Create a holder
-        self.holder = Holder(num_species, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, species)
+        self.holder = Holder(self.num_species, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, species)
 
         self.triu_index = torch.tensor([0]) # A dummy variable to make TorchScript happy ;)
 
-    def forward(self, speciesAndPositions: Tuple[Tensor, Tensor],
+    def forward(self, species_positions: Tuple[Tensor, Tensor],
                       cell: Optional[Tensor] = None,
                       pbc: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
         """Compute the atomic environment vectors
@@ -102,7 +102,7 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         The signature of the method is identical to torchani.AEVComputer.forward (https://aiqm.github.io/torchani/api.html?highlight=speciesaev#torchani.AEVComputer.forward)
 
         Arguments:
-            speciesAndPositions: atomic species and positions
+            species_positions: atomic species and positions
             cell: unitcell vectors
             pbc: periodic boundary conditions
 
@@ -110,14 +110,10 @@ class TorchANISymmetryFunctions(torch.nn.Module):
             SpeciesAEV: atomic species and environment vectors
 
         """
-        species, positions = speciesAndPositions
+        species, positions = species_positions
         if species.shape[0] != 1:
-            raise ValueError('Batched molecule computation is not supported')
-        if species.shape + (3,) != positions.shape:
-            raise ValueError('Inconsistent shapes of "species" and "positions"')
+            raise ValueError('Batched computation of molecules is not supported')
         if cell is not None:
-            if cell.shape != (3, 3):
-                raise ValueError('"cell" shape has to be [3, 3]')
             if pbc is None:
                 raise ValueError('"pbc" has to be defined')
             else:
