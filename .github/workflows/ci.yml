@@ -40,6 +40,7 @@ jobs:
       uses: Jimver/cuda-toolkit@v0.2.4
       with:
         cuda: ${{ matrix.cuda }}
+      if: ${{ matrix.enable_cuda }}
 
     - name: Install Miniconda
       uses: conda-incubator/setup-miniconda@v2
