@@ -54,7 +54,7 @@ class TorchANISymmetryFunctions(torch.nn.Module):
 
         # Construct ANI-2x and replace its native featurizer with NNPOps implementation
         >>> nnp = torchani.models.ANI2x(periodic_table_index=True).to(device)
-        >>> nnp.aev_computer = TorchANISymmetryFunctions(nnp.aev_computer)
+        >>> nnp.aev_computer = TorchANISymmetryFunctions(nnp.species_converter, nnp.aev_computer, species)
 
         # Compute energy
         >>> energy = nnp((species, positions)).energies
@@ -65,11 +65,14 @@ class TorchANISymmetryFunctions(torch.nn.Module):
     """
 
     from torchani import AEVComputer # https://github.com/openmm/NNPOps/pull/38
+    from torchani import SpeciesConverter # https://github.com/openmm/NNPOps/pull/38
 
-    def __init__(self, symmFunc: AEVComputer):
+    def __init__(self, converter: SpeciesConverter, symmFunc: AEVComputer, atomicNumbers: Tensor) -> None:
         """
         Arguments:
-            symmFunc: the instance of torchani.AEVComputer (https://aiqm.github.io/torchani/api.html#torchani.AEVComputer)
+            converter: an instance of torchani.nn.SpeciesConverter (https://aiqm.github.io/torchani/api.html#torchani.SpeciesConverter)
+            symmFunc: an instance of torchani.AEVComputer (https://aiqm.github.io/torchani/api.html#torchani.AEVComputer)
+            atomicNumbers: a tesnor of atomic numbers, e.g. [[6, 1, ,1 ,1, 1]]
         """
         super().__init__()
 
@@ -83,9 +86,14 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         self.ShfA = symmFunc.ShfA[0, 0, :, 0].tolist()
         self.ShfZ = symmFunc.ShfZ[0, 0, 0, :].tolist()
 
-        # Create an uninitialized holder
-        self.holder = Holder(0, 0, 0, [], [] , [] , [], [] , [], [])
-        assert not self.holder.is_initialized()
+        # Convert atomic numbers to species
+        self.species = converter((atomicNumbers, torch.empty(0))).species[0].tolist()
+
+        # Create a holder
+        self.holder = Holder(self.num_species, self.Rcr, self.Rca,
+                             self.EtaR, self.ShfR,
+                             self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
+                             self.species)
 
         self.triu_index = torch.tensor([0]) # A dummy variable to make TorchScript happy ;)
 
@@ -119,13 +127,6 @@ class TorchANISymmetryFunctions(torch.nn.Module):
                 pbc_: List[bool] = pbc.tolist() # Explicit type casting for TorchScript
                 if pbc_ != [True, True, True]:
                     raise ValueError('Only fully periodic systems are supported, i.e. pbc = [True, True, True]')
-
-        if not self.holder.is_initialized():
-            species_: List[int] = species[0].tolist() # Explicit type casting for TorchScript
-            self.holder = Holder(self.num_species, self.Rcr, self.Rca,
-                                 self.EtaR, self.ShfR,
-                                 self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
-                                 species_)
 
         radial, angular = operation(self.holder, positions[0], cell)
         features = torch.cat((radial, angular), dim=1).unsqueeze(0)

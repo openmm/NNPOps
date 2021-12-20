@@ -54,7 +54,7 @@ def test_compare_with_native(deviceString, molFile):
     energy_ref.backward()
     grad_ref = atomicPositions.grad.clone()
 
-    nnp.aev_computer = TorchANISymmetryFunctions(nnp.aev_computer)
+    nnp.aev_computer = TorchANISymmetryFunctions(nnp.species_converter, nnp.aev_computer, atomicNumbers)
     energy = nnp((atomicNumbers, atomicPositions)).energies
     atomicPositions.grad.zero_()
     energy.backward()
@@ -85,7 +85,7 @@ def test_model_serialization(deviceString, molFile):
     atomicPositions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
 
     nnp_ref = torchani.models.ANI2x(periodic_table_index=True).to(device)
-    nnp_ref.aev_computer = TorchANISymmetryFunctions(nnp_ref.aev_computer)
+    nnp_ref.aev_computer = TorchANISymmetryFunctions(nnp_ref.species_converter, nnp_ref.aev_computer, atomicNumbers)
 
     energy_ref = nnp_ref((atomicNumbers, atomicPositions)).energies
     energy_ref.backward()
@@ -122,7 +122,7 @@ def test_non_default_stream(molFile):
     atomicPositions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
 
     nnp = torchani.models.ANI2x(periodic_table_index=True).to(device)
-    nnp.aev_computer = TorchANISymmetryFunctions(nnp.aev_computer)
+    nnp.aev_computer = TorchANISymmetryFunctions(nnp.species_converter, nnp.aev_computer, atomicNumbers)
 
     energy_ref = nnp((atomicNumbers, atomicPositions)).energies
     energy_ref.backward()
