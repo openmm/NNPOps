@@ -23,12 +23,16 @@
 
 import torch
 from torch import Tensor
-from torchani.nn import SpeciesConverter
-from torchani.utils import EnergyShifter, SpeciesEnergies
-from typing import Optional, Tuple
+from typing import NamedTuple, Optional, Tuple
 
+class SpeciesEnergies(NamedTuple):
+    species: Tensor
+    energies: Tensor
 
 class TorchANIEnergyShifter(torch.nn.Module):
+
+    from torchani.nn import SpeciesConverter # https://github.com/openmm/NNPOps/issues/44
+    from torchani.utils import EnergyShifter # https://github.com/openmm/NNPOps/issues/44
 
     def __init__(self, converter: SpeciesConverter, shifter: EnergyShifter, atomicNumbers: Tensor) -> None:
 
