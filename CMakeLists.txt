@@ -35,8 +35,8 @@ endif(ENABLE_CUDA)
 set(TEST_PATHS src/ani/TestCpuANISymmetryFunctions.cpp
                src/schnet/TestCpuCFConv.cpp)
 if(ENABLE_CUDA)
-    list(APPEND TEST_PATHS src/ani/TestCudaANISymmetryFunctions.cpp
-                           src/schnet/TestCudaCFConv.cpp)
+    list(APPEND TEST_PATHS src/ani/TestCudaANISymmetryFunctions.cu
+                           src/schnet/TestCudaCFConv.cu)
 endif(ENABLE_CUDA)
 foreach(TEST_PATH ${TEST_PATHS})
     cmake_path(GET TEST_PATH STEM TEST_NAME)
