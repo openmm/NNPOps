@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 # Configure
 set(NAME NNPOps)
 project(${NAME} LANGUAGES CXX)
-option(ENABLE_CUDA "Enable biuilding CUDA components" OFF)
+option(ENABLE_CUDA "Enable biuilding CUDA components" ON)
 if(ENABLE_CUDA)
     enable_language(CUDA)
 endif(ENABLE_CUDA)
