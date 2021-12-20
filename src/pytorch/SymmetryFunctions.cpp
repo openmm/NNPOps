@@ -90,7 +90,7 @@ public:
         if (device.is_cpu())
             symFunc = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
 #ifdef ENABLE_CUDA
-        if (device.is_cuda()) {
+        else if (device.is_cuda()) {
             // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
             CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
             symFunc = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
