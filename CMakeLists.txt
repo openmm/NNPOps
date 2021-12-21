@@ -30,14 +30,16 @@ foreach(TEST_PATH ${TEST_PATHS})
 endforeach()
 
 add_test(TestBatchedNN         pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestBatchedNN.py)
-add_test(TestSpeciesConverter  pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestSpeciesConverter.py)
 add_test(TestEnergyShifter     pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestEnergyShifter.py)
+add_test(TestOptimizedTorchANI pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestOptimizedTorchANI.py)
+add_test(TestSpeciesConverter  pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestSpeciesConverter.py)
 add_test(TestSymmetryFunctions pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestSymmetryFunctions.py)
 
 install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
 install(FILES src/pytorch/__init__.py
               src/pytorch/BatchedNN.py
-              src/pytorch/SpeciesConverter.py
               src/pytorch/EnergyShifter.py
+              src/pytorch/OptimizedTorchANI.py
+              src/pytorch/SpeciesConverter.py
               src/pytorch/SymmetryFunctions.py
         DESTINATION ${Python_SITEARCH}/${NAME})
