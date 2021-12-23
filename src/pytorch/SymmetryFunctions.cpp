@@ -23,14 +23,16 @@
 
 #include <stdexcept>
 #include <torch/script.h>
-#include <c10/cuda/CUDAStream.h>
 #include "CpuANISymmetryFunctions.h"
+#ifdef ENABLE_CUDA
+#include <c10/cuda/CUDAStream.h>
 #include "CudaANISymmetryFunctions.h"
 
 #define CHECK_CUDA_RESULT(result) \
     if (result != cudaSuccess) { \
         throw std::runtime_error(std::string("Encountered error ")+cudaGetErrorName(result)+" at "+__FILE__+":"+std::to_string(__LINE__));\
     }
+#endif
 
 namespace NNPOps {
 namespace ANISymmetryFunctions {
@@ -87,17 +89,23 @@ public:
         const torch::Device& device = tensorOptions.device();
         if (device.is_cpu())
             symFunc = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
-        if (device.is_cuda()) {
+#ifdef ENABLE_CUDA
+        else if (device.is_cuda()) {
             // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
             CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
             symFunc = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies, radialFunctions, angularFunctions, true);
         }
+#endif
+        else
+            throw std::runtime_error("Unsupported device: " + device.str());
 
         radial  = torch::empty({numAtoms, numSpecies * (int)radialFunctions.size()}, tensorOptions);
         angular = torch::empty({numAtoms, numSpecies * (numSpecies + 1) / 2 * (int)angularFunctions.size()}, tensorOptions);
         positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
 
+#ifdef ENABLE_CUDA
         cudaSymFunc = dynamic_cast<CudaANISymmetryFunctions*>(symFunc.get());
+#endif
     };
 
     tensor_list forward(const Tensor& positions_, const optional<Tensor>& periodicBoxVectors_) {
@@ -111,10 +119,12 @@ public:
             float* periodicBoxVectorsPtr = periodicBoxVectors.data_ptr<float>();
         }
 
+#ifdef ENABLE_CUDA
         if (cudaSymFunc) {
             const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
             cudaSymFunc->setStream(stream.stream());
         }
+#endif
 
         symFunc->computeSymmetryFunctions(positions.data_ptr<float>(), periodicBoxVectorsPtr, radial.data_ptr<float>(), angular.data_ptr<float>());
 
@@ -126,10 +136,12 @@ public:
         const Tensor radialGrad = grads[0].clone();
         const Tensor angularGrad = grads[1].clone();
 
+#ifdef ENABLE_CUDA
         if (cudaSymFunc) {
             const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(tensorOptions.device().index());
             cudaSymFunc->setStream(stream.stream());
         }
+#endif
 
         symFunc->backprop(radialGrad.data_ptr<float>(), angularGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
 
@@ -146,7 +158,9 @@ private:
     Tensor radial;
     Tensor angular;
     Tensor positionsGrad;
+#ifdef ENABLE_CUDA
     CudaANISymmetryFunctions* cudaSymFunc;
+#endif
 };
 
 class AutogradFunctions : public torch::autograd::Function<AutogradFunctions> {
