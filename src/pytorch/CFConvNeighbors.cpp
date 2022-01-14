@@ -20,13 +20,14 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include "CFConvNeighbors.h"
+#include "CpuCFConv.h"
 
+#ifdef ENABLE_CUDA
 #include <stdexcept>
 #include <cuda_runtime.h>
 // #include <c10/cuda/CUDAStream.h>
-#include "CpuCFConv.h"
 #include "CudaCFConv.h"
-#include "CFConvNeighbors.h"
 
 #define int2 int[2]
 #define float3 float[3]
@@ -35,6 +36,7 @@
     if (result != cudaSuccess) { \
         throw std::runtime_error(std::string("Encountered error ")+cudaGetErrorName(result)+" at "+__FILE__+":"+std::to_string(__LINE__));\
     }
+#endif
 
 namespace NNPOps {
 namespace CFConvNeighbors {
@@ -57,10 +59,12 @@ void Holder::build(const Tensor& positions) {
         device = positions.device();
         if (device.is_cpu()) {
             impl = std::make_shared<::CpuCFConvNeighbors>(numAtoms, cutoff, false);
+#ifdef ENABLE_CUDA
         } else if (device.is_cuda()) {
             // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
             CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
             impl = std::make_shared<::CudaCFConvNeighbors>(numAtoms, cutoff, false);
+#endif
         } else
             throw std::runtime_error("Unsupported device");
     }

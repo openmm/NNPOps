@@ -20,20 +20,22 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
-#include <stdexcept>
-#include <cuda_runtime.h>
 #include <torch/script.h>
 #include <torch/serialize/archive.h>
-// #include <c10/cuda/CUDAStream.h>
 #include "CpuCFConv.h"
-#include "CudaCFConv.h"
 #include "CFConvNeighbors.h"
+
+#ifdef ENABLE_CUDA
+#include <stdexcept>
+#include <cuda_runtime.h>
+// #include <c10/cuda/CUDAStream.h>
+#include "CudaCFConv.h"
 
 #define CHECK_CUDA_RESULT(result) \
     if (result != cudaSuccess) { \
         throw std::runtime_error(std::string("Encountered error ")+cudaGetErrorName(result)+" at "+__FILE__+":"+std::to_string(__LINE__));\
     }
+#endif
 
 namespace NNPOps {
 namespace CFConv {
@@ -134,11 +136,13 @@ public:
             if (device.is_cpu()) {
                 impl = std::make_shared<::CpuCFConv>(numAtoms, numFilters, numGaussians, cutoff, false, gaussianWidth, activation_,
                                                      weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
+#ifdef ENABLE_CUDA
             } else if (device.is_cuda()) {
                 // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
                 CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
                 impl = std::make_shared<::CudaCFConv>(numAtoms, numFilters, numGaussians, cutoff, false, gaussianWidth, activation_,
                                                       weights1.data_ptr<float>(), biases1.data_ptr<float>(), weights2.data_ptr<float>(), biases2.data_ptr<float>());
+#endif
             } else
                 throw std::runtime_error("Unsupported device");
 
