@@ -44,8 +44,10 @@ using HolderPtr = torch::intrusive_ptr<Holder>;
 using std::string;
 using std::vector;
 using torch::autograd::tensor_list;
+#ifdef ENABLE_CUDA
 using torch::cuda::CUDAStream;
 using torch::cuda::getCurrentCUDAStream;
+#endif
 using torch::Device;
 using torch::IValue;
 using torch::optional;
