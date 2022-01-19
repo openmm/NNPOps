@@ -44,6 +44,8 @@ using HolderPtr = torch::intrusive_ptr<Holder>;
 using std::string;
 using std::vector;
 using torch::autograd::tensor_list;
+using torch::cuda::CUDAStream;
+using torch::cuda::getCurrentCUDAStream;
 using torch::Device;
 using torch::IValue;
 using torch::optional;
@@ -145,9 +147,9 @@ public:
 
 #ifdef ENABLE_CUDA
         if (cudaImpl) {
-            const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(device.index());
+            const CUDAStream stream = getCurrentCUDAStream(device.index());
             cudaImpl->setStream(stream.stream());
-        }    
+        }
 #endif
 
         impl->computeSymmetryFunctions(positions.data_ptr<float>(), cellPtr, radial.data_ptr<float>(), angular.data_ptr<float>());
@@ -162,7 +164,7 @@ public:
       
 #ifdef ENABLE_CUDA
         if (cudaImpl) {
-            const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(device.index());
+            const CUDAStream stream = getCurrentCUDAStream(device.index());
             cudaImpl->setStream(stream.stream());
         }
 #endif
