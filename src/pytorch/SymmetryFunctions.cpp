@@ -172,10 +172,6 @@ public:
         return { Tensor(), positionsGrad, Tensor() }; // empty grad for the holder and periodicBoxVectors
     };
 
-    bool is_initialized() {
-        return bool(impl);
-    };
-
     static const string serialize(const HolderPtr& self) {
 
         torch::serialize::OutputArchive archive;
@@ -278,7 +274,6 @@ TORCH_LIBRARY(NNPOpsANISymmetryFunctions, m) {
                          const vector<int64_t>&>()) // atomSpecies
         .def("forward", &Holder::forward)
         .def("backward", &Holder::backward)
-        .def("is_initialized", &Holder::is_initialized)
         .def_pickle(
             [](const HolderPtr& self) -> const string { return Holder::serialize(self); }, // __getstate__
             [](const string& state) -> HolderPtr { return Holder::deserialize(state); }    // __setstate__
