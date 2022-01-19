@@ -31,6 +31,45 @@ torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch
 torch.classes.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 
 class CFConv(torch.nn.Module):
+    """
+    Optimized continious-filter convolution layer (CFConv)
+
+    CFConv is used in SchNet (https://arxiv.org/abs/1706.08566).
+
+    Example::
+
+        import torch
+        from NNPOps.CFConvNeighbors import CFConvNeighbors
+        from NNPOps.CFConv import CFConv
+
+        # Set parameters
+        numAtoms = 7
+        numFilters = 5
+        numGaussians = 3
+        cutoff = 5.0
+        gaussianWidth = 1.0
+        activation = 'ssp'
+        weights1 = torch.rand(numGaussians, numFilters)
+        biases1 = torch.rand(numFilters)
+        weights2 = torch.rand(numFilters, numFilters)
+        biases2 = torch.rand(numFilters)
+
+        # Generate random input
+        positions = (10*torch.rand(numAtoms, 3) - 5).detach()
+        positions.requires_grad = True
+        input = torch.rand(numAtoms, numFilters)
+
+        # Create objects
+        neighbors = CFConvNeighbors(cutoff)
+        conv = CFConv(gaussianWidth, activation, weights1, biases1, weights2, biases2)
+
+        # Run forward and backward passes
+        neighbors.build(positions)
+        output = conv(neighbors, positions, input)
+        total = torch.sum(output)
+        total.backward()
+        grad = positions.grad
+    """
 
     Holder = torch.classes.NNPOpsCFConv.Holder
     operation = torch.ops.NNPOpsCFConv.operation

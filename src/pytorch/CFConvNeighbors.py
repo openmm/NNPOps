@@ -28,6 +28,13 @@ from torch import Tensor
 torch.classes.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 
 class CFConvNeighbors(torch.nn.Module):
+    """
+    Optimized nearest-neighbor implementation for the continious-filter convolution (CFConf)
+
+    CFConv is used in SchNet (https://arxiv.org/abs/1706.08566).
+
+    See NNPOps.CFConv for more details.
+    """
 
     def __init__(self, cutoff: float) -> None:
 
