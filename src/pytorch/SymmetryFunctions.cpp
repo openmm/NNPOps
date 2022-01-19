@@ -21,17 +21,19 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
 #include <torch/script.h>
 #include <torch/serialize/archive.h>
-#include <c10/cuda/CUDAStream.h>
 #include "CpuANISymmetryFunctions.h"
+#ifdef ENABLE_CUDA
+#include <stdexcept>
+#include <c10/cuda/CUDAStream.h>
 #include "CudaANISymmetryFunctions.h"
 
 #define CHECK_CUDA_RESULT(result) \
     if (result != cudaSuccess) { \
         throw std::runtime_error(std::string("Encountered error ")+cudaGetErrorName(result)+" at "+__FILE__+":"+std::to_string(__LINE__));\
     }
+#endif
 
 namespace NNPOps {
 namespace ANISymmetryFunctions {
@@ -117,29 +119,36 @@ public:
                         for (const float thetas: ShfZ)
                             angularFunctions.push_back({eta, rs, zeta, thetas});
 
-            if (device.is_cpu())
+            if (device.is_cpu()) {
                 impl = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies_, radialFunctions, angularFunctions, true);
-            if (device.is_cuda()) {
+#ifdef ENABLE_CUDA
+            } else if (device.is_cuda()) {
                 // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
                 CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
                 impl = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies_, radialFunctions, angularFunctions, true);
-            }
+#endif
+            } else
+                throw std::runtime_error("Unsupported device: " + device.str());
 
             const TensorOptions tensorOptions = TensorOptions().device(device); // Data type of float by default
             radial  = torch::empty({numAtoms, numSpecies * (int)radialFunctions.size()}, tensorOptions);
             angular = torch::empty({numAtoms, numSpecies * (numSpecies + 1) / 2 * (int)angularFunctions.size()}, tensorOptions);
             positionsGrad = torch::empty({numAtoms, 3}, tensorOptions);
 
+#ifdef ENABLE_CUDA
             cudaImpl = dynamic_cast<CudaANISymmetryFunctions*>(impl.get());
+#endif
         }
 
         if (positions.device() != device)
             throw std::runtime_error("The device of \"positions\" has changed");
 
+#ifdef ENABLE_CUDA
         if (cudaImpl) {
             const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(device.index());
             cudaImpl->setStream(stream.stream());
-        }
+        }    
+#endif
 
         impl->computeSymmetryFunctions(positions.data_ptr<float>(), cellPtr, radial.data_ptr<float>(), angular.data_ptr<float>());
 
@@ -150,11 +159,13 @@ public:
 
         const Tensor radialGrad = grads[0].clone();
         const Tensor angularGrad = grads[1].clone();
-
+      
+#ifdef ENABLE_CUDA
         if (cudaImpl) {
             const torch::cuda::CUDAStream stream = torch::cuda::getCurrentCUDAStream(device.index());
             cudaImpl->setStream(stream.stream());
         }
+#endif
 
         impl->backprop(radialGrad.data_ptr<float>(), angularGrad.data_ptr<float>(), positionsGrad.data_ptr<float>());
 
@@ -219,7 +230,9 @@ private:
     Tensor radial;
     Tensor angular;
     Tensor positionsGrad;
+#ifdef ENABLE_CUDA
     CudaANISymmetryFunctions* cudaImpl;
+#endif
 };
 
 class AutogradFunctions : public torch::autograd::Function<AutogradFunctions> {
