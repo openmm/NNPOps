@@ -70,7 +70,6 @@ def test_model_serialization(deviceString):
 
     for _ in range(3):
         neighbors_ref.build(positions)
-        # TODO test the result
 
     with tempfile.NamedTemporaryFile() as fd:
 
@@ -79,4 +78,3 @@ def test_model_serialization(deviceString):
 
         for _ in range(3):
             neighbors.build(positions)
-            # TODO test the result
