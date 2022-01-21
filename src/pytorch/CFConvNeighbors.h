@@ -20,12 +20,11 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#ifndef NNPOPS_CFCONVNEIGHBORS
+#define NNPOPS_CFCONVNEIGHBORS
 
 #include <torch/script.h>
 #include "CFConv.h"
-
-#ifndef NNPOPS_CFCONVNEIGHBORS
-#define NNPOPS_CFCONVNEIGHBORS
 
 namespace NNPOps {
 namespace CFConvNeighbors {
