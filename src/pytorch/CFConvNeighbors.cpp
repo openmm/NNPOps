@@ -42,6 +42,7 @@ namespace NNPOps {
 namespace CFConvNeighbors {
 
 using HolderPtr = torch::intrusive_ptr<Holder>;
+using torch::Tensor;
 
 Holder::Holder(double cutoff) : torch::CustomClassHolder(), cutoff(cutoff), numAtoms(0), device(torch::kCPU), impl(nullptr) {}
 
