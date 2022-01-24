@@ -72,7 +72,8 @@ public:
         Rcr(Rcr), Rca(Rca),
         EtaR(EtaR), ShfR(ShfR), EtaA(EtaA), Zeta(Zeta), ShfA(ShfA), ShfZ(ShfZ),
         atomSpecies(atomSpecies),
-        device(torch::kCPU)
+        device(torch::kCPU),
+        impl(nullptr)
     {};
 
     tensor_list forward(const Tensor& positions, const optional<Tensor>& cellOpt) {
