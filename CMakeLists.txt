@@ -18,6 +18,8 @@ enable_testing()
 set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
               src/ani/CudaANISymmetryFunctions.cu
               src/pytorch/BatchedNN.cpp
+              src/pytorch/CFConv.cpp
+              src/pytorch/CFConvNeighbors.cpp
               src/pytorch/SymmetryFunctions.cpp
               src/schnet/CpuCFConv.cpp
               src/schnet/CudaCFConv.cu)
@@ -47,6 +49,8 @@ endforeach()
 
 # Tests of PyTorch wrappers
 add_test(TestBatchedNN         pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestBatchedNN.py)
+add_test(TestCFConv            pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestCFConv.py)
+add_test(TestCFConvNeighbors   pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestCFConvNeighbors.py)
 add_test(TestEnergyShifter     pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestEnergyShifter.py)
 add_test(TestOptimizedTorchANI pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestOptimizedTorchANI.py)
 add_test(TestSpeciesConverter  pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestSpeciesConverter.py)
@@ -56,6 +60,8 @@ add_test(TestSymmetryFunctions pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestSym
 install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
 install(FILES src/pytorch/__init__.py
               src/pytorch/BatchedNN.py
+              src/pytorch/CFConv.py
+              src/pytorch/CFConvNeighbors.py
               src/pytorch/EnergyShifter.py
               src/pytorch/OptimizedTorchANI.py
               src/pytorch/SpeciesConverter.py
