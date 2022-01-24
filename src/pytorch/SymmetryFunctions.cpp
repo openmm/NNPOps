@@ -225,7 +225,7 @@ private:
     double Rcr, Rca;
     vector<double> EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ;
     vector<int64_t> atomSpecies;
-    torch::TensorOptions tensorOptions;
+    TensorOptions tensorOptions;
     Device device;
     std::shared_ptr<::ANISymmetryFunctions> impl;
     Tensor radial;
