@@ -29,19 +29,16 @@
 namespace NNPOps {
 namespace CFConvNeighbors {
 
-using torch::Device;
-using torch::Tensor;
-
 class Holder : public torch::CustomClassHolder {
 public:
     Holder(double cutoff);
-    void build(const Tensor& positions);
+    void build(const torch::Tensor& positions);
     double getCutoff() const { return cutoff; }
     const ::CFConvNeighbors& getImpl() const { return *impl.get(); }
 private:
     double cutoff;
     int numAtoms;
-    Device device;
+    torch::Device device;
     std::shared_ptr<::CFConvNeighbors> impl;
 };
 
