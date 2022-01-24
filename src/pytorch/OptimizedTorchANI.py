@@ -40,7 +40,7 @@ class OptimizedTorchANI(torch.nn.Module):
 
         # Optimize the components of an ANI model
         self.species_converter = TorchANISpeciesConverter(model.species_converter, atomicNumbers)
-        self.aev_computer = TorchANISymmetryFunctions(model.aev_computer)
+        self.aev_computer = TorchANISymmetryFunctions(model.species_converter, model.aev_computer, atomicNumbers)
         self.neural_networks = TorchANIBatchedNN(model.species_converter, model.neural_networks, atomicNumbers)
         self.energy_shifter = TorchANIEnergyShifter(model.species_converter, model.energy_shifter, atomicNumbers)
 

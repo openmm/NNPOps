@@ -54,7 +54,7 @@ class TorchANISymmetryFunctions(torch.nn.Module):
 
         # Construct ANI-2x and replace its native featurizer with NNPOps implementation
         >>> nnp = torchani.models.ANI2x(periodic_table_index=True).to(device)
-        >>> nnp.aev_computer = TorchANISymmetryFunctions(nnp.aev_computer)
+        >>> nnp.aev_computer = TorchANISymmetryFunctions(nnp.species_converter, nnp.aev_computer, species)
 
         # Compute energy
         >>> energy = nnp((species, positions)).energies
@@ -65,31 +65,36 @@ class TorchANISymmetryFunctions(torch.nn.Module):
     """
 
     from torchani import AEVComputer # https://github.com/openmm/NNPOps/pull/38
+    from torchani import SpeciesConverter # https://github.com/openmm/NNPOps/pull/38
 
-    def __init__(self, symmFunc: AEVComputer):
+    def __init__(self, converter: SpeciesConverter, symmFunc: AEVComputer, atomicNumbers: Tensor) -> None:
         """
         Arguments:
-            symmFunc: the instance of torchani.AEVComputer (https://aiqm.github.io/torchani/api.html#torchani.AEVComputer)
+            converter: an instance of torchani.nn.SpeciesConverter (https://aiqm.github.io/torchani/api.html#torchani.SpeciesConverter)
+            symmFunc: an instance of torchani.AEVComputer (https://aiqm.github.io/torchani/api.html#torchani.AEVComputer)
+            atomicNumbers: a tesnor of atomic numbers, e.g. [[6, 1, ,1 ,1, 1]]
         """
         super().__init__()
 
         self.num_species = symmFunc.num_species
-        self.Rcr = symmFunc.Rcr
-        self.Rca = symmFunc.Rca
-        self.EtaR = symmFunc.EtaR[:, 0].tolist()
-        self.ShfR = symmFunc.ShfR[0, :].tolist()
-        self.EtaA = symmFunc.EtaA[:, 0, 0, 0].tolist()
-        self.Zeta = symmFunc.Zeta[0, :, 0, 0].tolist()
-        self.ShfA = symmFunc.ShfA[0, 0, :, 0].tolist()
-        self.ShfZ = symmFunc.ShfZ[0, 0, 0, :].tolist()
+        Rcr = symmFunc.Rcr
+        Rca = symmFunc.Rca
+        EtaR = symmFunc.EtaR[:, 0].tolist()
+        ShfR = symmFunc.ShfR[0, :].tolist()
+        EtaA = symmFunc.EtaA[:, 0, 0, 0].tolist()
+        Zeta = symmFunc.Zeta[0, :, 0, 0].tolist()
+        ShfA = symmFunc.ShfA[0, 0, :, 0].tolist()
+        ShfZ = symmFunc.ShfZ[0, 0, 0, :].tolist()
 
-        # Create an uninitialized holder
-        self.holder = Holder(0, 0, 0, [], [] , [] , [], [] , [], [], Tensor())
-        assert not self.holder.is_initialized()
+        # Convert atomic numbers to species
+        species = converter((atomicNumbers, torch.empty(0))).species[0].tolist()
+
+        # Create a holder
+        self.holder = Holder(self.num_species, Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, species)
 
         self.triu_index = torch.tensor([0]) # A dummy variable to make TorchScript happy ;)
 
-    def forward(self, speciesAndPositions: Tuple[Tensor, Tensor],
+    def forward(self, species_positions: Tuple[Tensor, Tensor],
                       cell: Optional[Tensor] = None,
                       pbc: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
         """Compute the atomic environment vectors
@@ -97,7 +102,7 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         The signature of the method is identical to torchani.AEVComputer.forward (https://aiqm.github.io/torchani/api.html?highlight=speciesaev#torchani.AEVComputer.forward)
 
         Arguments:
-            speciesAndPositions: atomic species and positions
+            species_positions: atomic species and positions
             cell: unitcell vectors
             pbc: periodic boundary conditions
 
@@ -105,28 +110,16 @@ class TorchANISymmetryFunctions(torch.nn.Module):
             SpeciesAEV: atomic species and environment vectors
 
         """
-        species, positions = speciesAndPositions
+        species, positions = species_positions
         if species.shape[0] != 1:
-            raise ValueError('Batched molecule computation is not supported')
-        if species.shape + (3,) != positions.shape:
-            raise ValueError('Inconsistent shapes of "species" and "positions"')
+            raise ValueError('Batched computation of molecules is not supported')
         if cell is not None:
-            if cell.shape != (3, 3):
-                raise ValueError('"cell" shape has to be [3, 3]')
             if pbc is None:
                 raise ValueError('"pbc" has to be defined')
             else:
                 pbc_: List[bool] = pbc.tolist() # Explicit type casting for TorchScript
                 if pbc_ != [True, True, True]:
                     raise ValueError('Only fully periodic systems are supported, i.e. pbc = [True, True, True]')
-
-        if not self.holder.is_initialized():
-            species_: List[int] = species[0].tolist() # Explicit type casting for TorchScript
-            self.holder = Holder(self.num_species, self.Rcr, self.Rca,
-                                 self.EtaR, self.ShfR,
-                                 self.EtaA, self.Zeta, self.ShfA, self.ShfZ,
-                                 species_, positions)
-            assert self.holder.is_initialized()
 
         radial, angular = operation(self.holder, positions[0], cell)
         features = torch.cat((radial, angular), dim=1).unsqueeze(0)
