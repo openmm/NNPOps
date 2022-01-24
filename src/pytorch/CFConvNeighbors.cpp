@@ -43,7 +43,7 @@ namespace CFConvNeighbors {
 
 using HolderPtr = torch::intrusive_ptr<Holder>;
 
-Holder::Holder(double cutoff) : torch::CustomClassHolder(), cutoff(cutoff), numAtoms(0), device(torch::kCPU), impl() {}
+Holder::Holder(double cutoff) : torch::CustomClassHolder(), cutoff(cutoff), numAtoms(0), device(torch::kCPU), impl(nullptr) {}
 
 void Holder::build(const Tensor& positions) {
 

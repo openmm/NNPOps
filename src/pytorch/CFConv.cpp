@@ -71,7 +71,8 @@ public:
         biases1(biases1.to(torch::kFloat32).cpu().clone()),
         weights2(weights2.to(torch::kFloat32).cpu().clone()),
         biases2(biases2.to(torch::kFloat32).cpu().clone()),
-        device(torch::kCPU)
+        device(torch::kCPU),
+        impl(nullptr)
     {};
 
     Tensor forward(const IValue& neighbors_, const Tensor& positions, const Tensor& input) {
