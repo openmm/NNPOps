@@ -24,15 +24,10 @@
 #include <torch/script.h>
 #include <torch/serialize/archive.h>
 #include "CpuANISymmetryFunctions.h"
+#include "cuda_utils.h"
 #ifdef ENABLE_CUDA
-#include <stdexcept>
 #include <c10/cuda/CUDAStream.h>
 #include "CudaANISymmetryFunctions.h"
-
-#define CHECK_CUDA_RESULT(result) \
-    if (result != cudaSuccess) { \
-        throw std::runtime_error(std::string("Encountered error ")+cudaGetErrorName(result)+" at "+__FILE__+":"+std::to_string(__LINE__));\
-    }
 #endif
 
 namespace NNPOps {
