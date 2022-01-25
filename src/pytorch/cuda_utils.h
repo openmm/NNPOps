@@ -30,7 +30,8 @@
 
 #define CHECK_CUDA_RESULT(result) \
     if (result != cudaSuccess) { \
-       throw std::runtime_error(std::string("Encountered error ") + cudaGetErrorName(result) + " at " + __FILE__ + ":" + std::to_string(__LINE__));\
+       throw std::runtime_error(std::string("Encountered error ") + \
+             cudaGetErrorName(result) + " at " + __FILE__ + ":" + std::to_string(__LINE__)); \
     }
 
 #endif
