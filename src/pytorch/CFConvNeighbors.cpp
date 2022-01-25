@@ -22,20 +22,10 @@
  */
 #include "CFConvNeighbors.h"
 #include "CpuCFConv.h"
-
+#include "cuda_utils.h"
 #ifdef ENABLE_CUDA
-#include <stdexcept>
-#include <cuda_runtime.h>
 // #include <c10/cuda/CUDAStream.h>
 #include "CudaCFConv.h"
-
-#define int2 int[2]
-#define float3 float[3]
-
-#define CHECK_CUDA_RESULT(result) \
-    if (result != cudaSuccess) { \
-        throw std::runtime_error(std::string("Encountered error ")+cudaGetErrorName(result)+" at "+__FILE__+":"+std::to_string(__LINE__));\
-    }
 #endif
 
 namespace NNPOps {
