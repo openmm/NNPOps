@@ -25,7 +25,7 @@ jobs:
             gcc: 10.3.0
             nvcc: 11.2
             python: 3.9
-            pytorch: 1.10.0
+            pytorch: 1.10.2
           # Without CUDA
           - enable_cuda: false
             gcc: 10.3.0
