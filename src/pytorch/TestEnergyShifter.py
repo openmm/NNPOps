@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020 Acellera
+# Copyright (c) 2020-2021 Acellera
 # Authors: Raimondas Galvelis
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -32,7 +32,7 @@ molecules = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'molecules'
 
 def test_import():
     import NNPOps
-    import NNPOps.SymmetryFunctions
+    import NNPOps.EnergyShifter
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
 @pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
@@ -41,7 +41,7 @@ def test_compare_with_native(deviceString, molFile):
     if deviceString == 'cuda' and not torch.cuda.is_available():
         pytest.skip('CUDA is not available')
 
-    from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
+    from NNPOps.EnergyShifter import TorchANIEnergyShifter
 
     device = torch.device(deviceString)
 
@@ -54,7 +54,7 @@ def test_compare_with_native(deviceString, molFile):
     energy_ref.backward()
     grad_ref = atomicPositions.grad.clone()
 
-    nnp.aev_computer = TorchANISymmetryFunctions(nnp.species_converter, nnp.aev_computer, atomicNumbers)
+    nnp.energy_shifter = TorchANIEnergyShifter(nnp.species_converter, nnp.energy_shifter, atomicNumbers).to(device)
     energy = nnp((atomicNumbers, atomicPositions)).energies
     atomicPositions.grad.zero_()
     energy.backward()
@@ -64,10 +64,7 @@ def test_compare_with_native(deviceString, molFile):
     grad_error = torch.max(torch.abs((grad - grad_ref)/grad_ref))
 
     assert energy_error < 5e-7
-    if molFile == '3o99':
-        assert grad_error < 7e-3
-    else:
-        assert grad_error < 5e-3
+    assert grad_error < 5e-3
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
 @pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
@@ -76,7 +73,7 @@ def test_model_serialization(deviceString, molFile):
     if deviceString == 'cuda' and not torch.cuda.is_available():
         pytest.skip('CUDA is not available')
 
-    from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
+    from NNPOps.EnergyShifter import TorchANIEnergyShifter
 
     device = torch.device(deviceString)
 
@@ -85,7 +82,7 @@ def test_model_serialization(deviceString, molFile):
     atomicPositions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
 
     nnp_ref = torchani.models.ANI2x(periodic_table_index=True).to(device)
-    nnp_ref.aev_computer = TorchANISymmetryFunctions(nnp_ref.species_converter, nnp_ref.aev_computer, atomicNumbers)
+    nnp_ref.energy_shifter = TorchANIEnergyShifter(nnp_ref.species_converter, nnp_ref.energy_shifter, atomicNumbers).to(device)
 
     energy_ref = nnp_ref((atomicNumbers, atomicPositions)).energies
     energy_ref.backward()
@@ -100,42 +97,6 @@ def test_model_serialization(deviceString, molFile):
         atomicPositions.grad.zero_()
         energy.backward()
         grad = atomicPositions.grad.clone()
-
-    energy_error = torch.abs((energy - energy_ref)/energy_ref)
-    grad_error = torch.max(torch.abs((grad - grad_ref)/grad_ref))
-
-    assert energy_error < 5e-7
-    assert grad_error < 5e-3
-
-@pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
-def test_non_default_stream(molFile):
-
-    if not torch.cuda.is_available():
-        pytest.skip('CUDA is not available')
-
-    from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
-
-    device = torch.device('cuda')
-
-    mol = mdtraj.load(os.path.join(molecules, f'{molFile}_ligand.mol2'))
-    atomicNumbers = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
-    atomicPositions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
-
-    nnp = torchani.models.ANI2x(periodic_table_index=True).to(device)
-    nnp.aev_computer = TorchANISymmetryFunctions(nnp.species_converter, nnp.aev_computer, atomicNumbers)
-
-    energy_ref = nnp((atomicNumbers, atomicPositions)).energies
-    energy_ref.backward()
-    grad_ref = atomicPositions.grad.clone()
-
-    stream = torch.cuda.Stream()
-    stream.wait_stream(torch.cuda.current_stream())
-    with torch.cuda.stream(stream):
-        energy = nnp((atomicNumbers, atomicPositions)).energies
-        atomicPositions.grad.zero_()
-        energy.backward()
-        grad = atomicPositions.grad.clone()
-    torch.cuda.current_stream().wait_stream(stream)
 
     energy_error = torch.abs((energy - energy_ref)/energy_ref)
     grad_error = torch.max(torch.abs((grad - grad_ref)/grad_ref))

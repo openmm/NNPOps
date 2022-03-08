@@ -75,8 +75,12 @@ import mdtraj
 import torch
 import torchani
 
+from NNPOps.SpeciesConverter import TorchANISpeciesConverter
 from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
 from NNPOps.BatchedNN import TorchANIBatchedNN
+from NNPOps.EnergyShifter import TorchANIEnergyShifter
+
+from NNPOps import OptimizedTorchANI
 
 device = torch.device('cuda')
 
@@ -87,11 +91,25 @@ positions = torch.tensor(molecule.xyz * 10, dtype=torch.float32, requires_grad=T
 
 # Construct ANI-2x and replace its operations with the optimized ones
 nnp = torchani.models.ANI2x(periodic_table_index=True).to(device)
-nnp.aev_computer = TorchANISymmetryFunctions(nnp.aev_computer).to(device)
+nnp.species_converter = TorchANISpeciesConverter(nnp.species_converter, species).to(device)
+nnp.aev_computer = TorchANISymmetryFunctions(nnp.species_converter, nnp.aev_computer, species).to(device)
 nnp.neural_networks = TorchANIBatchedNN(nnp.species_converter, nnp.neural_networks, species).to(device)
+nnp.energy_shifter = TorchANIEnergyShifter(nnp.species_converter, nnp.energy_shifter, species).to(device)
 
 # Compute energy and forces
 energy = nnp((species, positions)).energies
+energy.backward()
+forces = -positions.grad.clone()
+
+print(energy, forces)
+
+# Alternatively, all the optimizations can be applied with OptimizedTorchANI
+nnp2 = torchani.models.ANI2x(periodic_table_index=True).to(device)
+nnp2 = OptimizedTorchANI(nnp2, species).to(device)
+
+# Compute energy and forces again
+energy = nnp2((species, positions)).energies
+positions.grad.zero_()
 energy.backward()
 forces = -positions.grad.clone()
 
