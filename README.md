@@ -1,6 +1,10 @@
+[![GH Actions Status](https://github.com/openmm/nnpops/workflows/CI/badge.svg)](https://github.com/openmm/nnpops/actions?query=branch%3Amaster+workflow%3ACI)
+[![Conda](https://img.shields.io/conda/v/conda-forge/nnpops.svg)](https://anaconda.org/conda-forge/nnpops)
+[![Anaconda Cloud Badge](https://anaconda.org/conda-forge/nnpops/badges/downloads.svg)](https://anaconda.org/conda-forge/nnpops)
+
 # NNPOps
 
-The goal of this repository is to promote the use of neural network potentials (NNPs)
+The goal of this project is to promote the use of neural network potentials (NNPs)
 by providing highly optimized, open source implementations of bottleneck operations
 that appear in popular potentials.  These are the core design principles.
 
@@ -22,7 +26,15 @@ not model parameters.
 
 ## Installation
 
-### From the source
+### Install with Conda
+
+A [conda](https://docs.conda.io/) package can be installed from the [conda-forge channel](https://anaconda.org/conda-forge/nnpops):
+```bash
+conda install -c conda-forge nnpops
+```
+If you don't have `conda`, we recommend installing [Miniconda](https://docs.conda.io/en/latest/miniconda.html).
+
+### Build from source
 
 #### Prerequisites
 
