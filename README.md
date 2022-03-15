@@ -1,3 +1,7 @@
+[![GH Actions Status](https://github.com/openmm/nnpops/workflows/CI/badge.svg)](https://github.com/openmm/nnpops/actions?query=branch%3Amaster+workflow%3ACI)
+[![Conda](https://img.shields.io/conda/v/conda-forge/nnpops.svg)](https://anaconda.org/conda-forge/nnpops)
+[![Anaconda Cloud Badge](https://anaconda.org/conda-forge/nnpops/badges/downloads.svg)](https://anaconda.org/conda-forge/nnpops)
+
 # NNPOps
 
 The goal of this repository is to promote the use of neural network potentials (NNPs)
