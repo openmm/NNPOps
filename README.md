@@ -4,7 +4,7 @@
 
 # NNPOps
 
-The goal of this repository is to promote the use of neural network potentials (NNPs)
+The goal of this project is to promote the use of neural network potentials (NNPs)
 by providing highly optimized, open source implementations of bottleneck operations
 that appear in popular potentials.  These are the core design principles.
 
@@ -28,11 +28,11 @@ not model parameters.
 
 ### Install with Conda
 
-[Conda](https://docs.conda.io/) packages can be installed from the [conda-forge channel](https://anaconda.org/conda-forge/nnpops):
+A [conda](https://docs.conda.io/) package can be installed from the [conda-forge channel](https://anaconda.org/conda-forge/nnpops):
 ```bash
 conda install -c conda-forge nnpops
 ```
-If you don't have `conda`, we recommend installing [Miniconda for Python 3](https://docs.conda.io/en/latest/miniconda.html).
+If you don't have `conda`, we recommend installing [Miniconda](https://docs.conda.io/en/latest/miniconda.html).
 
 ### Build from source
 
