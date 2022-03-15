@@ -26,7 +26,15 @@ not model parameters.
 
 ## Installation
 
-### From the source
+### Install with Conda
+
+[Conda](https://docs.conda.io/) packages can be installed from the [conda-forge channel](https://anaconda.org/conda-forge/nnpops):
+```bash
+conda install -c conda-forge nnpops
+```
+If you don't have `conda`, we recommend installing [Miniconda for Python 3](https://docs.conda.io/en/latest/miniconda.html).
+
+### Build from source
 
 #### Prerequisites
 
