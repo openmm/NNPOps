@@ -21,9 +21,9 @@ jobs:
             pytorch: 1.8.0
           # Latest supported versions
           - enable_cuda: true
-            cuda: 11.2.2
+            cuda: 10.2
             gcc: 10.3.0
-            nvcc: 11.2
+            nvcc: 10.2
             python: 3.9
             pytorch: 1.11
           # Without CUDA
