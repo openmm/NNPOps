@@ -22,7 +22,7 @@ jobs:
           # Latest supported versions
           - enable_cuda: true
             cuda: 10.2.89
-            gcc: 10.3.0
+            gcc: 7.5.0
             nvcc: 10.2
             python: 3.9
             pytorch: 1.11
