@@ -80,6 +80,12 @@ jobs:
       shell: bash -l {0}
       run: conda env create -n nnpops -f environment.yml
 
+    - name: List conda environment
+      shell: bash -l {0}
+      run: |
+        conda activate nnpops
+        conda list
+
     - name: Configure, compile, and install
       shell: bash -l {0}
       run: |
