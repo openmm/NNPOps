@@ -72,6 +72,10 @@ jobs:
                -e "/pytorch-gpu/c\  - pytorch-cpu ${{ matrix.pytorch }}" \
                environment.yml
 
+    - name: Show dependency file
+      shell: bash -l {0}
+      run: cat environment.yml
+
     - name: Install dependencies
       shell: bash -l {0}
       run: conda env create -n nnpops -f environment.yml
