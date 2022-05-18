@@ -24,7 +24,7 @@ using torch::zeros;
 template <typename scalar_t, int num_dims>
     using Accessor = PackedTensorAccessor32<scalar_t, num_dims, RestrictPtrTraits>;
 
-template <typename scalar_t, int num_dims> 
+template <typename scalar_t, int num_dims>
 inline Accessor<scalar_t, num_dims> get_accessor(const Tensor& tensor) {
     return tensor.packed_accessor32<scalar_t, num_dims, RestrictPtrTraits>();
 };
@@ -120,7 +120,7 @@ public:
         const Tensor deltas = empty({num_pairs, 3}, options);
         const Tensor distances = full(num_pairs, 0, options);
 
-        AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
+        AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "getNeighborPairs::forward", [&]() {
             const CUDAStreamGuard guard(stream);
             const scalar_t cutoff_ = cutoff.to<scalar_t>();
             TORCH_CHECK(cutoff_ > 0, "Expected \"cutoff\" to be positive");
@@ -157,7 +157,7 @@ public:
         const Tensor distances = data[2];
         const Tensor grad_positions = zeros({num_atoms, 3}, grad_distances.options());
 
-        AT_DISPATCH_FLOATING_TYPES(grad_distances.scalar_type(), "get_neighbor_pairs_backward", [&]() {
+        AT_DISPATCH_FLOATING_TYPES(grad_distances.scalar_type(), "getNeighborPairs::backward", [&]() {
             const CUDAStreamGuard guard(stream);
             backward_kernel<<<blocks, num_threads, 0, stream>>>(
                 get_accessor<int32_t, 2>(neighbors),
