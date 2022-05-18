@@ -17,6 +17,9 @@ enable_testing()
 # Source files of the library
 set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
               src/ani/CudaANISymmetryFunctions.cu
+              src/neighbors/neighbors.cpp
+              src/neighbors/neighbors_cpu.cpp
+              src/neighbors/neighbors_cuda.cu
               src/pytorch/BatchedNN.cpp
               src/pytorch/CFConv.cpp
               src/pytorch/CFConvNeighbors.cpp
@@ -27,6 +30,7 @@ set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
 # Build the library
 set(LIBRARY ${NAME}PyTorch)
 add_library(${LIBRARY} SHARED ${SRC_FILES})
+target_include_directories(${LIBRARY} PRIVATE ${PYTHON_INCLUDE_DIRS})
 target_include_directories(${LIBRARY} PRIVATE src/ani src/schnet)
 target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${PYTHON_LIBRARIES})
 if(ENABLE_CUDA)
