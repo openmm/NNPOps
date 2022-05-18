@@ -172,7 +172,7 @@ public:
 };
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
-    m.impl("get_neighbor_pairs",
+    m.impl("getNeighborPairs",
         [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_neighbors){
             const tensor_list results = Autograd::apply(positions, cutoff, max_num_neighbors);
             return make_tuple(results[0], results[1]);

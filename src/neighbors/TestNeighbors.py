@@ -1,8 +1,7 @@
-from turtle import pos
 import numpy as np
 import pytest
 import torch as pt
-from NNPOps import get_neighbor_pairs
+from NNPOps import getNeighborPairs
 
 @pytest.mark.parametrize('num_atoms', [1, 2, 3, 4, 5, 10, 100, 1000, 10000])
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
@@ -18,7 +17,7 @@ def test_neighbors(num_atoms, device):
     ref_positions = positions.cpu().numpy()
     ref_distances = np.linalg.norm(ref_positions[ref_neighbors[0]] - ref_positions[ref_neighbors[1]], axis=1)
 
-    neighbors, distances = get_neighbor_pairs(positions, cutoff=1000, max_num_neighbors=num_atoms)
+    neighbors, distances = getNeighborPairs(positions, cutoff=1000, max_num_neighbors=num_atoms)
 
     assert neighbors.device == device
     assert distances.device == device

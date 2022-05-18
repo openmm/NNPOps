@@ -36,5 +36,5 @@ static tuple<Tensor, Tensor> forward(const Tensor& positions,
 }
 
 TORCH_LIBRARY_IMPL(neighbors, CPU, m) {
-    m.impl("get_neighbor_pairs", &forward);
+    m.impl("getNeighborPairs", &forward);
 }
