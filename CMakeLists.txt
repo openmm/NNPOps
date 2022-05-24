@@ -27,13 +27,15 @@ set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
 # Build the library
 set(LIBRARY ${NAME}PyTorch)
 add_library(${LIBRARY} SHARED ${SRC_FILES})
+set_property(TARGET ${LIBRARY} PROPERTY CXX_STANDARD 14)
 target_include_directories(${LIBRARY} PRIVATE src/ani src/schnet)
 target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${PYTHON_LIBRARIES})
 if(ENABLE_CUDA)
+    set_property(TARGET ${LIBRARY} PROPERTY CUDA_STANDARD 14)
     target_compile_definitions(${LIBRARY} PRIVATE ENABLE_CUDA)
 endif(ENABLE_CUDA)
 
-# Test of the library
+# Tests of the library
 set(TEST_PATHS src/ani/TestCpuANISymmetryFunctions.cpp
                src/schnet/TestCpuCFConv.cpp)
 if(ENABLE_CUDA)
@@ -43,6 +45,10 @@ endif(ENABLE_CUDA)
 foreach(TEST_PATH ${TEST_PATHS})
     cmake_path(GET TEST_PATH STEM TEST_NAME)
     add_executable(${TEST_NAME} ${TEST_PATH})
+    set_property(TARGET ${TEST_NAME} PROPERTY CXX_STANDARD 14)
+    if(ENABLE_CUDA)
+        set_property(TARGET ${TEST_NAME} PROPERTY CUDA_STANDARD 14)
+    endif(ENABLE_CUDA)
     target_link_libraries(${TEST_NAME} ${LIBRARY})
     add_test(${TEST_NAME} ${TEST_NAME})
 endforeach()
