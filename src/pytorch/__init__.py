@@ -7,7 +7,7 @@ from torch import ops, Tensor
 from typing import Tuple
 
 
-def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int) -> Tuple[Tensor, Tensor]:
+def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = -1) -> Tuple[Tensor, Tensor]:
     '''
     TODO
     '''

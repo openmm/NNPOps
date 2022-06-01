@@ -100,25 +100,24 @@ public:
         TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
 
         const int max_num_neighbors_ = max_num_neighbors.to<int>();
-        TORCH_CHECK(max_num_neighbors_ > 0, "Expected \"max_num_neighbors\" to be positive");
+        TORCH_CHECK(max_num_neighbors_ > 0 || max_num_neighbors_ == -1,
+            "Expected \"max_num_neighbors\" to be positive or equal to -1");
 
         // Decide the algorithm
+        const bool store_all_pairs = max_num_neighbors_ == -1;
         const int num_atoms = positions.size(0);
         const int num_all_pairs = num_atoms * (num_atoms - 1) / 2;
-        const int num_exp_pairs = num_atoms * max_num_neighbors_;
-        const bool store_all_pairs = num_all_pairs <= num_exp_pairs;
-        const int num_pairs = store_all_pairs ? num_all_pairs : num_exp_pairs;
+        const int num_pairs = store_all_pairs ? num_all_pairs : num_atoms * max_num_neighbors_;
 
         const int num_threads = 128;
         const int num_blocks = max((num_all_pairs + num_threads - 1) / num_threads, 1);
         const auto stream = getCurrentCUDAStream(positions.get_device());
 
         const TensorOptions options = positions.options();
-        const Tensor i_curr_pair = store_all_pairs ? empty(1, options.dtype(kInt32)) :
-                                                     zeros(1, options.dtype(kInt32));
+        const Tensor i_curr_pair = zeros(1, options.dtype(kInt32));
         const Tensor neighbors = full({2, num_pairs}, -1, options.dtype(kInt32));
         const Tensor deltas = empty({num_pairs, 3}, options);
-        const Tensor distances = full(num_pairs, 0, options);
+        const Tensor distances = full(num_pairs, NAN, options);
 
         AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "getNeighborPairs::forward", [&]() {
             const CUDAStreamGuard guard(stream);
