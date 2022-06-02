@@ -33,6 +33,21 @@ template <typename scalar_t> __device__ __forceinline__ scalar_t sqrt_(scalar_t 
 template<> __device__ __forceinline__ float sqrt_(float x) { return ::sqrtf(x); };
 template<> __device__ __forceinline__ double sqrt_(double x) { return ::sqrt(x); };
 
+// Support pre-Kepler GPUs
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 600
+__device__ double atomicAdd(double* address, double val)
+{
+    unsigned long long int* address_as_ull = (unsigned long long int*)address;
+    unsigned long long int old = *address_as_ull, assumed;
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_ull, assumed,
+                __double_as_longlong(val + __longlong_as_double(assumed)));
+    } while (assumed != old);
+    return __longlong_as_double(old);
+}
+#endif
+
 template <typename scalar_t> __global__ void forward_kernel(
     const int32_t num_all_pairs,
     const Accessor<scalar_t, 2> positions,
