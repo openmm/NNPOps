@@ -73,6 +73,7 @@ template <typename scalar_t> __global__ void forward_kernel(
     if (distance2 > cutoff2) return;
 
     const int32_t i_pair = store_all_pairs ? index : atomicAdd(&i_curr_pair[0], 1);
+    assert(i_pair < neighbors.size(1));
 
     neighbors[0][i_pair] = row;
     neighbors[1][i_pair] = column;

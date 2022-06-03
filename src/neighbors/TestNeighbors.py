@@ -78,3 +78,16 @@ def test_neighbors(device, dtype, num_atoms, cutoff, all_pairs):
 
     assert np.all(ref_neighbors == neighbors)
     assert np.allclose(ref_distances, distances, equal_nan=True)
+
+@pytest.mark.parametrize('device', ['cpu', 'cuda'])
+@pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
+def test_too_many_neighbors(device, dtype):
+
+    if not pt.cuda.is_available() and device == 'cuda':
+        pytest.skip('No GPU')
+
+    # 4 points result into 6 pairs, but there is a storage just for 4.
+    with pytest.raises(RuntimeError):
+        positions = pt.zeros((4, 3,), device=device, dtype=dtype)
+        getNeighborPairs(positions, cutoff=1, max_num_neighbors=1)
+        pt.cuda.synchronize()
