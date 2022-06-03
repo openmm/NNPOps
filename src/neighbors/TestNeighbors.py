@@ -3,27 +3,43 @@ import pytest
 import torch as pt
 from NNPOps import getNeighborPairs
 
-@pytest.mark.parametrize('num_atoms', [1, 2, 3, 4, 5, 10, 100, 1000, 10000])
+
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
-def test_neighbors(num_atoms, device):
+@pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
+@pytest.mark.parametrize('num_atoms', [1, 2, 3, 4, 5, 10, 100, 1000, 10000])
+@pytest.mark.parametrize('cutoff', [1, 10, 100])
+def test_neighbors(device, dtype, num_atoms, cutoff):
 
     if not pt.cuda.is_available() and device == 'cuda':
         pytest.skip('No GPU')
 
-    positions = pt.randn((num_atoms, 3), device=device)
-    device = positions.device
+    # Generate random positions
+    positions = 10 * pt.randn((num_atoms, 3), device=device, dtype=dtype)
 
-    ref_neighbors = np.tril_indices(num_atoms, -1)
+    # Get neighbor pairs
+    ref_neighbors = np.vstack(np.tril_indices(num_atoms, -1))
     ref_positions = positions.cpu().numpy()
     ref_distances = np.linalg.norm(ref_positions[ref_neighbors[0]] - ref_positions[ref_neighbors[1]], axis=1)
 
-    neighbors, distances = getNeighborPairs(positions, cutoff=1000, max_num_neighbors=num_atoms)
+    # Filter the neighbor pairs
+    mask = ref_distances > cutoff
+    ref_neighbors[:, mask] = -1
+    ref_distances[mask] = np.nan
 
-    assert neighbors.device == device
-    assert distances.device == device
+    # Compute results
+    neighbors, distances = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=-1)
 
+    # Check device
+    assert neighbors.device == positions.device
+    assert distances.device == positions.device
+
+    # Check types
     assert neighbors.dtype == pt.int32
-    assert distances.dtype == pt.float32
+    assert distances.dtype == dtype
 
-    assert np.all(ref_neighbors == neighbors.cpu().numpy())
-    assert np.allclose(ref_distances, distances.cpu().numpy())
+    # Covert the results
+    neighbors = neighbors.cpu().numpy()
+    distances = distances.cpu().numpy()
+
+    assert np.all(ref_neighbors == neighbors)
+    assert np.allclose(ref_distances, distances, equal_nan=True)
