@@ -27,7 +27,7 @@ def resize_neighbors(neighbors, distances, num_neighbors):
 
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 @pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
-@pytest.mark.parametrize('num_atoms', [1, 2, 3, 4, 5, 10, 100, 1000, 10000])
+@pytest.mark.parametrize('num_atoms', [1, 2, 3, 4, 5, 10, 100, 1000])
 @pytest.mark.parametrize('cutoff', [1, 10, 100])
 @pytest.mark.parametrize('all_pairs', [True, False])
 def test_neighbors(device, dtype, num_atoms, cutoff, all_pairs):
