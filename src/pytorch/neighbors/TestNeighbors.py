@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 import torch as pt
-from NNPOps import getNeighborPairs
+from NNPOps.neighbors import getNeighborPairs
 
 
 def sort_neighbors(neighbors, distances):

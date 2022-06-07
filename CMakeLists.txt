@@ -17,13 +17,13 @@ enable_testing()
 # Source files of the library
 set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
               src/ani/CudaANISymmetryFunctions.cu
-              src/neighbors/neighbors.cpp
-              src/neighbors/getNeighborPairsCPU.cpp
-              src/neighbors/getNeighborPairsCUDA.cu
               src/pytorch/BatchedNN.cpp
               src/pytorch/CFConv.cpp
               src/pytorch/CFConvNeighbors.cpp
               src/pytorch/SymmetryFunctions.cpp
+              src/pytorch/neighbors/getNeighborPairsCPU.cpp
+              src/pytorch/neighbors/getNeighborPairsCUDA.cu
+              src/pytorch/neighbors/neighbors.cpp
               src/schnet/CpuCFConv.cpp
               src/schnet/CudaCFConv.cu)
 
@@ -61,10 +61,10 @@ add_test(TestBatchedNN         pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestBat
 add_test(TestCFConv            pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestCFConv.py)
 add_test(TestCFConvNeighbors   pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestCFConvNeighbors.py)
 add_test(TestEnergyShifter     pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestEnergyShifter.py)
-add_test(TestNeighbors         pytest -v ${CMAKE_SOURCE_DIR}/src/neighbors/TestNeighbors.py)
 add_test(TestOptimizedTorchANI pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestOptimizedTorchANI.py)
 add_test(TestSpeciesConverter  pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestSpeciesConverter.py)
 add_test(TestSymmetryFunctions pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestSymmetryFunctions.py)
+add_test(TestNeighbors         pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/TestNeighbors.py)
 
 # Installation
 install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
@@ -76,4 +76,9 @@ install(FILES src/pytorch/__init__.py
               src/pytorch/OptimizedTorchANI.py
               src/pytorch/SpeciesConverter.py
               src/pytorch/SymmetryFunctions.py
+              src/pytorch/neighbors/__init__.py
+              src/pytorch/neighbors/getNeighborPairs.py
         DESTINATION ${Python_SITEARCH}/${NAME})
+install(FILES src/pytorch/neighbors/__init__.py
+              src/pytorch/neighbors/getNeighborPairs.py
+        DESTINATION ${Python_SITEARCH}/${NAME}/neighbors)
