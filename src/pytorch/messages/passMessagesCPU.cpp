@@ -39,5 +39,5 @@ static Tensor forward(const Tensor& neighbors, const Tensor& messages, const Ten
 }
 
 TORCH_LIBRARY_IMPL(messages, CPU, m) {
-    m.impl("pass_messages", &forward);
+    m.impl("passMessages", &forward);
 }

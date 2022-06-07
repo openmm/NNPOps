@@ -21,6 +21,9 @@ set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
               src/pytorch/CFConv.cpp
               src/pytorch/CFConvNeighbors.cpp
               src/pytorch/SymmetryFunctions.cpp
+              src/pytorch/messages/messages.cpp
+              src/pytorch/messages/passMessagesCPU.cpp
+              src/pytorch/messages/passMessagesCUDA.cu
               src/schnet/CpuCFConv.cpp
               src/schnet/CudaCFConv.cu)
 
@@ -28,7 +31,7 @@ set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
 set(LIBRARY ${NAME}PyTorch)
 add_library(${LIBRARY} SHARED ${SRC_FILES})
 set_property(TARGET ${LIBRARY} PROPERTY CXX_STANDARD 14)
-target_include_directories(${LIBRARY} PRIVATE src/ani src/schnet)
+target_include_directories(${LIBRARY} PRIVATE ${PYTHON_INCLUDE_DIRS} src/ani src/schnet)
 target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${PYTHON_LIBRARIES})
 if(ENABLE_CUDA)
     set_property(TARGET ${LIBRARY} PROPERTY CUDA_STANDARD 14)
@@ -73,3 +76,6 @@ install(FILES src/pytorch/__init__.py
               src/pytorch/SpeciesConverter.py
               src/pytorch/SymmetryFunctions.py
         DESTINATION ${Python_SITEARCH}/${NAME})
+install(FILES src/pytorch/messages/__init__.py
+              src/pytorch/messages/passMessages.py
+        DESTINATION ${Python_SITEARCH}/${NAME}/messages)

@@ -80,7 +80,7 @@ public:
 
         Tensor new_states = states.clone();
 
-        AT_DISPATCH_FLOATING_TYPES(messages.scalar_type(), "pass_messages_forward", [&]() {
+        AT_DISPATCH_FLOATING_TYPES(messages.scalar_type(), "passMessages::forward", [&]() {
             const CUDAStreamGuard guard(stream);
             kernel_forward<<<blocks, threads, 0, stream>>>(
                 get_accessor<int32_t, 2>(neighbors),
@@ -107,7 +107,7 @@ public:
 
         Tensor grad_messages = torch::zeros({num_neighbors, num_features}, grad_new_state.options());
 
-        AT_DISPATCH_FLOATING_TYPES(grad_new_state.scalar_type(), "pass_messages_backward", [&]() {
+        AT_DISPATCH_FLOATING_TYPES(grad_new_state.scalar_type(), "passMessages::backward", [&]() {
             const CUDAStreamGuard guard(stream);
             kernel_backward<<<blocks, threads, 0, stream>>>(
                 get_accessor<int32_t, 2>(neighbors),
@@ -122,7 +122,7 @@ public:
 };
 
 TORCH_LIBRARY_IMPL(messages, AutogradCUDA, m) {
-    m.impl("pass_messages", [](const Tensor& neighbors,
+    m.impl("passMessages", [](const Tensor& neighbors,
                                const Tensor& messages,
                                const Tensor& states) {
         return Autograd::apply(neighbors, messages, states)[0];
