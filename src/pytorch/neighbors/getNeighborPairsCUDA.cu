@@ -33,7 +33,7 @@ template <typename scalar_t> __device__ __forceinline__ scalar_t sqrt_(scalar_t 
 template<> __device__ __forceinline__ float sqrt_(float x) { return ::sqrtf(x); };
 template<> __device__ __forceinline__ double sqrt_(double x) { return ::sqrt(x); };
 
-// Support pre-Kepler GPUs
+// Support pre-Pascal GPUs. Remove when the support of CUDA 11 is dropped.
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 600
 __device__ double atomicAdd(double* address, double val)
 {
