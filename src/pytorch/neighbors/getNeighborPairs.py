@@ -4,11 +4,17 @@ from typing import Tuple
 
 def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = -1) -> Tuple[Tensor, Tensor]:
     '''
-    Returns indices and distances of atom pairs withing a given cutoff distance.
+    Returns indices and distances of atom pairs within a given cutoff distance.
 
     If `max_num_neighbors == -1` (default), all the atom pairs are returned,
-    (i.e. `num_atoms * (num_atoms + 1) / 2` pairs). If `max_num_neighbors > 0`,
-    only `num_atoms * max_num_neighbors` pairs are returned.
+    i.e. `num_pairs = num_atoms * (num_atoms + 1) / 2`. This is intended for
+    the small molecules, where almost all the atoms are within the cutoff
+    distance of each other.
+
+    If `max_num_neighbors > 0`, a fixed number of the atom pair are returned,
+    i.e. `num_pairs = num_atoms * max_num_neighbors`. This is indeded for large
+    molecule, where most of the atoms are beyond the cutoff distance of each
+    other.
 
     Parameters
     ----------
@@ -39,6 +45,9 @@ def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = 
 
     Note
     ----
+    The operation is compatible with CUDA Grahps, i.e. the shapes of the output
+    tensors are independed of the values of input tensors.
+
     The CUDA implementation returns the atom pairs in non-determinist order,
     if `max_num_neighbors > 0`.
     '''
