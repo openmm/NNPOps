@@ -50,6 +50,33 @@ def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = 
 
     The CUDA implementation returns the atom pairs in non-determinist order,
     if `max_num_neighbors > 0`.
+
+    Examples
+    --------
+    >>> import torch as pt
+    >>> from NNPOps.neighbors import getNeighborPairs
+
+    >>> positions = pt.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]])
+
+    >>> getNeighborPairs(positions, cutoff=3.0) # doctest: +NORMALIZE_WHITESPACE
+    (tensor([[1, 2, 2],
+             [0, 0, 1]], dtype=torch.int32),
+     tensor([1., 2., 1.]))
+
+    >>> getNeighborPairs(positions, cutoff=1.5) # doctest: +NORMALIZE_WHITESPACE
+    (tensor([[ 1, -1,  2],
+             [ 0, -1,  1]], dtype=torch.int32),
+     tensor([1., nan, 1.]))
+
+    >>> getNeighborPairs(positions, cutoff=3.0, max_num_neighbors=2) # doctest: +NORMALIZE_WHITESPACE
+    (tensor([[ 1,  2,  2, -1, -1, -1],
+             [ 0,  0,  1, -1, -1, -1]], dtype=torch.int32),
+     tensor([1., 2., 1., nan, nan, nan]))
+
+    >>> getNeighborPairs(positions, cutoff=1.5, max_num_neighbors=2) # doctest: +NORMALIZE_WHITESPACE
+    (tensor([[ 1,  2, -1, -1, -1, -1],
+             [ 0,  1, -1, -1, -1, -1]], dtype=torch.int32),
+     tensor([1., 1., nan, nan, nan, nan]))
     '''
 
     return ops.neighbors.getNeighborPairs(positions, cutoff, max_num_neighbors)
