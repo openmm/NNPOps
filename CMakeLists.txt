@@ -83,7 +83,7 @@ install(FILES src/pytorch/__init__.py
         DESTINATION ${Python_SITEARCH}/${NAME})
 install(FILES src/pytorch/messages/__init__.py
               src/pytorch/messages/passMessages.py
-        DESTINATION ${Python_SITEARCH}/${NAME})
+        DESTINATION ${Python_SITEARCH}/${NAME}/messages)
 install(FILES src/pytorch/neighbors/__init__.py
               src/pytorch/neighbors/getNeighborPairs.py
         DESTINATION ${Python_SITEARCH}/${NAME}/neighbors)
