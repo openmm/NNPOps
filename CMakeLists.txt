@@ -21,15 +21,12 @@ set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
               src/pytorch/CFConv.cpp
               src/pytorch/CFConvNeighbors.cpp
               src/pytorch/SymmetryFunctions.cpp
-<<<<<<< HEAD
               src/pytorch/messages/messages.cpp
               src/pytorch/messages/passMessagesCPU.cpp
               src/pytorch/messages/passMessagesCUDA.cu
-=======
               src/pytorch/neighbors/getNeighborPairsCPU.cpp
               src/pytorch/neighbors/getNeighborPairsCUDA.cu
               src/pytorch/neighbors/neighbors.cpp
->>>>>>> master
               src/schnet/CpuCFConv.cpp
               src/schnet/CudaCFConv.cu)
 
