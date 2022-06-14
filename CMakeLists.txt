@@ -21,9 +21,15 @@ set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
               src/pytorch/CFConv.cpp
               src/pytorch/CFConvNeighbors.cpp
               src/pytorch/SymmetryFunctions.cpp
+<<<<<<< HEAD
               src/pytorch/messages/messages.cpp
               src/pytorch/messages/passMessagesCPU.cpp
               src/pytorch/messages/passMessagesCUDA.cu
+=======
+              src/pytorch/neighbors/getNeighborPairsCPU.cpp
+              src/pytorch/neighbors/getNeighborPairsCUDA.cu
+              src/pytorch/neighbors/neighbors.cpp
+>>>>>>> master
               src/schnet/CpuCFConv.cpp
               src/schnet/CudaCFConv.cu)
 
@@ -64,6 +70,8 @@ add_test(TestEnergyShifter     pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestEne
 add_test(TestOptimizedTorchANI pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestOptimizedTorchANI.py)
 add_test(TestSpeciesConverter  pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestSpeciesConverter.py)
 add_test(TestSymmetryFunctions pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestSymmetryFunctions.py)
+add_test(TestNeighbors         pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/TestNeighbors.py)
+add_test(TestGetNeighborPairs  pytest -v --doctest-modules ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/getNeighborPairs.py)
 
 # Installation
 install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
@@ -78,4 +86,7 @@ install(FILES src/pytorch/__init__.py
         DESTINATION ${Python_SITEARCH}/${NAME})
 install(FILES src/pytorch/messages/__init__.py
               src/pytorch/messages/passMessages.py
-        DESTINATION ${Python_SITEARCH}/${NAME}/messages)
+        DESTINATION ${Python_SITEARCH}/${NAME})
+install(FILES src/pytorch/neighbors/__init__.py
+              src/pytorch/neighbors/getNeighborPairs.py
+        DESTINATION ${Python_SITEARCH}/${NAME}/neighbors)
