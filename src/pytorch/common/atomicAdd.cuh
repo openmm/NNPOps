@@ -1,3 +1,6 @@
+#ifndef NNPOPS_ATOMICADD_H
+#define NNPOPS_ATOMICADD_H
+
 /*
 Implement atomicAdd with double precision numbers for pre-Pascal GPUs.
 Taken from https://stackoverflow.com/questions/37566987/cuda-atomicadd-for-doubles-definition-error
@@ -16,4 +19,6 @@ __device__ double atomicAdd(double* address, double val)
     } while (assumed != old);
     return __longlong_as_double(old);
 }
+#endif
+
 #endif
