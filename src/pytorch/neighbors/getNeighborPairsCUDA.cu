@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <tuple>
 
+#include "common/accessor.cuh"
 #include "common/atomicAdd.cuh"
 
 using c10::cuda::CUDAStreamGuard;
@@ -16,20 +17,10 @@ using torch::autograd::tensor_list;
 using torch::empty;
 using torch::full;
 using torch::kInt32;
-using torch::PackedTensorAccessor32;
-using torch::RestrictPtrTraits;
 using torch::Scalar;
 using torch::Tensor;
 using torch::TensorOptions;
 using torch::zeros;
-
-template <typename scalar_t, int num_dims>
-    using Accessor = PackedTensorAccessor32<scalar_t, num_dims, RestrictPtrTraits>;
-
-template <typename scalar_t, int num_dims>
-inline Accessor<scalar_t, num_dims> get_accessor(const Tensor& tensor) {
-    return tensor.packed_accessor32<scalar_t, num_dims, RestrictPtrTraits>();
-};
 
 template <typename scalar_t> __device__ __forceinline__ scalar_t sqrt_(scalar_t x) {};
 template<> __device__ __forceinline__ float sqrt_(float x) { return ::sqrtf(x); };

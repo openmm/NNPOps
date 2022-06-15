@@ -2,6 +2,7 @@
 #include <c10/cuda/CUDAStream.h>
 #include <torch/extension.h>
 
+#include "common/accessor.cuh"
 #include "common/atomicAdd.cuh"
 
 using c10::cuda::CUDAStreamGuard;
@@ -10,18 +11,8 @@ using torch::autograd::AutogradContext;
 using torch::autograd::Function;
 using torch::autograd::tensor_list;
 using torch::kInt32;
-using torch::PackedTensorAccessor32;
-using torch::RestrictPtrTraits;
 using torch::Tensor;
 using torch::TensorOptions;
-
-template <typename scalar_t, int num_dims>
-    using Accessor = PackedTensorAccessor32<scalar_t, num_dims, RestrictPtrTraits>;
-
-template <typename scalar_t, int num_dims> 
-inline Accessor<scalar_t, num_dims> get_accessor(const Tensor& tensor) {
-    return tensor.packed_accessor32<scalar_t, num_dims, RestrictPtrTraits>();
-};
 
 template <typename scalar_t> __global__ void kernel_forward(
     const Accessor<int32_t, 2> neighbors,
