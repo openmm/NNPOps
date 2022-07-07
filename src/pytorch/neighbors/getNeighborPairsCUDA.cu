@@ -132,7 +132,7 @@ public:
         const TensorOptions options = positions.options();
         const Tensor i_curr_pair = zeros(1, options.dtype(kInt32));
         const Tensor neighbors = full({2, num_pairs}, -1, options.dtype(kInt32));
-        const Tensor deltas = empty({num_pairs, 3}, options);
+        const Tensor deltas = full({num_pairs, 3}, NAN, options);
         const Tensor distances = full(num_pairs, NAN, options);
 
         AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "getNeighborPairs::forward", [&]() {
