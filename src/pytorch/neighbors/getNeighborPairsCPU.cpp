@@ -44,11 +44,13 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
     if (max_num_neighbors_ == -1) {
         const Tensor mask = distances > cutoff;
         neighbors.index_put_({Slice(), mask}, -1);
+        deltas.index_put_({mask, Slice()}, NAN);
         distances.index_put_({mask}, NAN);
 
     } else {
         const Tensor mask = distances <= cutoff;
         neighbors = neighbors.index({Slice(), mask});
+        deltas = deltas.index({mask, Slice()});
         distances = distances.index({mask});
 
         const int num_pad = num_atoms * max_num_neighbors_ - distances.size(0);
@@ -57,7 +59,7 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
 
         if (num_pad > 0) {
             neighbors = hstack({neighbors, full({2, num_pad}, -1, neighbors.options())});
-            deltas = hstack({deltas, full({num_pad, 3}, NAN, deltas.options())});
+            deltas = vstack({deltas, full({num_pad, 3}, NAN, deltas.options())});
             distances = hstack({distances, full({num_pad}, NAN, distances.options())});
         }
     }
