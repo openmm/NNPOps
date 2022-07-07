@@ -34,6 +34,12 @@ def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = 
         If an atom pair is separated by a larger distance than the cutoff,
         the indices are set to `-1`.
 
+    deltas: `torch.Tensor`
+        Atom pair displacement vectors. The shape of the tensor is `(num_pairs, 3)`.
+        The direction of the vectors are from `neighbors[1]` to `neighbors[0]`.
+        If an atom pair is separated by a larger distance than the cutoff,
+        the displacement vector is set to `[NaN, NaN, NaN]`.
+
     distances: `torch.Tensor`
         Atom pair distances. The shape of the tensor is `(num_pairs)`.
         If an atom pair is separated by a larger distance than the cutoff,
