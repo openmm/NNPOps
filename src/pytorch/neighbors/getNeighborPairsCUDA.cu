@@ -153,7 +153,7 @@ public:
         ctx->save_for_backward({neighbors, deltas, distances});
         ctx->saved_data["num_atoms"] = num_atoms;
 
-        return {neighbors, distances};
+        return {neighbors, deltas, distances};
     }
 
     static tensor_list backward(AutogradContext* ctx, tensor_list grad_inputs) {
@@ -190,6 +190,6 @@ TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
     m.impl("getNeighborPairs",
         [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_neighbors){
             const tensor_list results = Autograd::apply(positions, cutoff, max_num_neighbors);
-            return make_tuple(results[0], results[1]);
+            return make_tuple(results[0], results[1], results[2]);
     });
 }
