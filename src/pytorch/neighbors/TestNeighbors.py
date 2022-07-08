@@ -34,7 +34,7 @@ def resize_neighbors(neighbors, deltas, distances, num_neighbors):
 @pytest.mark.parametrize('num_atoms', [1, 2, 3, 4, 5, 10, 100, 1000])
 @pytest.mark.parametrize('cutoff', [1, 10, 100])
 @pytest.mark.parametrize('all_pairs', [True, False])
-def test_neighbors(device, dtype, num_atoms, cutoff, all_pairs):
+def test_neighbor_values(device, dtype, num_atoms, cutoff, all_pairs):
 
     if not pt.cuda.is_available() and device == 'cuda':
         pytest.skip('No GPU')
@@ -92,7 +92,7 @@ def test_neighbors(device, dtype, num_atoms, cutoff, all_pairs):
 @pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
 @pytest.mark.parametrize('num_atoms', [1, 2, 3, 4, 5, 10, 100, 1000])
 @pytest.mark.parametrize('grad', ['deltas', 'distances', 'combined'])
-def test_neighbors_grad(dtype, num_atoms, grad):
+def test_neighbor_grads(dtype, num_atoms, grad):
 
     if not pt.cuda.is_available():
         pytest.skip('No GPU')
@@ -127,9 +127,10 @@ def test_neighbors_grad(dtype, num_atoms, grad):
     else:
         raise ValueError('grad')
 
-    grads_cpu = positions_cpu.grad
-    grads_cuda = positions_cuda.grad
-    assert pt.allclose(grads_cpu, grads_cuda.cpu())
+    if dtype == pt.float32:
+        assert pt.allclose(positions_cpu.grad, positions_cuda.grad.cpu(), atol=1e-5, rtol=1e-3)
+    else:
+        assert pt.allclose(positions_cpu.grad, positions_cuda.grad.cpu(), atol=1e-8, rtol=1e-5)
 
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 @pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
