@@ -89,6 +89,48 @@ def test_neighbors(device, dtype, num_atoms, cutoff, all_pairs):
     assert np.allclose(ref_deltas, deltas, equal_nan=True)
     assert np.allclose(ref_distances, distances, equal_nan=True)
 
+@pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
+@pytest.mark.parametrize('num_atoms', [1, 2, 3, 4, 5, 10, 100, 1000])
+@pytest.mark.parametrize('grad', ['deltas', 'distances', 'combined'])
+def test_neighbors_grad(dtype, num_atoms, grad):
+
+    if not pt.cuda.is_available():
+        pytest.skip('No GPU')
+
+    # Generate random positions
+    positions = 10 * pt.randn((num_atoms, 3), dtype=dtype)
+
+    # Compute values
+    positions_cpu = positions.detach().cpu()
+    positions_cpu.requires_grad_(True)
+    neighbors_cpu, deltas_cpu, distances_cpu = getNeighborPairs(positions_cpu, cutoff=1000)
+
+    positions_cuda = positions.detach().cuda()
+    positions_cuda.requires_grad_(True)
+    neighbors_cuda, deltas_cuda, distances_cuda = getNeighborPairs(positions_cuda, cutoff=1000)
+
+    assert pt.all(neighbors_cpu > -1)
+    assert pt.all(neighbors_cpu == neighbors_cuda.cpu())
+    assert pt.allclose(deltas_cpu, deltas_cuda.cpu())
+    assert pt.allclose(distances_cpu, distances_cuda.cpu())
+
+    # Compute gradients
+    if grad == 'deltas':
+        deltas_cpu.sum().backward()
+        deltas_cuda.sum().backward()
+    elif grad == 'distances':
+        distances_cpu.sum().backward()
+        distances_cuda.sum().backward()
+    elif grad == 'combined':
+        (deltas_cpu.sum() + distances_cpu.sum()).backward()
+        (deltas_cuda.sum() + distances_cuda.sum()).backward()
+    else:
+        raise ValueError('grad')
+
+    grads_cpu = positions_cpu.grad
+    grads_cuda = positions_cuda.grad
+    assert pt.allclose(grads_cpu, grads_cuda.cpu())
+
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 @pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
 def test_too_many_neighbors(device, dtype):
