@@ -86,6 +86,7 @@ template <typename scalar_t> __global__ void forward_kernel(
 template <typename scalar_t> __global__ void backward_kernel(
     const Accessor<int32_t, 2> neighbors,
     const Accessor<scalar_t, 2> deltas,
+    const Accessor<scalar_t, 2> grad_deltas,
     const Accessor<scalar_t, 1> distances,
     const Accessor<scalar_t, 1> grad_distances,
     Accessor<scalar_t, 2> grad_positions
@@ -99,8 +100,10 @@ template <typename scalar_t> __global__ void backward_kernel(
     if (i_atom < 0) return;
 
     const int32_t i_comp = blockIdx.z;
-    const scalar_t grad = deltas[i_pair][i_comp] / distances[i_pair] * grad_distances[i_pair];
-    atomicAdd(&grad_positions[i_atom][i_comp], (i_dir ? -1 : 1) * grad);
+    const scalar_t grad_deltas_ = grad_deltas[i_pair][i_comp];
+    const scalar_t grad_distances_ = deltas[i_pair][i_comp] / distances[i_pair] * grad_distances[i_pair];
+    const scalar_t grad = (i_dir ? -1 : 1) * (grad_deltas_ + grad_distances_);
+    atomicAdd(&grad_positions[i_atom][i_comp], grad);
 }
 
 class Autograd : public Function<Autograd> {
@@ -132,7 +135,7 @@ public:
         const TensorOptions options = positions.options();
         const Tensor i_curr_pair = zeros(1, options.dtype(kInt32));
         const Tensor neighbors = full({2, num_pairs}, -1, options.dtype(kInt32));
-        const Tensor deltas = empty({num_pairs, 3}, options);
+        const Tensor deltas = full({num_pairs, 3}, NAN, options);
         const Tensor distances = full(num_pairs, NAN, options);
 
         AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "getNeighborPairs::forward", [&]() {
@@ -153,12 +156,13 @@ public:
         ctx->save_for_backward({neighbors, deltas, distances});
         ctx->saved_data["num_atoms"] = num_atoms;
 
-        return {neighbors, distances};
+        return {neighbors, deltas, distances};
     }
 
     static tensor_list backward(AutogradContext* ctx, tensor_list grad_inputs) {
 
-        const Tensor grad_distances = grad_inputs[1];
+        const Tensor grad_deltas = grad_inputs[1];
+        const Tensor grad_distances = grad_inputs[2];
         const int num_atoms = ctx->saved_data["num_atoms"].toInt();
         const int num_pairs = grad_distances.size(0);
         const int num_threads = 128;
@@ -177,6 +181,7 @@ public:
             backward_kernel<<<blocks, num_threads, 0, stream>>>(
                 get_accessor<int32_t, 2>(neighbors),
                 get_accessor<scalar_t, 2>(deltas),
+                get_accessor<scalar_t, 2>(grad_deltas),
                 get_accessor<scalar_t, 1>(distances),
                 get_accessor<scalar_t, 1>(grad_distances),
                 get_accessor<scalar_t, 2>(grad_positions));
@@ -190,6 +195,6 @@ TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
     m.impl("getNeighborPairs",
         [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_neighbors){
             const tensor_list results = Autograd::apply(positions, cutoff, max_num_neighbors);
-            return make_tuple(results[0], results[1]);
+            return make_tuple(results[0], results[1], results[2]);
     });
 }
