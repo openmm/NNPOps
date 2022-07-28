@@ -15,28 +15,47 @@ defaults:
 
 jobs:
   build:
-    runs-on: ubuntu-18.04
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
         include:
           # Oldest supported versions
-          - enable_cuda: true
+          - name: Linux CUDA 10.2
+            os: ubuntu-18.04
+            enable_cuda: true
             cuda: "10.2.89"
             gcc: "8.5.0"
             nvcc: "10.2"
             python: "3.7"
             pytorch: "1.11.0"
           # Latest supported versions
-          - enable_cuda: true
+          - name: Linux CUDA 11.2
+            os: ubuntu-18.04
+            enable_cuda: true
             cuda: "11.2.2"
             gcc: "10.3.0"
             nvcc: "11.2"
             python: "3.10"
             pytorch: "1.11.0"
           # Without CUDA
-          - enable_cuda: false
+          - name: Linux no CUDA
+            os: ubuntu-18.04
+            enable_cuda: false
             gcc: "10.3.0"
+            python: "3.10"
+            pytorch: "1.11.0"
+          # Intel Mac
+          - name: Mac Intel
+            os: macos-latest
+            enable_cuda: false
+            python: "3.10"
+            pytorch: "1.11.0"
+          # ARM Mac
+          - name: Mac ARM
+            os: M1-arm64
+            enable_cuda: false
             python: "3.10"
             pytorch: "1.11.0"
 
