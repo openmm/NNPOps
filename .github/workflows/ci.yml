@@ -52,12 +52,6 @@ jobs:
             enable_cuda: false
             python: "3.10"
             pytorch: "1.11.0"
-          # ARM Mac
-          - name: Mac ARM
-            os: M1-arm64
-            enable_cuda: false
-            python: "3.10"
-            pytorch: "1.11.0"
 
     steps:
     - name: Check out
