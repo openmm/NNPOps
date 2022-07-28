@@ -81,7 +81,7 @@ jobs:
                environment.yml
 
     - name: Prepare dependencies (without CUDA)
-      if: ${{ 'ubuntu' in matrix.os and !matrix.enable_cuda }}
+      if: ${{ contains(matrix.os, 'ubuntu') && !matrix.enable_cuda }}
       run: |
         sed -i -e "/cudatoolkit/c\  # - cudatoolkit" \
                -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
@@ -91,7 +91,7 @@ jobs:
                environment.yml
 
     - name: Prepare dependencies (Mac)
-      if: ${{ 'macos' in matrix.os }}
+      if: ${{ contains(matrix.os, 'macos') }}
       run: |
         sed -i -e "/cudatoolkit/c\  # - cudatoolkit" \
                -e "/gxx_linux-64/c\  # - gxx_linux-64" \
