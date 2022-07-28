@@ -81,10 +81,20 @@ jobs:
                environment.yml
 
     - name: Prepare dependencies (without CUDA)
-      if: ${{ !matrix.enable_cuda }}
+      if: ${{ 'ubuntu' in matrix.os and !matrix.enable_cuda }}
       run: |
         sed -i -e "/cudatoolkit/c\  # - cudatoolkit" \
                -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
+               -e "/nvcc_linux-64/c\  # - nvcc_linux-64" \
+               -e "/python/c\  - python ${{ matrix.python }}.*" \
+               -e "/pytorch-gpu/c\  - pytorch-cpu ${{ matrix.pytorch }}" \
+               environment.yml
+
+    - name: Prepare dependencies (Mac)
+      if: ${{ 'macos' in matrix.os }}
+      run: |
+        sed -i -e "/cudatoolkit/c\  # - cudatoolkit" \
+               -e "/gxx_linux-64/c\  # - gxx_linux-64" \
                -e "/nvcc_linux-64/c\  # - nvcc_linux-64" \
                -e "/python/c\  - python ${{ matrix.python }}.*" \
                -e "/pytorch-gpu/c\  - pytorch-cpu ${{ matrix.pytorch }}" \
