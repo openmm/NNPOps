@@ -96,6 +96,7 @@ jobs:
         sed -i '' -e "s/- cudatoolkit/# - cudatoolkit/" \
                   -e "s/- gxx_linux-64/# - gxx_linux-64/" \
                   -e "s/- nvcc_linux-64/# - nvcc_linux-64/" \
+                  -e "s/- sysroot_linux-64/# - sysroot_linux-64/" \
                   -e "s/- python/- python ${{ matrix.python }}.*/" \
                   -e "s/- pytorch-gpu/- pytorch-cpu ${{ matrix.pytorch }}/" \
                   environment.yml
