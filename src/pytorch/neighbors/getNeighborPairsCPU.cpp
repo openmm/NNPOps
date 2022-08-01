@@ -14,9 +14,9 @@ using torch::hstack;
 using torch::vstack;
 using torch::Tensor;
 
-static tuple<Tensor, Tensor> forward(const Tensor& positions,
-                                     const Scalar& cutoff,
-                                     const Scalar& max_num_neighbors) {
+static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
+                                             const Scalar& cutoff,
+                                             const Scalar& max_num_neighbors) {
 
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
     TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
@@ -38,17 +38,20 @@ static tuple<Tensor, Tensor> forward(const Tensor& positions,
     const Tensor columns = indices - div(rows * (rows - 1), 2, "floor");
 
     Tensor neighbors = vstack({rows, columns});
-    const Tensor vectors = index_select(positions, 0, rows) - index_select(positions, 0, columns);
-    Tensor distances = frobenius_norm(vectors, 1);
+    Tensor deltas = index_select(positions, 0, rows) - index_select(positions, 0, columns);
+    Tensor distances = frobenius_norm(deltas, 1);
 
     if (max_num_neighbors_ == -1) {
         const Tensor mask = distances > cutoff;
         neighbors.index_put_({Slice(), mask}, -1);
+        deltas = deltas.clone(); // Brake an autograd loop
+        deltas.index_put_({mask, Slice()}, NAN);
         distances.index_put_({mask}, NAN);
 
     } else {
         const Tensor mask = distances <= cutoff;
         neighbors = neighbors.index({Slice(), mask});
+        deltas = deltas.index({mask, Slice()});
         distances = distances.index({mask});
 
         const int num_pad = num_atoms * max_num_neighbors_ - distances.size(0);
@@ -57,11 +60,12 @@ static tuple<Tensor, Tensor> forward(const Tensor& positions,
 
         if (num_pad > 0) {
             neighbors = hstack({neighbors, full({2, num_pad}, -1, neighbors.options())});
+            deltas = vstack({deltas, full({num_pad, 3}, NAN, deltas.options())});
             distances = hstack({distances, full({num_pad}, NAN, distances.options())});
         }
     }
 
-    return {neighbors, distances};
+    return {neighbors, deltas, distances};
 }
 
 TORCH_LIBRARY_IMPL(neighbors, CPU, m) {
