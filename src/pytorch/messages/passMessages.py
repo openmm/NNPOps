@@ -1,7 +1,7 @@
 from torch import ops, Tensor
 
 
-def getNeighborPairs(neighbors: Tensor, messages: Tensor, states: Tensor) -> Tensor:
+def passMessages(neighbors: Tensor, messages: Tensor, states: Tensor) -> Tensor:
     '''
     TODO
     '''
