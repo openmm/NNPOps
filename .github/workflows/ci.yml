@@ -120,6 +120,7 @@ jobs:
               -DENABLE_CUDA=${{ matrix.enable_cuda }} \
               -DTorch_DIR=$CONDA_PREFIX/lib/python${{ matrix.python }}/site-packages/torch/share/cmake/Torch \
               -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
+        cat CMakeCache.txt
         make install
 
     - name: Test
