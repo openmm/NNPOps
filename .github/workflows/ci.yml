@@ -100,6 +100,8 @@ jobs:
                   -e "s/- python/- python ${{ matrix.python }}.*/" \
                   -e "s/- pytorch-gpu/- pytorch-cpu ${{ matrix.pytorch }}/" \
                   environment.yml
+        printenv DYLD_LIBRARY_PATH
+        export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$CONDA_PREFIX/lib
 
     - name: Show dependency file
       run: cat environment.yml
@@ -114,6 +116,7 @@ jobs:
 
     - name: Configure, compile, and install
       run: |
+        printenv DYLD_LIBRARY_PATH
         conda activate nnpops
         mkdir build && cd build
         cmake .. \
