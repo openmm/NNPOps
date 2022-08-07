@@ -102,13 +102,13 @@ jobs:
                   environment.yml
 
     - name: printenv
-      run: printenv DYLD_LIBRARY_PATH
+      run: echo $DYLD_LIBRARY_PATH
 
     - name: export
       run: export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$CONDA_PREFIX/lib
 
     - name: printenv2
-      run: printenv DYLD_LIBRARY_PATH
+      run: echo $DYLD_LIBRARY_PATH
 
     - name: Show dependency file
       run: cat environment.yml
