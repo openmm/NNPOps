@@ -101,14 +101,10 @@ jobs:
                   -e "s/- pytorch-gpu/- pytorch-cpu ${{ matrix.pytorch }}/" \
                   environment.yml
 
-    - name: printenv
-      run: echo $DYLD_LIBRARY_PATH
-
     - name: export
-      run: export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$CONDA_PREFIX/lib
-
-    - name: printenv2
-      run: echo $DYLD_LIBRARY_PATH
+      run: |
+        export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$CONDA_PREFIX/lib
+        echo $DYLD_LIBRARY_PATH
 
     - name: Show dependency file
       run: cat environment.yml
@@ -123,6 +119,7 @@ jobs:
 
     - name: Configure, compile, and install
       run: |
+        export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$CONDA_PREFIX/lib
         conda activate nnpops
         mkdir build && cd build
         cmake .. \
