@@ -98,9 +98,9 @@ public:
 
             Activation activation_;
             if (activation == "ssp")
-                activation_ == ::CFConv::ShiftedSoftplus;
+                activation_ = ::CFConv::ShiftedSoftplus;
             else if (activation == "tanh")
-                activation_ == ::CFConv::Tanh;
+                activation_ = ::CFConv::Tanh;
             else
                 throw std::invalid_argument("Invalid value of \"activation\"");
 
