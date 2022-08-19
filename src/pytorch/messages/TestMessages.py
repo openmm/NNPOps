@@ -10,8 +10,7 @@ from NNPOps.messages import passMessages
 @pytest.mark.parametrize('num_states', [32, 64, 1024])
 def testPassMessageValues(device, dtype, num_pairs, num_atoms, num_states):
 
-    device = pt.device(device)
-    if not pt.cuda.is_available() and device.is_cuda():
+    if not pt.cuda.is_available() and device == 'cuda':
         pytest.skip('No GPU')
 
     # Generate random neighbors
