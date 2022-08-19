@@ -37,7 +37,9 @@ def testPassMessageValues(device, dtype, num_pairs, num_atoms, num_states):
     assert new_states.dtype == dtype
 
     # Check values
-    if dtype == pt.float32:
+    if dtype == pt.float32 and num_pairs > 10 and num_atoms < 10:
+        assert pt.allclose(ref_new_states, new_states, atol=1e-5, rtol=1e-3)
+    elif dtype == pt.float32:
         assert pt.allclose(ref_new_states, new_states, atol=1e-6, rtol=1e-4)
     else:
         assert pt.allclose(ref_new_states, new_states, atol=1e-12, rtol=1e-8)
