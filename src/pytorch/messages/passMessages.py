@@ -14,7 +14,7 @@ def passMessages(neighbors: Tensor, messages: Tensor, states: Tensor) -> Tensor:
     ----------
     neighbors: `torch.Tensor`
         Atom pair indices. The shape of the tensor is `(2, num_pairs)`.
-        The indices can be `[0, num_atoms-1)` or `-1` (ignored pairs).
+        The indices can be `[0, num_atoms)` or `-1` (ignored pairs).
         See for the documentation of `NNPOps.neighbors.getNeighborPairs` for
         details.
     messages: `torch.Tensor`
