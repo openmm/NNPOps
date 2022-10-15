@@ -103,10 +103,13 @@ positions = torch.tensor(molecule.xyz * 10, dtype=torch.float32, requires_grad=T
 
 # Construct ANI-2x and replace its operations with the optimized ones
 nnp = torchani.models.ANI2x(periodic_table_index=True).to(device)
-nnp.species_converter = TorchANISpeciesConverter(nnp.species_converter, species).to(device)
+
 nnp.aev_computer = TorchANISymmetryFunctions(nnp.species_converter, nnp.aev_computer, species).to(device)
 nnp.neural_networks = TorchANIBatchedNN(nnp.species_converter, nnp.neural_networks, species).to(device)
 nnp.energy_shifter = TorchANIEnergyShifter(nnp.species_converter, nnp.energy_shifter, species).to(device)
+# Convertor should be the last one to be replaced, bc TorchANISymmetryFunctions, TorchANIBatchedNN, and TorchANIEnergyShifter 
+# use torchani converter which is not a tuple
+nnp.species_converter = TorchANISpeciesConverter(nnp.species_converter, species).to(device)
 
 # Compute energy and forces
 energy = nnp((species, positions)).energies
