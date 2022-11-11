@@ -13,10 +13,13 @@ using torch::Scalar;
 using torch::hstack;
 using torch::vstack;
 using torch::Tensor;
+using torch::outer;
+using torch::round;
 
 static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
                                              const Scalar& cutoff,
-                                             const Scalar& max_num_neighbors) {
+                                             const Scalar& max_num_neighbors,
+                                             const Tensor& box_vectors) {
 
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
     TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
@@ -24,6 +27,11 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
     TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
 
     TORCH_CHECK(cutoff.to<double>() > 0, "Expected \"cutoff\" to be positive");
+
+    if (box_vectors.dim() != 0) {
+        TORCH_CHECK(box_vectors.dim() == 2, "Expected \"box_vectors\" to have two dimensions");
+        TORCH_CHECK(box_vectors.size(0) == 3 && box_vectors.size(1) == 3, "Expected \"box_vectors\" to have shape (3, 3)");
+    }
 
     const int max_num_neighbors_ = max_num_neighbors.to<int>();
     TORCH_CHECK(max_num_neighbors_ > 0 || max_num_neighbors_ == -1,
@@ -39,12 +47,17 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
 
     Tensor neighbors = vstack({rows, columns});
     Tensor deltas = index_select(positions, 0, rows) - index_select(positions, 0, columns);
+    if (box_vectors.dim() == 2) {
+        deltas -= outer(round(deltas.index({Slice(), 2})/box_vectors.index({2, 2})), box_vectors.index({2}));
+        deltas -= outer(round(deltas.index({Slice(), 1})/box_vectors.index({1, 1})), box_vectors.index({1}));
+        deltas -= outer(round(deltas.index({Slice(), 0})/box_vectors.index({0, 0})), box_vectors.index({0}));
+    }
     Tensor distances = frobenius_norm(deltas, 1);
 
     if (max_num_neighbors_ == -1) {
         const Tensor mask = distances > cutoff;
         neighbors.index_put_({Slice(), mask}, -1);
-        deltas = deltas.clone(); // Brake an autograd loop
+        deltas = deltas.clone(); // Break an autograd loop
         deltas.index_put_({mask, Slice()}, NAN);
         distances.index_put_({mask}, NAN);
 

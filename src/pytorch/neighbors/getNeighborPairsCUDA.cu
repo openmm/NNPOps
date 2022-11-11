@@ -89,7 +89,8 @@ public:
     static tensor_list forward(AutogradContext* ctx,
                                const Tensor& positions,
                                const Scalar& cutoff,
-                               const Scalar& max_num_neighbors) {
+                               const Scalar& max_num_neighbors,
+                               const Tensor& box_vectors) {
 
         TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
         TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
@@ -171,8 +172,8 @@ public:
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
     m.impl("getNeighborPairs",
-        [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_neighbors){
-            const tensor_list results = Autograd::apply(positions, cutoff, max_num_neighbors);
+        [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_neighbors, const Tensor& box_vectors){
+            const tensor_list results = Autograd::apply(positions, cutoff, max_num_neighbors, box_vectors);
             return make_tuple(results[0], results[1], results[2]);
     });
 }

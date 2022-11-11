@@ -1,8 +1,8 @@
-from torch import ops, Tensor
-from typing import Tuple
+from torch import empty, ops, Tensor
+from typing import Optional, Tuple
 
 
-def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = -1) -> Tuple[Tensor, Tensor]:
+def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = -1, box_vectors: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
     '''
     Returns indices and distances of atom pairs within a given cutoff distance.
 
@@ -16,6 +16,20 @@ def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = 
     molecule, where most of the atoms are beyond the cutoff distance of each
     other.
 
+    This function optionally supports periodic boundary conditions with
+    arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
+    certain requirements:
+
+    `a[1] = a[2] = b[2] = 0`
+    `a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff`
+    `a[0] >= 2*b[0]`
+    `a[0] >= 2*c[0]`
+    `b[1] >= 2*c[1]`
+
+    These requirements correspond to a particular rotation of the system and
+    reduced form of the vectors, as well as the requirement that the cutoff be
+    no larger than half the box width.
+
     Parameters
     ----------
     positions: `torch.Tensor`
@@ -26,6 +40,10 @@ def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = 
     max_num_neighbors: int, optional
         Maximum number of neighbors per atom. If set to `-1` (default),
         all possible combinations of atom pairs are included.
+    box_vectors: `torch.Tensor`, optional
+        The vectors defining the periodic box.  This must have shape `(3, 3)`,
+        where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
+        If this is omitted, periodic boundary conditions are not applied.
 
     Returns
     -------
@@ -103,4 +121,6 @@ def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = 
      tensor([1., 1., nan, nan, nan, nan]))
     '''
 
-    return ops.neighbors.getNeighborPairs(positions, cutoff, max_num_neighbors)
+    if box_vectors is None:
+        box_vectors = empty(tuple())
+    return ops.neighbors.getNeighborPairs(positions, cutoff, max_num_neighbors, box_vectors)
