@@ -155,16 +155,17 @@ def test_periodic_neighbors(device, dtype):
     # Generate random positions
     num_atoms = 100
     positions = (20 * pt.randn((num_atoms, 3), device=device, dtype=dtype)) - 10
-    box_vectors = pt.tensor([[10, 0, 0], [2, 12, 0], [0, 1, 11]])
+    box_vectors = pt.tensor([[10, 0, 0], [2, 12, 0], [0, 1, 11]], device=device, dtype=dtype)
     cutoff = 5.0
 
     # Get neighbor pairs
     ref_neighbors = np.vstack(np.tril_indices(num_atoms, -1))
     ref_positions = positions.cpu().numpy()
+    ref_vectors = box_vectors.cpu().numpy()
     ref_deltas = ref_positions[ref_neighbors[0]] - ref_positions[ref_neighbors[1]]
-    ref_deltas -= np.outer(np.round(ref_deltas[:,2]/box_vectors[2,2]), box_vectors[2])
-    ref_deltas -= np.outer(np.round(ref_deltas[:,1]/box_vectors[1,1]), box_vectors[1])
-    ref_deltas -= np.outer(np.round(ref_deltas[:,0]/box_vectors[0,0]), box_vectors[0])
+    ref_deltas -= np.outer(np.round(ref_deltas[:,2]/ref_vectors[2,2]), ref_vectors[2])
+    ref_deltas -= np.outer(np.round(ref_deltas[:,1]/ref_vectors[1,1]), ref_vectors[1])
+    ref_deltas -= np.outer(np.round(ref_deltas[:,0]/ref_vectors[0,0]), ref_vectors[0])
     ref_distances = np.linalg.norm(ref_deltas, axis=1)
 
     # Filter the neighbor pairs

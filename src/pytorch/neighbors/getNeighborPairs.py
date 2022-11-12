@@ -122,5 +122,5 @@ def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = 
     '''
 
     if box_vectors is None:
-        box_vectors = empty(tuple())
+        box_vectors = empty((0, 0), device=positions.device, dtype=positions.dtype)
     return ops.neighbors.getNeighborPairs(positions, cutoff, max_num_neighbors, box_vectors)

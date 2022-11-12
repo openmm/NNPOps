@@ -28,7 +28,7 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
 
     TORCH_CHECK(cutoff.to<double>() > 0, "Expected \"cutoff\" to be positive");
 
-    if (box_vectors.dim() != 0) {
+    if (box_vectors.size(0) != 0) {
         TORCH_CHECK(box_vectors.dim() == 2, "Expected \"box_vectors\" to have two dimensions");
         TORCH_CHECK(box_vectors.size(0) == 3 && box_vectors.size(1) == 3, "Expected \"box_vectors\" to have shape (3, 3)");
     }
@@ -47,7 +47,7 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
 
     Tensor neighbors = vstack({rows, columns});
     Tensor deltas = index_select(positions, 0, rows) - index_select(positions, 0, columns);
-    if (box_vectors.dim() == 2) {
+    if (box_vectors.size(0) != 0) {
         deltas -= outer(round(deltas.index({Slice(), 2})/box_vectors.index({2, 2})), box_vectors.index({2}));
         deltas -= outer(round(deltas.index({Slice(), 1})/box_vectors.index({1, 1})), box_vectors.index({1}));
         deltas -= outer(round(deltas.index({Slice(), 0})/box_vectors.index({0, 0})), box_vectors.index({0}));

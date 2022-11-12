@@ -31,10 +31,12 @@ template <typename scalar_t> __global__ void forward_kernel(
     const Accessor<scalar_t, 2> positions,
     const scalar_t cutoff2,
     const bool store_all_pairs,
+    const bool use_periodic,
     Accessor<int32_t, 1> i_curr_pair,
     Accessor<int32_t, 2> neighbors,
     Accessor<scalar_t, 2> deltas,
-    Accessor<scalar_t, 1> distances
+    Accessor<scalar_t, 1> distances,
+    Accessor<scalar_t, 2> box_vectors
 ) {
     const int32_t index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= num_all_pairs) return;
@@ -43,9 +45,20 @@ template <typename scalar_t> __global__ void forward_kernel(
     if (row * (row - 1) > 2 * index) row--;
     const int32_t column = index - row * (row - 1) / 2;
 
-    const scalar_t delta_x = positions[row][0] - positions[column][0];
-    const scalar_t delta_y = positions[row][1] - positions[column][1];
-    const scalar_t delta_z = positions[row][2] - positions[column][2];
+    scalar_t delta_x = positions[row][0] - positions[column][0];
+    scalar_t delta_y = positions[row][1] - positions[column][1];
+    scalar_t delta_z = positions[row][2] - positions[column][2];
+    if (use_periodic) {
+        scalar_t scale3 = round(delta_z/box_vectors[2][2]);
+        delta_x -= scale3*box_vectors[2][0];
+        delta_y -= scale3*box_vectors[2][1];
+        delta_z -= scale3*box_vectors[2][2];
+        scalar_t scale2 = round(delta_y/box_vectors[1][1]);
+        delta_x -= scale2*box_vectors[1][0];
+        delta_y -= scale2*box_vectors[1][1];
+        scalar_t scale1 = round(delta_x/box_vectors[0][0]);
+        delta_x -= scale1*box_vectors[0][0];
+    }
     const scalar_t distance2 = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
 
     if (distance2 > cutoff2) return;
@@ -101,6 +114,12 @@ public:
         TORCH_CHECK(max_num_neighbors_ > 0 || max_num_neighbors_ == -1,
             "Expected \"max_num_neighbors\" to be positive or equal to -1");
 
+        const bool use_periodic = (box_vectors.size(0) != 0);
+        if (use_periodic) {
+            TORCH_CHECK(box_vectors.dim() == 2, "Expected \"box_vectors\" to have two dimensions");
+            TORCH_CHECK(box_vectors.size(0) == 3 && box_vectors.size(1) == 3, "Expected \"box_vectors\" to have shape (3, 3)");
+        }
+
         // Decide the algorithm
         const bool store_all_pairs = max_num_neighbors_ == -1;
         const int num_atoms = positions.size(0);
@@ -126,10 +145,12 @@ public:
                 get_accessor<scalar_t, 2>(positions),
                 cutoff_ * cutoff_,
                 store_all_pairs,
+                use_periodic,
                 get_accessor<int32_t, 1>(i_curr_pair),
                 get_accessor<int32_t, 2>(neighbors),
                 get_accessor<scalar_t, 2>(deltas),
-                get_accessor<scalar_t, 1>(distances));
+                get_accessor<scalar_t, 1>(distances),
+                get_accessor<scalar_t, 2>(box_vectors));
         });
 
         ctx->save_for_backward({neighbors, deltas, distances});
