@@ -187,7 +187,7 @@ public:
                 get_accessor<scalar_t, 2>(grad_positions));
         });
 
-        return {grad_positions, Tensor(), Tensor()};
+        return {grad_positions, Tensor(), Tensor(), Tensor()};
       }
 };
 
