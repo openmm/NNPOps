@@ -106,7 +106,7 @@ class _BatchedNN(torch.nn.Module):
 
         # Sum: [num_mols, num_atoms, num_models, 1, 1] --> [num_mols, num_models]
         # Mean: [num_mols, num_models] --> [num_mols]
-        energies = torch.mean(torch.sum(vectors, (1, 3, 4)), 1)
+        energies = torch.sum(vectors, (1, 2, 3, 4))/vectors.shape[2]
 
         return SpeciesEnergies(species, energies)
 
