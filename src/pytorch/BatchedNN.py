@@ -106,6 +106,8 @@ class _BatchedNN(torch.nn.Module):
 
         # Sum: [num_mols, num_atoms, num_models, 1, 1] --> [num_mols, num_models]
         # Mean: [num_mols, num_models] --> [num_mols]
+        # The sum and mean must be combined into a single operation to avoid a PyTorch bug.
+        # See https://github.com/openmm/openmm/issues/3812.
         energies = torch.sum(vectors, (1, 2, 3, 4))/vectors.shape[2]
 
         return SpeciesEnergies(species, energies)
