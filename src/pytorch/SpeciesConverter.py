@@ -15,7 +15,11 @@
 
 import torch
 from torch import Tensor
-from typing import Optional, Tuple
+from typing import NamedTuple, Optional, Tuple
+
+class SpeciesCoordinates(NamedTuple):
+    species: Tensor
+    coordinates: Tensor
 
 class TorchANISpeciesConverter(torch.nn.Module):
 
@@ -37,4 +41,4 @@ class TorchANISpeciesConverter(torch.nn.Module):
 
         _, coordinates = species_coordinates
 
-        return self.species, coordinates
+        return SpeciesCoordinates(self.species, coordinates)
