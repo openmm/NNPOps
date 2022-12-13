@@ -15,28 +15,41 @@ defaults:
 
 jobs:
   build:
-    runs-on: ubuntu-18.04
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
         include:
           # Oldest supported versions
-          - enable_cuda: true
+          - name: Linux CUDA 10.2
+            os: ubuntu-18.04
+            enable_cuda: true
             cuda: "10.2.89"
             gcc: "8.5.0"
             nvcc: "10.2"
             python: "3.7"
             pytorch: "1.11.0"
           # Latest supported versions
-          - enable_cuda: true
+          - name: Linux CUDA 11.2
+            os: ubuntu-18.04
+            enable_cuda: true
             cuda: "11.2.2"
             gcc: "10.3.0"
             nvcc: "11.2"
             python: "3.10"
             pytorch: "1.11.0"
           # Without CUDA
-          - enable_cuda: false
+          - name: Linux no CUDA
+            os: ubuntu-18.04
+            enable_cuda: false
             gcc: "10.3.0"
+            python: "3.10"
+            pytorch: "1.11.0"
+          # Intel Mac
+          - name: Mac Intel
+            os: macos-latest
+            enable_cuda: false
             python: "3.10"
             pytorch: "1.11.0"
 
@@ -68,7 +81,7 @@ jobs:
                environment.yml
 
     - name: Prepare dependencies (without CUDA)
-      if: ${{ !matrix.enable_cuda }}
+      if: ${{ contains(matrix.os, 'ubuntu') && !matrix.enable_cuda }}
       run: |
         sed -i -e "/cudatoolkit/c\  # - cudatoolkit" \
                -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
@@ -76,6 +89,17 @@ jobs:
                -e "/python/c\  - python ${{ matrix.python }}.*" \
                -e "/pytorch-gpu/c\  - pytorch-cpu ${{ matrix.pytorch }}" \
                environment.yml
+
+    - name: Prepare dependencies (Mac)
+      if: ${{ contains(matrix.os, 'macos') }}
+      run: |
+        sed -i '' -e "s/- cudatoolkit/# - cudatoolkit/" \
+                  -e "s/- gxx_linux-64/# - gxx_linux-64/" \
+                  -e "s/- nvcc_linux-64/# - nvcc_linux-64/" \
+                  -e "s/- sysroot_linux-64/# - sysroot_linux-64/" \
+                  -e "s/- python/- python ${{ matrix.python }}.*/" \
+                  -e "s/- pytorch-gpu/- pytorch-cpu ${{ matrix.pytorch }}/" \
+                  environment.yml
 
     - name: Show dependency file
       run: cat environment.yml
@@ -96,7 +120,8 @@ jobs:
               -DENABLE_CUDA=${{ matrix.enable_cuda }} \
               -DTorch_DIR=$CONDA_PREFIX/lib/python${{ matrix.python }}/site-packages/torch/share/cmake/Torch \
               -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
-        make install
+        cat CMakeCache.txt
+        make VERBOSE=1 install
 
     - name: Test
       run: |
