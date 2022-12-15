@@ -79,7 +79,7 @@ jobs:
         sed -i -e "/cudatoolkit/c\  - cudatoolkit ${{ matrix.cuda }}" \
                -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
                -e "/nvcc_linux-64/c\  - nvcc_linux-64 ${{ matrix.nvcc }}" \
-               -e "/python/c\  - python ${{ matrix.python }}.*" \
+               -e "/python/c\  - python ${{ matrix.python }}" \
                -e "/pytorch-gpu/c\  - pytorch-gpu ${{ matrix.pytorch }}" \
                environment.yml
 
@@ -89,7 +89,7 @@ jobs:
         sed -i -e "/cudatoolkit/c\  # - cudatoolkit" \
                -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
                -e "/nvcc_linux-64/c\  # - nvcc_linux-64" \
-               -e "/python/c\  - python ${{ matrix.python }}.*" \
+               -e "/python/c\  - python ${{ matrix.python }}" \
                -e "/pytorch-gpu/c\  - pytorch-cpu ${{ matrix.pytorch }}" \
                environment.yml
 
