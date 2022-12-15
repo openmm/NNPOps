@@ -28,16 +28,16 @@ jobs:
             cuda: "10.2.89"
             gcc: "8.5.*"
             nvcc: "10.2"
-            python: "3.7"
+            python: "3.7.*"
             pytorch: "1.11.*"
 
           # Older supported versions
           - name: Linux (CUDA 11.2, Python 3.9, PyTorch 1.11)
             enable_cuda: true
             cuda: "11.2.2"
-            gcc: "10.3"
+            gcc: "10.3.*"
             nvcc: "11.2"
-            python: "3.9"
+            python: "3.9.*"
             pytorch: "1.11.*"
 
           # Latest supported versions (with CUDA)
@@ -46,14 +46,14 @@ jobs:
             cuda: "11.2.2"
             gcc: "10.3.*"
             nvcc: "11.2"
-            python: "3.10"
+            python: "3.10.*"
             pytorch: "1.12.*"
 
           # Latest supported versions (without CUDA)
           - name: Linux (no CUDA, Python 3.10, PyTorch 1.12)
             enable_cuda: false
             gcc: "10.3.*"
-            python: "3.10"
+            python: "3.10.*"
             pytorch: "1.12.*"
 
     steps:
@@ -79,7 +79,7 @@ jobs:
         sed -i -e "/cudatoolkit/c\  - cudatoolkit ${{ matrix.cuda }}" \
                -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
                -e "/nvcc_linux-64/c\  - nvcc_linux-64 ${{ matrix.nvcc }}" \
-               -e "/python/c\  - python ${{ matrix.python }}.*" \
+               -e "/python/c\  - python ${{ matrix.python }}" \
                -e "/pytorch-gpu/c\  - pytorch-gpu ${{ matrix.pytorch }}" \
                environment.yml
 
@@ -89,7 +89,7 @@ jobs:
         sed -i -e "/cudatoolkit/c\  # - cudatoolkit" \
                -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
                -e "/nvcc_linux-64/c\  # - nvcc_linux-64" \
-               -e "/python/c\  - python ${{ matrix.python }}.*" \
+               -e "/python/c\  - python ${{ matrix.python }}" \
                -e "/pytorch-gpu/c\  - pytorch-cpu ${{ matrix.pytorch }}" \
                environment.yml
 
@@ -113,7 +113,7 @@ jobs:
         mkdir build && cd build
         cmake .. \
               -DENABLE_CUDA=${{ matrix.enable_cuda }} \
-              -DTorch_DIR=$CONDA_PREFIX/lib/python${{ matrix.python }}/site-packages/torch/share/cmake/Torch \
+              -DTorch_DIR=$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)') \
               -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
         make install
 
