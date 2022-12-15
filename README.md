@@ -64,7 +64,7 @@ $ conda activate nnpops
 ```bash
 $ mkdir build && cd build
 $ cmake .. \
-        -DTorch_DIR=$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)') \
+        -DTorch_DIR=$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')/Torch \
         -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
 $ make install
 ```
