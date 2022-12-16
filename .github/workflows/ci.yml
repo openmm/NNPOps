@@ -61,7 +61,7 @@ jobs:
       uses: actions/checkout@v2
 
     - name: Install CUDA Toolkit
-      uses: Jimver/cuda-toolkit@v0.2.4
+      uses: Jimver/cuda-toolkit@v0.2.8
       with:
         cuda: ${{ matrix.cuda }}
       if: ${{ matrix.enable_cuda }}
