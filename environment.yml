@@ -3,12 +3,12 @@ channels:
 dependencies:
   - cmake >=3.20
   - cudatoolkit 11.2.2
-  - gxx_linux-64 10.3.0
+  - gxx_linux-64 10.3.*
   - make
   - mdtraj
   - nvcc_linux-64 11.2
   - torchani 2.2.2
   - pytest
   - python 3.10.*
-  - pytorch-gpu 1.11.0
+  - pytorch-gpu 1.12.*
   - sysroot_linux-64 2.17
