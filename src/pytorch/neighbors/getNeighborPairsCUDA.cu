@@ -26,6 +26,8 @@ template <typename scalar_t> __device__ __forceinline__ scalar_t sqrt_(scalar_t 
 template<> __device__ __forceinline__ float sqrt_(float x) { return ::sqrtf(x); };
 template<> __device__ __forceinline__ double sqrt_(double x) { return ::sqrt(x); };
 
+__device__ __managed__ int32_t tooManyNeighborsErrorFlag; //Error flag for forward_kernel
+
 template <typename scalar_t> __global__ void forward_kernel(
     const int32_t num_all_pairs,
     const Accessor<scalar_t, 2> positions,
@@ -64,7 +66,12 @@ template <typename scalar_t> __global__ void forward_kernel(
     if (distance2 > cutoff2) return;
 
     const int32_t i_pair = store_all_pairs ? index : atomicAdd(&i_curr_pair[0], 1);
-    assert(i_pair < neighbors.size(1));
+    //If the maximum number of neighbours is surpassed encode the
+    //number of pairs found in a flag and exit
+    if(i_pair >= neighbors.size(1)){
+      atomicMin(&tooManyNeighborsErrorFlag, -i_pair);
+      return;
+    }
 
     neighbors[0][i_pair] = row;
     neighbors[1][i_pair] = column;
@@ -135,11 +142,19 @@ public:
         const Tensor neighbors = full({2, num_pairs}, -1, options.dtype(kInt32));
         const Tensor deltas = full({num_pairs, 3}, NAN, options);
         const Tensor distances = full(num_pairs, NAN, options);
-
+	//Advice CUDA on expected usage of the error flag
+	//cudaStreamAttachMemAsync(stream, &tooManyNeighborsErrorFlag);
+	cudaMemAdvise(&tooManyNeighborsErrorFlag, sizeof(int),
+	 	      cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
+	cudaMemAdvise(&tooManyNeighborsErrorFlag, sizeof(int),
+		      cudaMemAdviseSetReadMostly, 0);
         AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "getNeighborPairs::forward", [&]() {
             const CUDAStreamGuard guard(stream);
+	    tooManyNeighborsErrorFlag = 0;
             const scalar_t cutoff_ = cutoff.to<scalar_t>();
             TORCH_CHECK(cutoff_ > 0, "Expected \"cutoff\" to be positive");
+	    cudaEvent_t event;
+	    cudaEventCreateWithFlags(&event, cudaEventDisableTiming | cudaEventBlockingSync);
             forward_kernel<<<num_blocks, num_threads, 0, stream>>>(
                 num_all_pairs,
                 get_accessor<scalar_t, 2>(positions),
@@ -151,6 +166,13 @@ public:
                 get_accessor<scalar_t, 2>(deltas),
                 get_accessor<scalar_t, 1>(distances),
                 get_accessor<scalar_t, 2>(box_vectors));
+	    cudaEventRecord(event, stream);
+	    cudaEventSynchronize(event);
+	    //Check the error flag
+	    TORCH_CHECK(tooManyNeighborsErrorFlag == 0, "Some particle has too many neighbours, found " +
+			std::to_string(-tooManyNeighborsErrorFlag) + " but max is " +
+			std::to_string(max_num_neighbors.toInt()));
+	    cudaEventDestroy(event);
         });
 
         ctx->save_for_backward({neighbors, deltas, distances});
