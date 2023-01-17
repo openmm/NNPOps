@@ -9,8 +9,7 @@ if(ENABLE_CUDA)
 endif(ENABLE_CUDA)
 
 # Find dependencies
-find_package(Python REQUIRED)
-find_package(PythonLibs REQUIRED)
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 find_package(Torch REQUIRED)
 enable_testing()
 
@@ -31,9 +30,9 @@ set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
 set(LIBRARY ${NAME}PyTorch)
 add_library(${LIBRARY} SHARED ${SRC_FILES})
 set_property(TARGET ${LIBRARY} PROPERTY CXX_STANDARD 14)
-target_include_directories(${LIBRARY} PRIVATE ${PYTHON_INCLUDE_DIRS}
+target_include_directories(${LIBRARY} PRIVATE ${Python3_INCLUDE_DIRS}
                                               src/ani src/pytorch src/schnet)
-target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${PYTHON_LIBRARIES})
+target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${Python3_LIBRARIES})
 if(ENABLE_CUDA)
     set_property(TARGET ${LIBRARY} PROPERTY CUDA_STANDARD 14)
     target_compile_definitions(${LIBRARY} PRIVATE ENABLE_CUDA)
@@ -69,7 +68,7 @@ add_test(TestNeighbors         pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/neighbo
 add_test(TestGetNeighborPairs  pytest -v --doctest-modules ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/getNeighborPairs.py)
 
 # Installation
-install(TARGETS ${LIBRARY} DESTINATION ${Python_SITEARCH}/${NAME})
+install(TARGETS ${LIBRARY} DESTINATION ${Python3_SITEARCH}/${NAME})
 install(FILES src/pytorch/__init__.py
               src/pytorch/BatchedNN.py
               src/pytorch/CFConv.py
@@ -80,7 +79,7 @@ install(FILES src/pytorch/__init__.py
               src/pytorch/SymmetryFunctions.py
               src/pytorch/neighbors/__init__.py
               src/pytorch/neighbors/getNeighborPairs.py
-        DESTINATION ${Python_SITEARCH}/${NAME})
+        DESTINATION ${Python3_SITEARCH}/${NAME})
 install(FILES src/pytorch/neighbors/__init__.py
               src/pytorch/neighbors/getNeighborPairs.py
-        DESTINATION ${Python_SITEARCH}/${NAME}/neighbors)
+        DESTINATION ${Python3_SITEARCH}/${NAME}/neighbors)
