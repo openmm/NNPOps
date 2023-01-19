@@ -202,8 +202,7 @@ public:
         });
 	//Check the error flag via cudaLaunchHostFunction so it is compatible with cuda graphs
 	cudaHostFn_t h_fn = detail::checkTooManyNeighbors;
-	static std::tuple<int, bool> h_fn_data;
-	h_fn_data = {max_num_neighbors_, checkErrors};
+	std::tuple<int, bool> h_fn_data = {max_num_neighbors_, checkErrors};
 	cudaLaunchHostFunc(stream, h_fn, (void*)&h_fn_data);
 	//Errors are thrown as exceptions  asynchronously and in a way
 	//compatible with CUDA graphs.   However, this way of throwing
