@@ -96,5 +96,10 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
 }
 
 TORCH_LIBRARY_IMPL(neighbors, CPU, m) {
-    m.impl("getNeighborPairs", &forward);
+  m.impl("getNeighborPairs",
+	   [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_neighbors,
+	      const Tensor& box_vectors, const bool &checkErrors){
+	   //The checkErrors flag is ignored, this function always checks for errors synchronously
+	   return forward(positions, cutoff, max_num_neighbors, box_vectors);
+	 });
 }

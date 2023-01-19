@@ -1,5 +1,7 @@
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
+#include <exception>
+#include <stdexcept>
 #include <torch/extension.h>
 #include <algorithm>
 #include <tuple>
@@ -104,13 +106,47 @@ template <typename scalar_t> __global__ void backward_kernel(
     atomicAdd(&grad_positions[i_atom][i_comp], grad);
 }
 
+namespace detail{
+  static std::exception_ptr tooManyNeighborsException = nullptr;
+  // Checks the  too many  neighbors flag and  stores an  exception if
+  // necessary to detail::tooManyNeighborsException.  This function is
+  // intended to be launched via cudaLaunchHostFunc.
+  //data  is a  void pointer  to a  std::tuple<int,bool>, storing  the
+  // maximum number  of neighbors and  whether to throw  an uncatchable
+  // exception here (false) or store it for later (true).
+  void CUDART_CB checkTooManyNeighbors(void *data){
+    int max_num_neighbors;
+    bool checkErrors;
+    std::tie(max_num_neighbors, checkErrors) = *static_cast<std::tuple<int, bool>*>(data);
+    // An exception thrown  in a stream callback is  not catchable (it
+    // runs in another thread), so we store it in an exception_ptr for
+    // it  to be  processed sometime  later in  the main  thread.  For
+    // performance   reasons,    the   exception   is    thrown   here
+    // asynchronously if the checkErrors flag is set to false
+    try{
+      const int tooMan = tooManyNeighborsErrorFlag;
+      TORCH_CHECK(tooMan == 0,
+		  "Some particle has too many neighbors, found " +
+		  std::to_string(-tooMan) + " but max is " +
+		  std::to_string(max_num_neighbors));
+    }
+    catch(...){
+      if(not checkErrors)
+	throw;
+      else
+	tooManyNeighborsException = std::current_exception();
+    }
+  }
+}
+
 class Autograd : public Function<Autograd> {
 public:
     static tensor_list forward(AutogradContext* ctx,
                                const Tensor& positions,
                                const Scalar& cutoff,
                                const Scalar& max_num_neighbors,
-                               const Tensor& box_vectors) {
+                               const Tensor& box_vectors,
+			       bool checkErrors) {
 
         TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
         TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
@@ -143,18 +179,15 @@ public:
         const Tensor deltas = full({num_pairs, 3}, NAN, options);
         const Tensor distances = full(num_pairs, NAN, options);
 	//Advice CUDA on expected usage of the error flag
-	//cudaStreamAttachMemAsync(stream, &tooManyNeighborsErrorFlag);
 	cudaMemAdvise(&tooManyNeighborsErrorFlag, sizeof(int),
-	 	      cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
+		      cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
 	cudaMemAdvise(&tooManyNeighborsErrorFlag, sizeof(int),
 		      cudaMemAdviseSetReadMostly, 0);
+	tooManyNeighborsErrorFlag = 0;
+	const CUDAStreamGuard guard(stream);
         AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "getNeighborPairs::forward", [&]() {
-            const CUDAStreamGuard guard(stream);
-	    tooManyNeighborsErrorFlag = 0;
-            const scalar_t cutoff_ = cutoff.to<scalar_t>();
-            TORCH_CHECK(cutoff_ > 0, "Expected \"cutoff\" to be positive");
-	    cudaEvent_t event;
-	    cudaEventCreateWithFlags(&event, cudaEventDisableTiming | cudaEventBlockingSync);
+	  const scalar_t cutoff_ = cutoff.to<scalar_t>();
+	  TORCH_CHECK(cutoff_ > 0, "Expected \"cutoff\" to be positive");
             forward_kernel<<<num_blocks, num_threads, 0, stream>>>(
                 num_all_pairs,
                 get_accessor<scalar_t, 2>(positions),
@@ -166,18 +199,26 @@ public:
                 get_accessor<scalar_t, 2>(deltas),
                 get_accessor<scalar_t, 1>(distances),
                 get_accessor<scalar_t, 2>(box_vectors));
-	    cudaEventRecord(event, stream);
-	    cudaEventSynchronize(event);
-	    //Check the error flag
-	    TORCH_CHECK(tooManyNeighborsErrorFlag == 0, "Some particle has too many neighbours, found " +
-			std::to_string(-tooManyNeighborsErrorFlag) + " but max is " +
-			std::to_string(max_num_neighbors.toInt()));
-	    cudaEventDestroy(event);
         });
-
-        ctx->save_for_backward({neighbors, deltas, distances});
+	//Check the error flag via cudaLaunchHostFunction so it is compatible with cuda graphs
+	cudaHostFn_t h_fn = detail::checkTooManyNeighbors;
+	static std::tuple<int, bool> h_fn_data;
+	h_fn_data = {max_num_neighbors_, checkErrors};
+	cudaLaunchHostFunc(stream, h_fn, (void*)&h_fn_data);
+	//Errors are thrown as exceptions  asynchronously and in a way
+	//compatible with CUDA graphs.   However, this way of throwing
+	//an exception  makes it  uncatchable, crashing the  code.  If
+	//the   checkErrors  flag   is   set  to   true  an   explicit
+	//synchronization barrier  here forces to throw  the exception
+	//from the main thread, making  it catchable at the expense of
+	//a performance penalty each time the function is called.
+	if(checkErrors){
+	  cudaStreamSynchronize(stream);
+	  if(detail::tooManyNeighborsException)
+	    std::rethrow_exception(detail::tooManyNeighborsException);
+	}
+	ctx->save_for_backward({neighbors, deltas, distances});
         ctx->saved_data["num_atoms"] = num_atoms;
-
         return {neighbors, deltas, distances};
     }
 
@@ -209,14 +250,16 @@ public:
                 get_accessor<scalar_t, 2>(grad_positions));
         });
 
-        return {grad_positions, Tensor(), Tensor(), Tensor()};
+        return {grad_positions, Tensor(), Tensor(), Tensor(), Tensor()};
       }
 };
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
-    m.impl("getNeighborPairs",
-        [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_neighbors, const Tensor& box_vectors){
-            const tensor_list results = Autograd::apply(positions, cutoff, max_num_neighbors, box_vectors);
-            return make_tuple(results[0], results[1], results[2]);
-    });
+  m.impl("getNeighborPairs",
+	 [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_neighbors,
+	    const Tensor& box_vectors, const bool &checkErrors){
+	   const tensor_list results = Autograd::apply(positions, cutoff, max_num_neighbors,
+						       box_vectors, checkErrors);
+	   return make_tuple(results[0], results[1], results[2]);
+	 });
 }

@@ -145,8 +145,10 @@ def test_too_many_neighbors(device, dtype):
     # 4 points result into 6 pairs, but there is a storage just for 4.
     with pytest.raises(RuntimeError):
         positions = pt.zeros((4, 3,), device=device, dtype=dtype)
-        getNeighborPairs(positions, cutoff=1, max_num_neighbors=1)
+        # Omitting check_errors makes the exception non-catchable
+        getNeighborPairs(positions, cutoff=1, max_num_neighbors=1, check_errors=True)
         pt.cuda.synchronize()
+
 
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 @pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
