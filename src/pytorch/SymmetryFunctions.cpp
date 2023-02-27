@@ -119,13 +119,15 @@ public:
                         for (const float thetas: ShfZ)
                             angularFunctions.push_back({eta, rs, zeta, thetas});
 
+            bool periodic = cellPtr != nullptr;
+
             if (device.is_cpu()) {
-                impl = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies_, radialFunctions, angularFunctions, true);
+                impl = std::make_shared<CpuANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, periodic, atomSpecies_, radialFunctions, angularFunctions, true);
 #ifdef ENABLE_CUDA
             } else if (device.is_cuda()) {
                 // PyTorch allow to chose GPU with "torch.device", but it doesn't set as the default one.
                 CHECK_CUDA_RESULT(cudaSetDevice(device.index()));
-                impl = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, false, atomSpecies_, radialFunctions, angularFunctions, true);
+                impl = std::make_shared<CudaANISymmetryFunctions>(numAtoms, numSpecies, Rcr, Rca, periodic, atomSpecies_, radialFunctions, angularFunctions, true);
 #endif
             } else
                 throw std::runtime_error("Unsupported device: " + device.str());
