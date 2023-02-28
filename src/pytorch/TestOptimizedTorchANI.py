@@ -66,6 +66,40 @@ def test_compare_with_native(deviceString, molFile):
         assert grad_error < 5e-3
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
+def test_compare_waterbox_pbc_with_native(deviceString):
+
+    if deviceString == 'cuda' and not torch.cuda.is_available():
+        pytest.skip('CUDA is not available')
+
+    from NNPOps import OptimizedTorchANI
+
+    device = torch.device(deviceString)
+
+    mol = mdtraj.load(os.path.join(molecules, 'water.pdb'))
+    atomicNumbers = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
+    atomicPositions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
+    cell = mol.unitcell_vectors[0]
+    cell = torch.tensor(cell, dtype=torch.float32, device=device)*10.0
+    pbc = torch.tensor([True, True, True], dtype=torch.bool, device=device)
+
+    nnp = torchani.models.ANI2x(periodic_table_index=True).to(device)
+    energy_ref = nnp((atomicNumbers, atomicPositions), cell=cell, pbc=pbc).energies
+    energy_ref.backward()
+    grad_ref = atomicPositions.grad.clone()
+
+    nnp = OptimizedTorchANI(nnp, atomicNumbers).to(device)
+    energy = nnp((atomicNumbers, atomicPositions), cell=cell, pbc=pbc).energies
+    atomicPositions.grad.zero_()
+    energy.backward()
+    grad = atomicPositions.grad.clone()
+
+    energy_error = torch.abs((energy - energy_ref)/energy_ref)
+    grad_error = torch.max(torch.abs((grad - grad_ref)/grad_ref))
+
+    assert energy_error < 5e-7
+    assert grad_error < 7e-3
+
+@pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
 @pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
 def test_model_serialization(deviceString, molFile):
 
