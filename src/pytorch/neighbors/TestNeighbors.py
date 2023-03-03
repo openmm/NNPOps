@@ -138,16 +138,24 @@ def test_neighbor_grads(dtype, num_atoms, grad):
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 @pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
 def test_too_many_neighbors(device, dtype):
-
     if not pt.cuda.is_available() and device == 'cuda':
         pytest.skip('No GPU')
-
     # 4 points result into 6 pairs, but there is a storage just for 4.
+    positions = pt.zeros((4, 3,), device=device, dtype=dtype)
     with pytest.raises(RuntimeError):
-        positions = pt.zeros((4, 3,), device=device, dtype=dtype)
-        # Omitting check_errors makes the exception non-catchable
-        getNeighborPairs(positions, cutoff=1, max_num_neighbors=1, check_errors=True)
+        # checkErrors = False will throw due to exceeding neighbours
+        # syncExceptions = True makes  this exception catchable at the
+        # expense of performance (even when no error ocurred)
+        getNeighborPairs(positions, cutoff=1, max_num_neighbors=1, check_errors=False, sync_exceptions=True)
         pt.cuda.synchronize()
+
+    # checkErrors = True will never throw due to exceeding neighbours,
+    # but  will return  the number  of pairs  found.
+    # syncExceptions is ignored in this case
+    neighbors, deltas, distances, number_found_pairs = getNeighborPairs(positions, cutoff=1, max_num_neighbors=1, check_errors=True)
+    assert number_found_pairs == 6
+
+
 
 
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])

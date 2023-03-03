@@ -16,10 +16,11 @@ using torch::Tensor;
 using torch::outer;
 using torch::round;
 
-static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
-                                             const Scalar& cutoff,
-                                             const Scalar& max_num_neighbors,
-                                             const Tensor& box_vectors) {
+static tuple<Tensor, Tensor, Tensor, Tensor> forward(const Tensor& positions,
+						     const Scalar& cutoff,
+						     const Scalar& max_num_neighbors,
+						     const Tensor& box_vectors,
+						     bool checkErrors) {
 
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
     TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
@@ -82,24 +83,26 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
         distances = distances.index({mask});
 
         const int num_pad = num_atoms * max_num_neighbors_ - distances.size(0);
-        TORCH_CHECK(num_pad >= 0,
-            "The maximum number of pairs has been exceed! Increase \"max_num_neighbors\"");
-
+        if (!checkErrors) {
+            TORCH_CHECK(num_pad >= 0,
+                "The maximum number of pairs has been exceed! Increase \"max_num_neighbors\"");
+        }
         if (num_pad > 0) {
             neighbors = hstack({neighbors, full({2, num_pad}, -1, neighbors.options())});
             deltas = vstack({deltas, full({num_pad, 3}, NAN, deltas.options())});
             distances = hstack({distances, full({num_pad}, NAN, distances.options())});
         }
     }
-
-    return {neighbors, deltas, distances};
+    Tensor num_pairs_found = torch::empty(1, indices.options().dtype(kInt32));
+    num_pairs_found[0] = distances.size(0);
+    return {neighbors, deltas, distances, num_pairs_found};
 }
 
 TORCH_LIBRARY_IMPL(neighbors, CPU, m) {
   m.impl("getNeighborPairs",
 	   [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_neighbors,
-	      const Tensor& box_vectors, const bool &checkErrors){
-	   //The checkErrors flag is ignored, this function always checks for errors synchronously
-	   return forward(positions, cutoff, max_num_neighbors, box_vectors);
+	      const Tensor& box_vectors, const bool &checkErrors, const bool &syncExceptions){
+	       //The syncExceptions flag is ignored, this function always throws synchronously
+	       return forward(positions, cutoff, max_num_neighbors, box_vectors, checkErrors);
 	 });
 }

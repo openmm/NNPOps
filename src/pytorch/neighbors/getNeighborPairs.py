@@ -2,9 +2,14 @@ from torch import empty, ops, Tensor
 from typing import Optional, Tuple
 
 
-def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = -1, box_vectors: Optional[Tensor] = None, check_errors: Optional[bool] = False) -> Tuple[Tensor, Tensor]:
-    '''
-    Returns indices and distances of atom pairs within a given cutoff distance.
+def getNeighborPairs(
+        positions: Tensor,
+        cutoff: float,
+        max_num_neighbors: int = -1,
+        box_vectors: Optional[Tensor] = None,
+        check_errors: Optional[bool] = False,
+        sync_exceptions: Optional[bool] = False) -> Tuple[Tensor, Tensor, Tensor, Optional[Tensor]]:
+    '''Returns indices and distances of atom pairs within a given cutoff distance.
 
     If `max_num_neighbors == -1` (default), all the atom pairs are returned,
     i.e. `num_pairs = num_atoms * (num_atoms + 1) / 2`. This is intended for
@@ -45,12 +50,18 @@ def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = 
         where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
         If this is omitted, periodic boundary conditions are not applied.
     check_errors: bool, optional
-        If set to True the function is guaranteed to throw if an error
-        is encountered, synchronizing if necessary.
-        If set to False, an error arising in this function might crash
-        the code at some point after calling it.
+        If set to True the function does not throw due to a number of pairs larger than the maximum.
+        If set to False, an exception will be thrown in that case.
         Defaults to False.
-
+    sync_exceptions: bool, optional
+        If  set to  True the  function will  synchronize to  check for
+        errors  and  throw  an  exception  in  the  caller  thread  if
+        necessary.
+        If set  to False it  is possible  that an exception  thrown by
+        this function cannot bbe catched and result in a crash.
+        This flag is ignored if check_errors is True.
+        This flag must be False for the getNeighborPairs operation to be CUDA graph compatible.
+        Defaults to False.
     Returns
     -------
     neighbors: `torch.Tensor`
@@ -69,19 +80,26 @@ def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = 
         If an atom pair is separated by a larger distance than the cutoff,
         the distance is set to `NaN`.
 
+    number_found_pairs: `Optional[torch.Tensor]`
+        Present  if check_errors=True.  Contains the  total number  of
+        pairs    found,    which    might   exceed    the    requested
+        max_num_neighbors,  leaving  the  rest  of the  output  in  an
+        undefined state.
+
     Exceptions
     ----------
-    If `max_num_neighbors > 0` and too small, `RuntimeError` is raised.
+    If `max_num_neighbors > 0` and too small, `RuntimeError` is raised unless check_errors=True.
 
     Note
     ----
-    The operation is compatible with CUDA Grahps, i.e. the shapes of the output
-    tensors are independed of the values of input tensors.
+    The operation can be compatible with CUDA Grahps, i.e. the shapes of the output
+    tensors are independed of the values of input tensors and no synchronizing operation is performed.
+
+    For this to be the case sync_exceptions must be False.
 
     The CUDA implementation returns the atom pairs in non-determinist order,
     if `max_num_neighbors > 0`.
 
-    The check_errors argument is forced to False if CUDA graphs are used.
 
     Examples
     --------
@@ -132,4 +150,8 @@ def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = 
 
     if box_vectors is None:
         box_vectors = empty((0, 0), device=positions.device, dtype=positions.dtype)
-    return ops.neighbors.getNeighborPairs(positions, cutoff, max_num_neighbors, box_vectors, check_errors)
+    neighbors, deltas, distances, number_found_pairs = ops.neighbors.getNeighborPairs(positions, cutoff, max_num_neighbors, box_vectors, check_errors, sync_exceptions)
+    if check_errors is True:
+        return neighbors, deltas, distances, number_found_pairs
+    else:
+        return neighbors, deltas, distances
