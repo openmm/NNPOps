@@ -23,22 +23,22 @@ jobs:
         include:
 
           # Oldest supported versions
-          - name: Linux (CUDA 10.2, Python 3.7, PyTorch 1.11)
+          - name: Linux (CUDA 11.2, Python 3.8, PyTorch 1.11)
             enable_cuda: true
-            cuda: "10.2.89"
-            gcc: "8.5.*"
-            nvcc: "10.2"
-            python: "3.7.*"
+            cuda: "11.2.2"
+            gcc: "10.3.*"
+            nvcc: "11.2"
+            python: "3.8.*"
             pytorch: "1.11.*"
 
           # Older supported versions
-          - name: Linux (CUDA 11.2, Python 3.9, PyTorch 1.11)
+          - name: Linux (CUDA 11.7, Python 3.9, PyTorch 1.12)
             enable_cuda: true
             cuda: "11.2.2"
             gcc: "10.3.*"
             nvcc: "11.2"
             python: "3.9.*"
-            pytorch: "1.11.*"
+            pytorch: "1.12.*"
 
           # Latest supported versions (with CUDA)
           - name: Linux (CUDA 11.7, Python 3.10, PyTorch 1.13)
