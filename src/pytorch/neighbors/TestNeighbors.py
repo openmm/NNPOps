@@ -132,9 +132,6 @@ def test_neighbor_grads(dtype, num_atoms, grad):
     else:
         assert pt.allclose(positions_cpu.grad, positions_cuda.grad.cpu(), atol=1e-8, rtol=1e-5)
 
-# The following test is only run on the CPU.  Running it on the GPU triggers a
-# CUDA assertion, which causes all tests run after it to fail.
-
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 @pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
 def test_too_many_neighbors(device, dtype):
