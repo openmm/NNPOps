@@ -129,7 +129,7 @@ static void CUDART_CB checkTooManyNeighbors(void* data) {
             TORCH_CHECK(tooMan == 0, "Some particle has too many neighbors, found " + std::to_string(-tooMan) + " but max is " + std::to_string(max_num_neighbors));
         }
         catch (...) {
-            if (not syncExceptions)
+            if (!syncExceptions)
                 throw;
             else
                 tooManyNeighborsException = std::current_exception();
