@@ -156,6 +156,41 @@ def test_too_many_neighbors(device, dtype):
     assert number_found_pairs == 6
 
 
+def test_is_cuda_graph_compatible():
+    device = 'cuda'
+    dtype = pt.float32
+    num_atoms = 100
+    # Generate random positions
+    positions = 10 * pt.randn((num_atoms, 3), device=device, dtype=dtype)
+    cutoff = 5
+    # Get neighbor pairs
+    ref_neighbors = np.vstack(np.tril_indices(num_atoms, -1))
+    ref_positions = positions.cpu().numpy()
+    ref_deltas = ref_positions[ref_neighbors[0]] - ref_positions[ref_neighbors[1]]
+    ref_distances = np.linalg.norm(ref_deltas, axis=1)
+
+    # Filter the neighbor pairs
+    mask = ref_distances > cutoff
+    ref_neighbors[:, mask] = -1
+    ref_deltas[mask, :] = np.nan
+    ref_distances[mask] = np.nan
+
+    # Find the number of neighbors
+    num_neighbors = np.count_nonzero(np.logical_not(np.isnan(ref_distances)))
+
+    graph = pt.cuda.CUDAGraph()
+    s = pt.cuda.Stream()
+    s.wait_stream(pt.cuda.current_stream())
+    with pt.cuda.stream(s):
+        for _ in range(3):
+            neighbors, deltas, distances = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=num_neighbors+1)
+    pt.cuda.synchronize()
+
+    with pt.cuda.graph(graph):
+        neighbors, deltas, distances = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=num_neighbors+1)
+
+    graph.replay()
+    pt.cuda.synchronize()
 
 
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])

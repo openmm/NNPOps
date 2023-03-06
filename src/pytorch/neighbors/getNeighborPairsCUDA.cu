@@ -28,7 +28,7 @@ template <typename scalar_t> __device__ __forceinline__ scalar_t sqrt_(scalar_t 
 template<> __device__ __forceinline__ float sqrt_(float x) { return ::sqrtf(x); };
 template<> __device__ __forceinline__ double sqrt_(double x) { return ::sqrt(x); };
 
-__device__ __managed__ int32_t tooManyNeighborsErrorFlag; //Error flag for forward_kernel
+__device__ __managed__ int32_t tooManyNeighborsErrorFlag; // Error flag for forward_kernel
 
 template <typename scalar_t> __global__ void forward_kernel(
     const int32_t num_all_pairs,
@@ -137,6 +137,12 @@ static void CUDART_CB checkTooManyNeighbors(void* data) {
     }
 }
 
+static bool isStreamCapturing(cudaStream_t st) {
+    cudaStreamCaptureStatus graphStatus;
+    cudaStreamIsCapturing(st, &graphStatus);
+    return graphStatus == cudaStreamCaptureStatusActive;
+}
+
 class Autograd : public Function<Autograd> {
 public:
     static tensor_list forward(AutogradContext* ctx,
@@ -146,7 +152,14 @@ public:
                                const Tensor& box_vectors,
 			       bool checkErrors,
 			       bool syncExceptions) {
-
+        const auto stream = getCurrentCUDAStream(positions.get_device());
+        bool isCUDAGraphCapturing = isStreamCapturing(stream);
+        // Advice CUDA on expected usage of the error flag
+        if (!isCUDAGraphCapturing) {
+            cudaMemAdvise(&tooManyNeighborsErrorFlag, sizeof(int), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
+            cudaMemAdvise(&tooManyNeighborsErrorFlag, sizeof(int), cudaMemAdviseSetReadMostly, 0);
+        }
+        const CUDAStreamGuard guard(stream);
         TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
         TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
         TORCH_CHECK(positions.size(1) == 3, "Expected the 2nd dimension size of \"positions\" to be 3");
@@ -170,20 +183,14 @@ public:
 
         const int num_threads = 128;
         const int num_blocks = max((num_all_pairs + num_threads - 1) / num_threads, 1);
-        const auto stream = getCurrentCUDAStream(positions.get_device());
 
         const TensorOptions options = positions.options();
         const Tensor i_curr_pair = zeros(1, options.dtype(kInt32));
         const Tensor neighbors = full({2, num_pairs}, -1, options.dtype(kInt32));
         const Tensor deltas = full({num_pairs, 3}, NAN, options);
         const Tensor distances = full(num_pairs, NAN, options);
-	//Advice CUDA on expected usage of the error flag
-	cudaMemAdvise(&tooManyNeighborsErrorFlag, sizeof(int),
-		      cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
-	cudaMemAdvise(&tooManyNeighborsErrorFlag, sizeof(int),
-		      cudaMemAdviseSetReadMostly, 0);
+
 	tooManyNeighborsErrorFlag = 0;
-	const CUDAStreamGuard guard(stream);
         AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "getNeighborPairs::forward", [&]() {
 	  const scalar_t cutoff_ = cutoff.to<scalar_t>();
 	  TORCH_CHECK(cutoff_ > 0, "Expected \"cutoff\" to be positive");
