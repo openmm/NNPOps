@@ -16,7 +16,7 @@ defaults:
 jobs:
   build:
     name: ${{ matrix.name }}
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -32,7 +32,7 @@ jobs:
             pytorch: "1.11.*"
 
           # Older supported versions
-          - name: Linux (CUDA 11.7, Python 3.9, PyTorch 1.12)
+          - name: Linux (CUDA 11.2, Python 3.9, PyTorch 1.12)
             enable_cuda: true
             cuda: "11.2.2"
             gcc: "10.3.*"
