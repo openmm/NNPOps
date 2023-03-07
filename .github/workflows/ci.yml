@@ -64,7 +64,7 @@ jobs:
       uses: Jimver/cuda-toolkit@v0.2.8
       with:
         cuda: ${{ matrix.cuda }}
-        linux-local-args: '["--toolkit", "--override"]'
+        linux-local-args: '["--toolkit", "--override"]' # Need to install CUDA 10.2
       if: ${{ matrix.enable_cuda }}
 
     - name: Install Miniconda
