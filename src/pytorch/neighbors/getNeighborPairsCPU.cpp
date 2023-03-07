@@ -72,6 +72,7 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
         const Tensor mask = distances > cutoff;
         neighbors.index_put_({Slice(), mask}, -1);
         deltas = deltas.clone(); // Break an autograd loop
+        distances = distances.clone();
         deltas.index_put_({mask, Slice()}, NAN);
         distances.index_put_({mask}, NAN);
 
