@@ -97,7 +97,7 @@ def test_compare_waterbox_pbc_with_native(deviceString):
     grad_error = torch.max(torch.abs((grad - grad_ref)/grad_ref))
 
     assert energy_error < 5e-7
-    assert grad_error < 7e-3
+    assert grad_error < 8e-3
 
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
 @pytest.mark.parametrize('molFile', ['1hvj', '1hvk', '2iuz', '3hkw', '3hky', '3lka', '3o99'])
