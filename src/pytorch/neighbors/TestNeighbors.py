@@ -94,7 +94,7 @@ def test_neighbor_values(device, dtype, num_atoms, cutoff, all_pairs):
 @pytest.mark.parametrize('num_atoms', [1, 2, 3, 4, 5, 10, 100, 1000])
 @pytest.mark.parametrize('grad', ['deltas', 'distances', 'combined'])
 def test_neighbor_grads(device, dtype, num_atoms, grad):
-    
+
     if not pt.cuda.is_available() and device == 'cuda':
         pytest.skip('No GPU')
 
@@ -115,7 +115,7 @@ def test_neighbor_grads(device, dtype, num_atoms, grad):
     positions.requires_grad_(True)
     print(positions)
     neighbors, deltas, distances = getNeighborPairs(positions, cutoff=cutoff)
-    
+
     assert pt.all(neighbors > -1)
     assert pt.all(neighbors == ref_neighbors)
     assert pt.allclose(deltas, ref_deltas)
@@ -133,7 +133,7 @@ def test_neighbor_grads(device, dtype, num_atoms, grad):
         (deltas.sum() + distances.sum()).backward()
     else:
         raise ValueError('grad')
-    
+
     if dtype == pt.float32:
         assert pt.allclose(ref_positions.grad, positions.grad, atol=1e-3, rtol=1e-3)
     else:
@@ -162,6 +162,8 @@ def test_too_many_neighbors(device, dtype):
 
 
 def test_is_cuda_graph_compatible():
+    if not pt.cuda.is_available():
+        pytest.skip('No GPU')
     device = 'cuda'
     dtype = pt.float32
     num_atoms = 100
