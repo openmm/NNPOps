@@ -77,8 +77,6 @@ install(FILES src/pytorch/__init__.py
               src/pytorch/OptimizedTorchANI.py
               src/pytorch/SpeciesConverter.py
               src/pytorch/SymmetryFunctions.py
-              src/pytorch/neighbors/__init__.py
-              src/pytorch/neighbors/getNeighborPairs.py
         DESTINATION ${Python3_SITEARCH}/${NAME})
 install(FILES src/pytorch/neighbors/__init__.py
               src/pytorch/neighbors/getNeighborPairs.py
