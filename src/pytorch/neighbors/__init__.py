@@ -1,10 +1,9 @@
 '''
 Neighbor operations
 '''
-import site
-import os
+import os.path
 import torch
 
-torch.ops.load_library(os.path.join(site.getsitepackages()[-1],"NNPOps", "libNNPOpsPyTorch.so"))
+torch.ops.load_library(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'libNNPOpsPyTorch.so'))
 
 from NNPOps.neighbors.getNeighborPairs import getNeighborPairs
