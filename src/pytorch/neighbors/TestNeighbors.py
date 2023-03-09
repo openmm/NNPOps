@@ -89,48 +89,56 @@ def test_neighbor_values(device, dtype, num_atoms, cutoff, all_pairs):
     assert np.allclose(ref_deltas, deltas, equal_nan=True)
     assert np.allclose(ref_distances, distances, equal_nan=True)
 
+@pytest.mark.parametrize('device', ['cpu', 'cuda'])
 @pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
 @pytest.mark.parametrize('num_atoms', [1, 2, 3, 4, 5, 10, 100, 1000])
 @pytest.mark.parametrize('grad', ['deltas', 'distances', 'combined'])
-def test_neighbor_grads(dtype, num_atoms, grad):
-
-    if not pt.cuda.is_available():
+def test_neighbor_grads(device, dtype, num_atoms, grad):
+    
+    if not pt.cuda.is_available() and device == 'cuda':
         pytest.skip('No GPU')
 
+    cutoff=1000
+
     # Generate random positions
-    positions = 10 * pt.randn((num_atoms, 3), dtype=dtype)
+    positions = 10 * pt.randn((num_atoms, 3), device=device, dtype=dtype)
 
-    # Compute values
-    positions_cpu = positions.detach().cpu()
-    positions_cpu.requires_grad_(True)
-    neighbors_cpu, deltas_cpu, distances_cpu = getNeighborPairs(positions_cpu, cutoff=1000)
+    # Compute reference values using pure pytorch
+    ref_neighbors = pt.vstack((pt.tril_indices(num_atoms,num_atoms, -1, device=device),))
+    ref_positions = positions.clone()
+    ref_positions.requires_grad_(True)
+    ref_deltas = ref_positions[ref_neighbors[0]] - ref_positions[ref_neighbors[1]]
+    ref_distances = pt.linalg.norm(ref_deltas, axis=1)
 
-    positions_cuda = positions.detach().cuda()
-    positions_cuda.requires_grad_(True)
-    neighbors_cuda, deltas_cuda, distances_cuda = getNeighborPairs(positions_cuda, cutoff=1000)
 
-    assert pt.all(neighbors_cpu > -1)
-    assert pt.all(neighbors_cpu == neighbors_cuda.cpu())
-    assert pt.allclose(deltas_cpu, deltas_cuda.cpu())
-    assert pt.allclose(distances_cpu, distances_cuda.cpu())
+    # Compute values using NNPOps
+    positions.requires_grad_(True)
+    print(positions)
+    neighbors, deltas, distances = getNeighborPairs(positions, cutoff=cutoff)
+    
+    assert pt.all(neighbors > -1)
+    assert pt.all(neighbors == ref_neighbors)
+    assert pt.allclose(deltas, ref_deltas)
+    assert pt.allclose(distances, ref_distances)
 
     # Compute gradients
     if grad == 'deltas':
-        deltas_cpu.sum().backward()
-        deltas_cuda.sum().backward()
+        ref_deltas.sum().backward()
+        deltas.sum().backward()
     elif grad == 'distances':
-        distances_cpu.sum().backward()
-        distances_cuda.sum().backward()
+        ref_distances.sum().backward()
+        distances.sum().backward()
     elif grad == 'combined':
-        (deltas_cpu.sum() + distances_cpu.sum()).backward()
-        (deltas_cuda.sum() + distances_cuda.sum()).backward()
+        (ref_deltas.sum() + ref_distances.sum()).backward()
+        (deltas.sum() + distances.sum()).backward()
     else:
         raise ValueError('grad')
-
+    
     if dtype == pt.float32:
-        assert pt.allclose(positions_cpu.grad, positions_cuda.grad.cpu(), atol=1e-3, rtol=1e-3)
+        assert pt.allclose(ref_positions.grad, positions.grad, atol=1e-3, rtol=1e-3)
     else:
-        assert pt.allclose(positions_cpu.grad, positions_cuda.grad.cpu(), atol=1e-8, rtol=1e-5)
+        assert pt.allclose(ref_positions.grad, positions.grad, atol=1e-8, rtol=1e-5)
+
 
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 @pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
