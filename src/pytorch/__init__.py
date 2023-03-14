@@ -12,7 +12,7 @@ for path in site.getsitepackages():
         break
 else:
     # if we didn't find it, look for NNPOps/libNNPOpsPyTorch.so in the same directory as this file
-    torch.ops.load_library(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'libNNPOpsPyTorch.so'))
+    torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 
 
 from NNPOps.OptimizedTorchANI import OptimizedTorchANI
