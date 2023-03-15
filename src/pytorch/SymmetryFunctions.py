@@ -21,13 +21,9 @@
 # SOFTWARE.
 #
 
-import os.path
 from typing import List, Optional, Tuple
 import torch
 from torch import Tensor
-
-torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
-torch.classes.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 
 Holder = torch.classes.NNPOpsANISymmetryFunctions.Holder
 operation = torch.ops.NNPOpsANISymmetryFunctions.operation
