@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import torch as pt
 from NNPOps.neighbors import getNeighborPairs
-
+import tempfile
 
 def sort_neighbors(neighbors, deltas, distances):
     i_sorted = np.lexsort(neighbors)[::-1]
@@ -218,3 +218,22 @@ def test_periodic_neighbors(device, dtype):
     assert np.all(ref_neighbors == neighbors)
     assert np.allclose(ref_deltas, deltas, equal_nan=True)
     assert np.allclose(ref_distances, distances, equal_nan=True)
+
+
+@pytest.mark.parametrize('device', ['cpu', 'cuda'])
+@pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
+def test_jit_script_compatible(device, dtype):
+
+    class ForceModule(pt.nn.Module):
+
+        def forward(self, positions):
+
+            neighbors, deltas, distances = getNeighborPairs(positions, cutoff=1.0)
+            mask = pt.isnan(distances)
+            distances = distances[~mask]
+            return pt.sum(distances**2)
+
+    with tempfile.NamedTemporaryFile() as temp:
+        model = ForceModule()
+        module = pt.jit.script(model)
+        module.save(temp.name)
