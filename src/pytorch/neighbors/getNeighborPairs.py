@@ -2,7 +2,7 @@ from torch import empty, ops, Tensor
 from typing import Optional, Tuple
 
 
-def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = -1, box_vectors: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
+def getNeighborPairs(positions: Tensor, cutoff: float, max_num_neighbors: int = -1, box_vectors: Optional[Tensor] = None) -> Tuple[Tensor, Tensor, Tensor]:
     '''
     Returns indices and distances of atom pairs within a given cutoff distance.
 
