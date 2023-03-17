@@ -115,25 +115,22 @@ static std::exception_ptr tooManyNeighborsException = nullptr;
 // exception here or store it for later.
 static void CUDART_CB checkTooManyNeighbors(void* data) {
     int max_num_neighbors;
-    bool checkErrors;
     bool syncExceptions;
-    std::tie(max_num_neighbors, checkErrors, syncExceptions) = *static_cast<std::tuple<int, bool, bool>*>(data);
+    std::tie(max_num_neighbors, syncExceptions) = *static_cast<std::tuple<int, bool>*>(data);
     // An exception thrown  in a stream callback is  not catchable (it
     // runs in another thread), so we store it in an exception_ptr for
     // it  to be  processed sometime  later in  the main  thread.  For
     // performance   reasons,    the   exception   is    thrown   here
     // asynchronously if the checkErrors flag is set to false
-    if (!checkErrors) {
-        try {
-            const int tooMan = tooManyNeighborsErrorFlag;
-            TORCH_CHECK(tooMan == 0, "Some particle has too many neighbors, found " + std::to_string(-tooMan) + " but max is " + std::to_string(max_num_neighbors));
-        }
-        catch (...) {
-            if (!syncExceptions)
-                throw;
-            else
-                tooManyNeighborsException = std::current_exception();
-        }
+    try {
+      const int tooMan = tooManyNeighborsErrorFlag;
+      TORCH_CHECK(tooMan == 0, "Some particle has too many neighbors, found " + std::to_string(-tooMan) + " total pairs but max per particle is " + std::to_string(max_num_neighbors));
+    }
+    catch (...) {
+      if (!syncExceptions)
+	throw;
+      else
+	tooManyNeighborsException = std::current_exception();
     }
 }
 
@@ -164,8 +161,7 @@ public:
         TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
         TORCH_CHECK(positions.size(1) == 3, "Expected the 2nd dimension size of \"positions\" to be 3");
         TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
-
-        const int max_num_neighbors_ = max_num_neighbors.to<int>();
+	int max_num_neighbors_ = max_num_neighbors.to<int>();
         TORCH_CHECK(max_num_neighbors_ > 0 || max_num_neighbors_ == -1,
             "Expected \"max_num_neighbors\" to be positive or equal to -1");
 
@@ -207,26 +203,29 @@ public:
                 get_accessor<scalar_t, 2>(box_vectors));
         });
         // Check the error flag via cudaLaunchHostFunction so it is compatible with cuda graphs
-        cudaHostFn_t h_fn = checkTooManyNeighbors;
-        std::tuple<int, bool, bool> h_fn_data = {max_num_neighbors_, checkErrors, syncExceptions};
-        cudaLaunchHostFunc(stream, h_fn, (void*)&h_fn_data);
-        // With chekErrors=false and syncExceptions=false the state of
-        // the tooManyErrorsFlag is checked  and exceptions are thrown
-        // asynchronously and  in a  way compatible with  CUDA graphs.
-        // However,  this  way  of  throwing  an  exception  makes  it
-        // uncatchable, crashing  the code.
-	//If  checkErrors=false  the syncExceptions=true  an  explicit
-        // synchronization barrier here forces  to throw the exception
-        // from the main thread, making it catchable at the expense of
-        // a performance penalty each time the function is called.
-	//Otherwise, if  checkErrors=true, no exception is  thrown and
-	//the user is  responsible to check if the number  of pairs is
-	//too high
-        if (!checkErrors && syncExceptions) {
+	if(!checkErrors){
+	  static constexpr cudaHostFn_t h_fn = checkTooManyNeighbors;
+	  static std::tuple<int, bool> h_fn_data;
+	  h_fn_data = {max_num_neighbors_, syncExceptions};
+	  cudaLaunchHostFunc(stream, h_fn, (void*)&h_fn_data);
+	  // With chekErrors=false and syncExceptions=false the state of
+	  // the tooManyErrorsFlag is checked  and exceptions are thrown
+	  // asynchronously and  in a  way compatible with  CUDA graphs.
+	  // However,  this  way  of  throwing  an  exception  makes  it
+	  // uncatchable, crashing  the code.
+	  //If  checkErrors=false  the syncExceptions=true  an  explicit
+	  // synchronization barrier here forces  to throw the exception
+	  // from the main thread, making it catchable at the expense of
+	  // a performance penalty each time the function is called.
+	  //Otherwise, if  checkErrors=true, no exception is  thrown and
+	  //the user is  responsible to check if the number  of pairs is
+	  //too high
+	  if (syncExceptions) {
             cudaStreamSynchronize(stream);
             if (tooManyNeighborsException)
-                std::rethrow_exception(tooManyNeighborsException);
-        }
+	      std::rethrow_exception(tooManyNeighborsException);
+	  }
+	}
         ctx->save_for_backward({neighbors, deltas, distances});
         ctx->saved_data["num_atoms"] = num_atoms;
         return {neighbors, deltas, distances, i_curr_pair};
