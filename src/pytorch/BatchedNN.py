@@ -21,14 +21,12 @@
 # SOFTWARE.
 #
 
-import os
 import torch
 from torch import nn
 from torch import Tensor
 from torch.nn import functional as F
 from typing import List, NamedTuple, Tuple, Union
 
-torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 batchedLinear = torch.ops.NNPOpsBatchedNN.BatchedLinear
 
 
