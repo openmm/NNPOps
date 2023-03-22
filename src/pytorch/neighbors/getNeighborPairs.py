@@ -9,7 +9,7 @@ def getNeighborPairs(
     box_vectors: Optional[Tensor] = None,
     check_errors: Optional[bool] = False,
     sync_exceptions: Optional[bool] = False,
-) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+) -> Tuple[Tensor, Tensor, Tensor, Optional[Tensor]]:
     """Returns indices and distances of atom pairs within a given cutoff distance.
 
     If `max_num_neighbors == -1` (default), all the atom pairs are returned,
@@ -81,10 +81,11 @@ def getNeighborPairs(
         If an atom pair is separated by a larger distance than the cutoff,
         the distance is set to `NaN`.
 
-    number_found_pairs: `torch.Tensor`
-        Contains the total  number of pairs found,  which might exceed
-        the  requested  max_num_neighbors,  leaving the  rest  of  the
-        output in an undefined state.
+    number_found_pairs: `Optional[torch.Tensor]`
+        Present  if check_errors=False.  Contains the  total number  of
+        pairs    found,    which    might   exceed    the    requested
+        max_num_neighbors,  leaving  the  rest  of the  output  in  an
+        undefined state.
 
     Exceptions
     ----------
@@ -153,4 +154,7 @@ def getNeighborPairs(
     neighbors, deltas, distances, number_found_pairs = ops.neighbors.getNeighborPairs(
         positions, cutoff, max_num_neighbors, box_vectors, check_errors, sync_exceptions
     )
-    return neighbors, deltas, distances, number_found_pairs
+    if check_errors is False:
+        return neighbors, deltas, distances, number_found_pairs
+    else:
+        return neighbors, deltas, distances
