@@ -52,7 +52,7 @@ def getNeighborPairs(
         If this is omitted, periodic boundary conditions are not applied.
     check_errors: bool, optional
         If set to False the function does not raise due to a number of pairs larger than the maximum.
-        If set to True, an exception will be raised in that case.
+        If set to True, a RuntimeError will be raised in that case.
         Defaults to False.
     sync_exceptions: bool, optional
         If  set to  True the  function will  synchronize to  check for
