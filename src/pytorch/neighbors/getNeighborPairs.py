@@ -50,16 +50,16 @@ def getNeighborPairs(
         where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
         If this is omitted, periodic boundary conditions are not applied.
     check_errors: bool, optional
-        If set to True the function does not throw due to a number of pairs larger than the maximum.
-        If set to False, an exception will be thrown in that case.
+        If set to False the function does not raise due to a number of pairs larger than the maximum.
+        If set to True, an exception will be raised in that case.
         Defaults to False.
     sync_exceptions: bool, optional
         If  set to  True the  function will  synchronize to  check for
-        errors  and  throw  an  exception  in  the  caller  thread  if
+        errors  and  raise  an  exception  in  the  caller  thread  if
         necessary.
-        If set  to False it  is possible  that an exception  thrown by
+        If set  to False it  is possible  that an exception  raised by
         this function cannot bbe catched and result in a crash.
-        This flag is ignored if check_errors is True.
+        This flag is ignored if check_errors is False.
         This flag must be False for the getNeighborPairs operation to be CUDA graph compatible.
         Defaults to False.
     Returns
@@ -81,14 +81,14 @@ def getNeighborPairs(
         the distance is set to `NaN`.
 
     number_found_pairs: `Optional[torch.Tensor]`
-        Present  if check_errors=True.  Contains the  total number  of
+        Present  if check_errors=False.  Contains the  total number  of
         pairs    found,    which    might   exceed    the    requested
         max_num_neighbors,  leaving  the  rest  of the  output  in  an
         undefined state.
 
     Exceptions
     ----------
-    If `max_num_neighbors > 0` and too small, `RuntimeError` is raised unless check_errors=True.
+    If `max_num_neighbors > 0` and too small, `RuntimeError` is raised unless check_errors=False.
 
     Note
     ----
@@ -151,7 +151,7 @@ def getNeighborPairs(
     if box_vectors is None:
         box_vectors = empty((0, 0), device=positions.device, dtype=positions.dtype)
     neighbors, deltas, distances, number_found_pairs = ops.neighbors.getNeighborPairs(positions, cutoff, max_num_neighbors, box_vectors, check_errors, sync_exceptions)
-    if check_errors is True:
+    if check_errors is False:
         return neighbors, deltas, distances, number_found_pairs
     else:
         return neighbors, deltas, distances
