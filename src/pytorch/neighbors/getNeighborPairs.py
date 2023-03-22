@@ -154,7 +154,7 @@ def getNeighborPairs(
     neighbors, deltas, distances, number_found_pairs = ops.neighbors.getNeighborPairs(
         positions, cutoff, max_num_neighbors, box_vectors, check_errors, sync_exceptions
     )
-    if check_errors is False:
+    if check_errors is True:
         return neighbors, deltas, distances, number_found_pairs
     else:
         return neighbors, deltas, distances
