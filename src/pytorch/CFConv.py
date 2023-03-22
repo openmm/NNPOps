@@ -21,14 +21,10 @@
 # SOFTWARE.
 #
 
-import os.path
 import torch
 from torch import Tensor
 
 from NNPOps.CFConvNeighbors import CFConvNeighbors
-
-torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
-torch.classes.load_library(os.path.join(os.path.dirname(__file__), 'libNNPOpsPyTorch.so'))
 
 class CFConv(torch.nn.Module):
     """

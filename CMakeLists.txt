@@ -56,16 +56,26 @@ foreach(TEST_PATH ${TEST_PATHS})
     add_test(${TEST_NAME} ${TEST_NAME})
 endforeach()
 
-# Tests of PyTorch wrappers
-add_test(TestBatchedNN         pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestBatchedNN.py)
-add_test(TestCFConv            pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestCFConv.py)
-add_test(TestCFConvNeighbors   pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestCFConvNeighbors.py)
-add_test(TestEnergyShifter     pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestEnergyShifter.py)
-add_test(TestOptimizedTorchANI pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestOptimizedTorchANI.py)
-add_test(TestSpeciesConverter  pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestSpeciesConverter.py)
-add_test(TestSymmetryFunctions pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/TestSymmetryFunctions.py)
-add_test(TestNeighbors         pytest -v ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/TestNeighbors.py)
-add_test(TestGetNeighborPairs  pytest -v --doctest-modules ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/getNeighborPairs.py)
+# Move test scripts to a test folder in the build directory, create test folder if necessary
+add_custom_command(TARGET ${LIBRARY} POST_BUILD	COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/test)
+add_custom_command(TARGET ${LIBRARY} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy
+  ${CMAKE_SOURCE_DIR}/src/pytorch/Test*.py
+  ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/Test*.py
+  ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/getNeighborPairs.py
+  ${CMAKE_BINARY_DIR}/test)
+add_custom_command(TARGET ${LIBRARY} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+  ${CMAKE_SOURCE_DIR}/src/pytorch/molecules
+  ${CMAKE_BINARY_DIR}/test/molecules)
+
+# Add tests for all scripts in the test directory
+file(GLOB_RECURSE PYTHON_TEST_PATHS ${CMAKE_BINARY_DIR}/test/Test*.py)
+foreach(TEST_PATH ${PYTHON_TEST_PATHS})
+		cmake_path(GET TEST_PATH STEM TEST_NAME)
+		add_test(${TEST_NAME} pytest -v ${CMAKE_BINARY_DIR}/test/${TEST_NAME}.py)
+endforeach()
+add_test(TestGetNeighborPairs  pytest -v --doctest-modules ${CMAKE_BINARY_DIR}/test/getNeighborPairs.py)
 
 # Installation
 install(TARGETS ${LIBRARY} DESTINATION ${Python3_SITEARCH}/${NAME})
@@ -77,8 +87,6 @@ install(FILES src/pytorch/__init__.py
               src/pytorch/OptimizedTorchANI.py
               src/pytorch/SpeciesConverter.py
               src/pytorch/SymmetryFunctions.py
-              src/pytorch/neighbors/__init__.py
-              src/pytorch/neighbors/getNeighborPairs.py
         DESTINATION ${Python3_SITEARCH}/${NAME})
 install(FILES src/pytorch/neighbors/__init__.py
               src/pytorch/neighbors/getNeighborPairs.py
