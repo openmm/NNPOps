@@ -3,13 +3,14 @@ from typing import Optional, Tuple
 
 
 def getNeighborPairs(
-        positions: Tensor,
-        cutoff: float,
-        max_num_neighbors: int = -1,
-        box_vectors: Optional[Tensor] = None,
-        check_errors: Optional[bool] = False,
-        sync_exceptions: Optional[bool] = False) -> Tuple[Tensor, Tensor, Tensor, Optional[Tensor]]:
-    '''Returns indices and distances of atom pairs within a given cutoff distance.
+    positions: Tensor,
+    cutoff: float,
+    max_num_neighbors: int = -1,
+    box_vectors: Optional[Tensor] = None,
+    check_errors: Optional[bool] = False,
+    sync_exceptions: Optional[bool] = False,
+) -> Tuple[Tensor, Tensor, Tensor, Optional[Tensor]]:
+    """Returns indices and distances of atom pairs within a given cutoff distance.
 
     If `max_num_neighbors == -1` (default), all the atom pairs are returned,
     i.e. `num_pairs = num_atoms * (num_atoms + 1) / 2`. This is intended for
@@ -58,7 +59,7 @@ def getNeighborPairs(
         errors  and  raise  an  exception  in  the  caller  thread  if
         necessary.
         If set  to False it  is possible  that an exception  raised by
-        this function cannot bbe catched and result in a crash.
+        this function cannot be catched and result in a crash.
         This flag is ignored if check_errors is False.
         This flag must be False for the getNeighborPairs operation to be CUDA graph compatible.
         Defaults to False.
@@ -146,11 +147,13 @@ def getNeighborPairs(
              [nan, nan, nan]]),
      tensor([1., 1., nan, nan, nan, nan]))
 
-    '''
+    """
 
     if box_vectors is None:
         box_vectors = empty((0, 0), device=positions.device, dtype=positions.dtype)
-    neighbors, deltas, distances, number_found_pairs = ops.neighbors.getNeighborPairs(positions, cutoff, max_num_neighbors, box_vectors, check_errors, sync_exceptions)
+    neighbors, deltas, distances, number_found_pairs = ops.neighbors.getNeighborPairs(
+        positions, cutoff, max_num_neighbors, box_vectors, check_errors, sync_exceptions
+    )
     if check_errors is False:
         return neighbors, deltas, distances, number_found_pairs
     else:

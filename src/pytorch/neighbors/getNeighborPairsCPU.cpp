@@ -84,7 +84,7 @@ static tuple<Tensor, Tensor, Tensor, Tensor> forward(const Tensor& positions,
         distances = distances.index({mask});
 
         const int num_pad = num_atoms * max_num_neighbors_ - distances.size(0);
-        if (!checkErrors) {
+        if (checkErrors) {
             TORCH_CHECK(num_pad >= 0,
                 "The maximum number of pairs has been exceed! Increase \"max_num_neighbors\"");
         }

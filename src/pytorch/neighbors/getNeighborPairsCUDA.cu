@@ -110,7 +110,7 @@ static std::exception_ptr tooManyNeighborsException = nullptr;
 // Checks the  too many  neighbors flag and  stores an  exception if
 // necessary to detail::tooManyNeighborsException.  This function is
 // intended to be launched via cudaLaunchHostFunc.
-// data  is a  void pointer  to a  std::tuple<int,bool,bool>, storing  the
+// data  is a  void pointer  to a  std::tuple<int,bool>, storing  the
 // maximum number  of neighbors and  whether to throw  an uncatchable
 // exception here or store it for later.
 static void CUDART_CB checkTooManyNeighbors(void* data) {
@@ -121,7 +121,7 @@ static void CUDART_CB checkTooManyNeighbors(void* data) {
     // runs in another thread), so we store it in an exception_ptr for
     // it  to be  processed sometime  later in  the main  thread.  For
     // performance   reasons,    the   exception   is    thrown   here
-    // asynchronously if the checkErrors flag is set to false
+    // asynchronously if the checkErrors flag is set to true
     try {
       const int tooMan = tooManyNeighborsErrorFlag;
       TORCH_CHECK(tooMan == 0, "Some particle has too many neighbors, found " + std::to_string(-tooMan) + " total pairs but max per particle is " + std::to_string(max_num_neighbors));
@@ -203,7 +203,7 @@ public:
                 get_accessor<scalar_t, 2>(box_vectors));
         });
         // Check the error flag via cudaLaunchHostFunction so it is compatible with cuda graphs
-	if(!checkErrors){
+	if(checkErrors){
 	  static constexpr cudaHostFn_t h_fn = checkTooManyNeighbors;
 	  static std::tuple<int, bool> h_fn_data;
 	  h_fn_data = {max_num_neighbors_, syncExceptions};
@@ -213,11 +213,11 @@ public:
 	  // asynchronously and  in a  way compatible with  CUDA graphs.
 	  // However,  this  way  of  throwing  an  exception  makes  it
 	  // uncatchable, crashing  the code.
-	  //If  checkErrors=false  the syncExceptions=true  an  explicit
+	  //If  checkErrors=true  the syncExceptions=true  an  explicit
 	  // synchronization barrier here forces  to throw the exception
 	  // from the main thread, making it catchable at the expense of
 	  // a performance penalty each time the function is called.
-	  //Otherwise, if  checkErrors=true, no exception is  thrown and
+	  //Otherwise, if  checkErrors=false, no exception is  thrown and
 	  //the user is  responsible to check if the number  of pairs is
 	  //too high
 	  if (syncExceptions) {
