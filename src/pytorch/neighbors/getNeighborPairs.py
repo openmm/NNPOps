@@ -7,8 +7,8 @@ def getNeighborPairs(
     cutoff: float,
     max_num_neighbors: int = -1,
     box_vectors: Optional[Tensor] = None,
-    check_errors: Optional[bool] = False,
-    sync_exceptions: Optional[bool] = False,
+    check_errors: bool = False,
+    sync_exceptions: bool = False,
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     """Returns indices and distances of atom pairs within a given cutoff distance.
 
