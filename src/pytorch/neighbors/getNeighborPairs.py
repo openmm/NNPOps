@@ -114,7 +114,7 @@ def getNeighborPairs(
      tensor([[1., 0., 0.],
              [2., 0., 0.],
              [1., 0., 0.]]),
-     tensor([1., 2., 1.]))
+     tensor([1., 2., 1.]), tensor([3], dtype=torch.int32))
 
     >>> getNeighborPairs(positions, cutoff=1.5) # doctest: +NORMALIZE_WHITESPACE
     (tensor([[ 1, -1,  2],
@@ -122,29 +122,25 @@ def getNeighborPairs(
      tensor([[1., 0., 0.],
              [nan, nan, nan],
              [1., 0., 0.]]),
-     tensor([1., nan, 1.]))
+     tensor([1., nan, 1.]), tensor([3], dtype=torch.int32))
 
     >>> getNeighborPairs(positions, cutoff=3.0, max_num_neighbors=2) # doctest: +NORMALIZE_WHITESPACE
     (tensor([[ 1,  2,  2, -1, -1, -1],
-             [ 0,  0,  1, -1, -1, -1]], dtype=torch.int32),
-     tensor([[1., 0., 0.],
-             [2., 0., 0.],
-             [1., 0., 0.],
-             [nan, nan, nan],
-             [nan, nan, nan],
-             [nan, nan, nan]]),
-     tensor([1., 2., 1., nan, nan, nan]))
+            [ 0,  0,  1, -1, -1, -1]], dtype=torch.int32), tensor([[1., 0., 0.],
+            [2., 0., 0.],
+            [1., 0., 0.],
+            [nan, nan, nan],
+            [nan, nan, nan],
+            [nan, nan, nan]]), tensor([1., 2., 1., nan, nan, nan]), tensor([6], dtype=torch.int32))
 
     >>> getNeighborPairs(positions, cutoff=1.5, max_num_neighbors=2) # doctest: +NORMALIZE_WHITESPACE
     (tensor([[ 1,  2, -1, -1, -1, -1],
-             [ 0,  1, -1, -1, -1, -1]], dtype=torch.int32),
-     tensor([[1., 0., 0.],
-             [1., 0., 0.],
-             [nan, nan, nan],
-             [nan, nan, nan],
-             [nan, nan, nan],
-             [nan, nan, nan]]),
-     tensor([1., 1., nan, nan, nan, nan]))
+             [ 0,  1, -1, -1, -1, -1]], dtype=torch.int32), tensor([[1., 0., 0.],
+            [1., 0., 0.],
+            [nan, nan, nan],
+            [nan, nan, nan],
+            [nan, nan, nan],
+            [nan, nan, nan]]), tensor([1., 1., nan, nan, nan, nan]), tensor([6], dtype=torch.int32))
 
     """
 

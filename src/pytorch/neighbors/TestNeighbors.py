@@ -59,7 +59,7 @@ def test_neighbor_values(device, dtype, num_atoms, cutoff, all_pairs):
     max_num_neighbors = -1 if all_pairs else max(int(np.ceil(num_neighbors / num_atoms)), 1)
 
     # Compute results
-    neighbors, deltas, distances = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=max_num_neighbors)
+    neighbors, deltas, distances, _ = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=max_num_neighbors)
 
     # Check device
     assert neighbors.device == positions.device
@@ -114,7 +114,7 @@ def test_neighbor_grads(device, dtype, num_atoms, grad):
     # Compute values using NNPOps
     positions.requires_grad_(True)
     print(positions)
-    neighbors, deltas, distances = getNeighborPairs(positions, cutoff=cutoff)
+    neighbors, deltas, distances, _ = getNeighborPairs(positions, cutoff=cutoff)
 
     assert pt.all(neighbors > -1)
     assert pt.all(neighbors == ref_neighbors)
@@ -190,11 +190,11 @@ def test_is_cuda_graph_compatible():
     s.wait_stream(pt.cuda.current_stream())
     with pt.cuda.stream(s):
         for _ in range(3):
-            neighbors, deltas, distances = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=num_neighbors+1)
+            neighbors, deltas, distances, _ = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=num_neighbors+1)
     pt.cuda.synchronize()
 
     with pt.cuda.graph(graph):
-        neighbors, deltas, distances = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=num_neighbors+1)
+        neighbors, deltas, distances, _ = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=num_neighbors+1)
 
     graph.replay()
     pt.cuda.synchronize()
@@ -234,7 +234,7 @@ def test_periodic_neighbors(device, dtype):
     max_num_neighbors = max(int(np.ceil(num_neighbors / num_atoms)), 1)
 
     # Compute results
-    neighbors, deltas, distances = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=max_num_neighbors, box_vectors=box_vectors)
+    neighbors, deltas, distances, _ = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=max_num_neighbors, box_vectors=box_vectors)
 
     # Check device
     assert neighbors.device == positions.device
@@ -272,7 +272,7 @@ def test_jit_script_compatible(device, dtype):
 
         def forward(self, positions):
 
-            neighbors, deltas, distances = getNeighborPairs(positions, cutoff=1.0)
+            neighbors, deltas, distances, _ = getNeighborPairs(positions, cutoff=1.0)
             mask = pt.isnan(distances)
             distances = distances[~mask]
             return pt.sum(distances**2)
