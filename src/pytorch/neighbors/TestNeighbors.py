@@ -148,15 +148,11 @@ def test_too_many_neighbors(device, dtype):
     # 4 points result into 6 pairs, but there is a storage just for 4.
     positions = pt.zeros((4, 3,), device=device, dtype=dtype)
     with pytest.raises(RuntimeError):
-        # checkErrors = True will throw due to exceeding neighbours
-        # syncExceptions = True makes  this exception catchable at the
-        # expense of performance (even when no error ocurred)
-        getNeighborPairs(positions, cutoff=1, max_num_neighbors=1, check_errors=True, sync_exceptions=True)
+        # checkErrors = True will raise due to exceeding neighbours
+        getNeighborPairs(positions, cutoff=1, max_num_neighbors=1, check_errors=True)
         pt.cuda.synchronize()
 
-    # checkErrors = False will never throw due to exceeding neighbours,
-    # but  will return  the number  of pairs  found.
-    # syncExceptions is ignored in this case
+    # checkErrors = False will never throw due to exceeding neighbours. In addition, the call will be compatible with CUDA graphs
     neighbors, deltas, distances, number_found_pairs = getNeighborPairs(positions, cutoff=1, max_num_neighbors=1, check_errors=False)
     assert number_found_pairs == 6
 

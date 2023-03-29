@@ -7,8 +7,7 @@ def getNeighborPairs(
     cutoff: float,
     max_num_neighbors: int = -1,
     box_vectors: Optional[Tensor] = None,
-    check_errors: bool = False,
-    sync_exceptions: bool = False,
+    check_errors: bool = False
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     """Returns indices and distances of atom pairs within a given cutoff distance.
 
@@ -54,15 +53,6 @@ def getNeighborPairs(
         If set to False the function does not raise due to a number of pairs larger than the maximum.
         If set to True, a RuntimeError will be raised in that case.
         Defaults to False.
-    sync_exceptions: bool, optional
-        If  set to  True the  function will  synchronize to  check for
-        errors  and  raise  an  exception  in  the  caller  thread  if
-        necessary.
-        If set  to False it  is possible  that an exception  raised by
-        this function cannot be catched and result in a crash.
-        This flag is ignored if check_errors is False.
-        This flag must be False for the getNeighborPairs operation to be CUDA graph compatible.
-        Defaults to False.
     Returns
     -------
     neighbors: `torch.Tensor`
@@ -88,14 +78,14 @@ def getNeighborPairs(
 
     Exceptions
     ----------
-    If `max_num_neighbors > 0` and too small, `RuntimeError` is raised unless check_errors=False.
+    If `max_num_neighbors > 0` and too small, `RuntimeError` is raised if check_errors=True.
 
     Note
     ----
     The operation can be compatible with CUDA Grahps, i.e. the shapes of the output
     tensors are independed of the values of input tensors and no synchronizing operation is performed.
 
-    For this to be the case sync_exceptions must be False.
+    For this to be the case check_errors must be False
 
     The CUDA implementation returns the atom pairs in non-determinist order,
     if `max_num_neighbors > 0`.
@@ -147,6 +137,6 @@ def getNeighborPairs(
     if box_vectors is None:
         box_vectors = empty((0, 0), device=positions.device, dtype=positions.dtype)
     neighbors, deltas, distances, number_found_pairs = ops.neighbors.getNeighborPairs(
-        positions, cutoff, max_num_neighbors, box_vectors, check_errors, sync_exceptions
+        positions, cutoff, max_num_neighbors, box_vectors, check_errors
     )
     return neighbors, deltas, distances, number_found_pairs

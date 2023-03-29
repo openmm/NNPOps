@@ -102,7 +102,7 @@ static tuple<Tensor, Tensor, Tensor, Tensor> forward(const Tensor& positions,
 TORCH_LIBRARY_IMPL(neighbors, CPU, m) {
   m.impl("getNeighborPairs",
 	   [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_neighbors,
-	      const Tensor& box_vectors, const bool &checkErrors, const bool &syncExceptions){
+	      const Tensor& box_vectors, const bool &checkErrors){
 	       //The syncExceptions flag is ignored, this function always throws synchronously
 	       return forward(positions, cutoff, max_num_neighbors, box_vectors, checkErrors);
 	 });

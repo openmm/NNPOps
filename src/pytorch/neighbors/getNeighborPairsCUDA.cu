@@ -28,8 +28,6 @@ template <typename scalar_t> __device__ __forceinline__ scalar_t sqrt_(scalar_t 
 template<> __device__ __forceinline__ float sqrt_(float x) { return ::sqrtf(x); };
 template<> __device__ __forceinline__ double sqrt_(double x) { return ::sqrt(x); };
 
-__device__ __managed__ int32_t tooManyNeighborsErrorFlag; // Error flag for forward_kernel
-
 template <typename scalar_t> __global__ void forward_kernel(
     const int32_t num_all_pairs,
     const Accessor<scalar_t, 2> positions,
@@ -68,19 +66,15 @@ template <typename scalar_t> __global__ void forward_kernel(
     if (distance2 > cutoff2) return;
 
     const int32_t i_pair = store_all_pairs ? index : atomicAdd(&i_curr_pair[0], 1);
-    //If the maximum number of neighbours is surpassed encode the
-    //number of pairs found in a flag and exit
-    if(i_pair >= neighbors.size(1)){
-      atomicMin(&tooManyNeighborsErrorFlag, -i_pair);
-      return;
+    //We handle too many neighbors outside of the kernel
+    if(i_pair < neighbors.size(1)){
+      neighbors[0][i_pair] = row;
+      neighbors[1][i_pair] = column;
+      deltas[i_pair][0] = delta_x;
+      deltas[i_pair][1] = delta_y;
+      deltas[i_pair][2] = delta_z;
+      distances[i_pair] = sqrt_(distance2);
     }
-
-    neighbors[0][i_pair] = row;
-    neighbors[1][i_pair] = column;
-    deltas[i_pair][0] = delta_x;
-    deltas[i_pair][1] = delta_y;
-    deltas[i_pair][2] = delta_z;
-    distances[i_pair] = sqrt_(distance2);
 }
 
 template <typename scalar_t> __global__ void backward_kernel(
@@ -106,33 +100,6 @@ template <typename scalar_t> __global__ void backward_kernel(
     atomicAdd(&grad_positions[i_atom][i_comp], grad);
 }
 
-static std::exception_ptr tooManyNeighborsException = nullptr;
-// Checks the  too many  neighbors flag and  stores an  exception if
-// necessary to detail::tooManyNeighborsException.  This function is
-// intended to be launched via cudaLaunchHostFunc.
-// data  is a  void pointer  to a  std::tuple<int,bool>, storing  the
-// maximum number  of neighbors and  whether to throw  an uncatchable
-// exception here or store it for later.
-static void CUDART_CB checkTooManyNeighbors(void* data) {
-    int max_num_neighbors;
-    bool syncExceptions;
-    std::tie(max_num_neighbors, syncExceptions) = *static_cast<std::tuple<int, bool>*>(data);
-    // An exception thrown  in a stream callback is  not catchable (it
-    // runs in another thread), so we store it in an exception_ptr for
-    // it  to be  processed sometime  later in  the main  thread.  For
-    // performance   reasons,    the   exception   is    thrown   here
-    // asynchronously if the checkErrors flag is set to true
-    try {
-      const int tooMan = tooManyNeighborsErrorFlag;
-      TORCH_CHECK(tooMan == 0, "Some particle has too many neighbors, found " + std::to_string(-tooMan) + " total pairs but max per particle is " + std::to_string(max_num_neighbors));
-    }
-    catch (...) {
-      if (!syncExceptions)
-	throw;
-      else
-	tooManyNeighborsException = std::current_exception();
-    }
-}
 
 static bool isStreamCapturing(cudaStream_t st) {
     cudaStreamCaptureStatus graphStatus;
@@ -147,15 +114,9 @@ public:
                                const Scalar& cutoff,
                                const Scalar& max_num_neighbors,
                                const Tensor& box_vectors,
-			       bool checkErrors,
-			       bool syncExceptions) {
+			       bool checkErrors) {
         const auto stream = getCurrentCUDAStream(positions.get_device());
         bool isCUDAGraphCapturing = isStreamCapturing(stream);
-        // Advice CUDA on expected usage of the error flag
-        if (!isCUDAGraphCapturing) {
-            cudaMemAdvise(&tooManyNeighborsErrorFlag, sizeof(int), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
-            cudaMemAdvise(&tooManyNeighborsErrorFlag, sizeof(int), cudaMemAdviseSetReadMostly, 0);
-        }
         const CUDAStreamGuard guard(stream);
         TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
         TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
@@ -186,7 +147,6 @@ public:
         const Tensor deltas = full({num_pairs, 3}, NAN, options);
         const Tensor distances = full(num_pairs, NAN, options);
 
-	tooManyNeighborsErrorFlag = 0;
         AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "getNeighborPairs::forward", [&]() {
 	  const scalar_t cutoff_ = cutoff.to<scalar_t>();
 	  TORCH_CHECK(cutoff_ > 0, "Expected \"cutoff\" to be positive");
@@ -202,29 +162,10 @@ public:
                 get_accessor<scalar_t, 1>(distances),
                 get_accessor<scalar_t, 2>(box_vectors));
         });
-        // Check the error flag via cudaLaunchHostFunction so it is compatible with cuda graphs
+        // Synchronize and check the number of pairs found. Note that this is incompatible with CUDA graphs
 	if(checkErrors){
-	  static constexpr cudaHostFn_t h_fn = checkTooManyNeighbors;
-	  static std::tuple<int, bool> h_fn_data;
-	  h_fn_data = {max_num_neighbors_, syncExceptions};
-	  cudaLaunchHostFunc(stream, h_fn, (void*)&h_fn_data);
-	  // With chekErrors=false and syncExceptions=false the state of
-	  // the tooManyErrorsFlag is checked  and exceptions are thrown
-	  // asynchronously and  in a  way compatible with  CUDA graphs.
-	  // However,  this  way  of  throwing  an  exception  makes  it
-	  // uncatchable, crashing  the code.
-	  //If  checkErrors=true  the syncExceptions=true  an  explicit
-	  // synchronization barrier here forces  to throw the exception
-	  // from the main thread, making it catchable at the expense of
-	  // a performance penalty each time the function is called.
-	  //Otherwise, if  checkErrors=false, no exception is  thrown and
-	  //the user is  responsible to check if the number  of pairs is
-	  //too high
-	  if (syncExceptions) {
-            cudaStreamSynchronize(stream);
-            if (tooManyNeighborsException)
-	      std::rethrow_exception(tooManyNeighborsException);
-	  }
+	  int num_pairs = i_curr_pair.item<int32_t>();
+	  TORCH_CHECK(num_pairs < max_num_neighbors_, "Too many neighbor pairs found. Maximum is " + std::to_string(max_num_neighbors_), " but found " + std::to_string(num_pairs));
 	}
         ctx->save_for_backward({neighbors, deltas, distances});
         ctx->saved_data["num_atoms"] = num_atoms;
@@ -266,9 +207,9 @@ public:
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
   m.impl("getNeighborPairs",
 	 [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_neighbors,
-	    const Tensor& box_vectors, const bool &checkErrors, const bool &syncExceptions){
+	    const Tensor& box_vectors, const bool &checkErrors){
 	     const tensor_list results = Autograd::apply(positions, cutoff, max_num_neighbors,
-							 box_vectors, checkErrors, syncExceptions);
+							 box_vectors, checkErrors);
 	     return make_tuple(results[0], results[1], results[2], results[3]);
 	 });
 }
