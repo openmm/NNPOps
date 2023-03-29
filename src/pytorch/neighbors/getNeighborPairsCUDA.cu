@@ -100,13 +100,6 @@ template <typename scalar_t> __global__ void backward_kernel(
     atomicAdd(&grad_positions[i_atom][i_comp], grad);
 }
 
-
-static bool isStreamCapturing(cudaStream_t st) {
-    cudaStreamCaptureStatus graphStatus;
-    cudaStreamIsCapturing(st, &graphStatus);
-    return graphStatus == cudaStreamCaptureStatusActive;
-}
-
 class Autograd : public Function<Autograd> {
 public:
     static tensor_list forward(AutogradContext* ctx,
@@ -116,7 +109,6 @@ public:
                                const Tensor& box_vectors,
 			       bool checkErrors) {
         const auto stream = getCurrentCUDAStream(positions.get_device());
-        bool isCUDAGraphCapturing = isStreamCapturing(stream);
         const CUDAStreamGuard guard(stream);
         TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
         TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
