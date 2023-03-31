@@ -50,9 +50,13 @@ def getNeighborPairs(
         where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
         If this is omitted, periodic boundary conditions are not applied.
     check_errors: bool, optional
-        If set to False the function does not raise due to a number of pairs larger than the maximum.
-        If set to True, a RuntimeError will be raised in that case.
-        Defaults to False.
+        If True, a RuntimeError is raised if more than max_num_neighbors pairs are found.
+        The error checking requires synchronization, which adds cost and makes this function
+        incompatible with CUDA graphs. If this argument is False, no error checking is performed.
+        This makes it faster and compatible with CUDA graphs, but it is your responsibility
+        to check the return value for number_found_pairs to make sure that no neighbors were missed.
+        Default: False
+
     Returns
     -------
     neighbors: `torch.Tensor`
