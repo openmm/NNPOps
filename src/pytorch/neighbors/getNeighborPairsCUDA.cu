@@ -67,13 +67,13 @@ template <typename scalar_t> __global__ void forward_kernel(
 
     const int32_t i_pair = store_all_pairs ? index : atomicAdd(&i_curr_pair[0], 1);
     //We handle too many neighbors outside of the kernel
-    if(i_pair < neighbors.size(1)){
-      neighbors[0][i_pair] = row;
-      neighbors[1][i_pair] = column;
-      deltas[i_pair][0] = delta_x;
-      deltas[i_pair][1] = delta_y;
-      deltas[i_pair][2] = delta_z;
-      distances[i_pair] = sqrt_(distance2);
+    if (i_pair < neighbors.size(1)) {
+        neighbors[0][i_pair] = row;
+        neighbors[1][i_pair] = column;
+        deltas[i_pair][0] = delta_x;
+        deltas[i_pair][1] = delta_y;
+        deltas[i_pair][2] = delta_z;
+        distances[i_pair] = sqrt_(distance2);
     }
 }
 
