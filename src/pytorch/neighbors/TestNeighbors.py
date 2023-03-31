@@ -155,6 +155,19 @@ def test_too_many_neighbors(device, dtype):
     neighbors, deltas, distances, number_found_pairs = getNeighborPairs(positions, cutoff=1, max_num_neighbors=1, check_errors=False)
     assert number_found_pairs == 6
 
+@pytest.mark.parametrize('device', ['cpu', 'cuda'])
+@pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
+def test_max_neighbors_means_per_particle(device, dtype):
+    if not pt.cuda.is_available() and device == 'cuda':
+        pytest.skip('No GPU')
+    # 4 points result into 6 pairs.
+    positions = pt.zeros((4, 3,), device=device, dtype=dtype)
+    with pytest.raises(RuntimeError):
+        # checkErrors = True should raise due to exceeding neighbours
+        # As of now this will not raise, since 6<num_atoms*max_num_neighbors=8
+        getNeighborPairs(positions, cutoff=1, max_num_neighbors=2, check_errors=True)
+    #This should not fail, there are 4 neighbors per particle
+    getNeighborPairs(positions, cutoff=1, max_num_neighbors=4, check_errors=True)
 
 def test_is_cuda_graph_compatible():
     if not pt.cuda.is_available():
