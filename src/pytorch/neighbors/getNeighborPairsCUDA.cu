@@ -128,16 +128,16 @@ public:
         const bool store_all_pairs = max_num_neighbors_ == -1;
         const int num_atoms = positions.size(0);
         const int num_all_pairs = num_atoms * (num_atoms - 1) / 2;
-        const int num_pairs = store_all_pairs ? num_all_pairs : num_atoms * max_num_neighbors_;
+        const int max_num_pairs = store_all_pairs ? num_all_pairs : (num_atoms * max_num_neighbors_);
 
         const int num_threads = 128;
         const int num_blocks = max((num_all_pairs + num_threads - 1) / num_threads, 1);
 
         const TensorOptions options = positions.options();
         const Tensor i_curr_pair = zeros(1, options.dtype(kInt32));
-        const Tensor neighbors = full({2, num_pairs}, -1, options.dtype(kInt32));
-        const Tensor deltas = full({num_pairs, 3}, NAN, options);
-        const Tensor distances = full(num_pairs, NAN, options);
+        const Tensor neighbors = full({2, max_num_pairs}, -1, options.dtype(kInt32));
+        const Tensor deltas = full({max_num_pairs, 3}, NAN, options);
+        const Tensor distances = full(max_num_pairs, NAN, options);
 
         AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "getNeighborPairs::forward", [&]() {
 	  const scalar_t cutoff_ = cutoff.to<scalar_t>();
@@ -156,8 +156,8 @@ public:
         });
         // Synchronize and check the number of pairs found. Note that this is incompatible with CUDA graphs
         if (checkErrors) {
-            int num_pairs = i_curr_pair.item<int32_t>();
-            TORCH_CHECK(num_pairs < max_num_neighbors_, "Too many neighbor pairs found. Maximum is " + std::to_string(max_num_neighbors_), " but found " + std::to_string(num_pairs));
+            int num_found_pairs = i_curr_pair.item<int32_t>();
+            TORCH_CHECK(num_found_pairs < max_num_pairs, "Too many neighbor pairs found. Maximum is " + std::to_string(max_num_pairs), " but found " + std::to_string(num_found_pairs));
         }
         ctx->save_for_backward({neighbors, deltas, distances});
         ctx->saved_data["num_atoms"] = num_atoms;
