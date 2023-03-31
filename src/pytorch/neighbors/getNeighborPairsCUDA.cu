@@ -155,10 +155,10 @@ public:
                 get_accessor<scalar_t, 2>(box_vectors));
         });
         // Synchronize and check the number of pairs found. Note that this is incompatible with CUDA graphs
-	if(checkErrors){
-	  int num_pairs = i_curr_pair.item<int32_t>();
-	  TORCH_CHECK(num_pairs < max_num_neighbors_, "Too many neighbor pairs found. Maximum is " + std::to_string(max_num_neighbors_), " but found " + std::to_string(num_pairs));
-	}
+        if (checkErrors) {
+            int num_pairs = i_curr_pair.item<int32_t>();
+            TORCH_CHECK(num_pairs < max_num_neighbors_, "Too many neighbor pairs found. Maximum is " + std::to_string(max_num_neighbors_), " but found " + std::to_string(num_pairs));
+        }
         ctx->save_for_backward({neighbors, deltas, distances});
         ctx->saved_data["num_atoms"] = num_atoms;
         return {neighbors, deltas, distances, i_curr_pair};
