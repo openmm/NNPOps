@@ -86,10 +86,10 @@ def getNeighborPairs(
 
     Note
     ----
-    The operation can be compatible with CUDA Grahps, i.e. the shapes of the output
-    tensors are independed of the values of input tensors and no synchronizing operation is performed.
-
-    For this to be the case check_errors must be False
+    The operation  can be compatible  with CUDA Graphs: the  shapes of
+    the output tensors are independent of the values of input tensors,
+    and  no  synchronization  is  performed.
+    For  this  to  be  true, check_errors must be False.
 
     The CUDA implementation returns the atom pairs in non-determinist order,
     if `max_num_neighbors > 0`.
