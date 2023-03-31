@@ -57,17 +57,17 @@ foreach(TEST_PATH ${TEST_PATHS})
 endforeach()
 
 # Move test scripts to a test folder in the build directory, create test folder if necessary
-add_custom_command(TARGET ${LIBRARY} POST_BUILD	COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/test)
-add_custom_command(TARGET ${LIBRARY} POST_BUILD
+add_custom_target(copy_test ALL
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/test
   COMMAND ${CMAKE_COMMAND} -E copy
   ${CMAKE_SOURCE_DIR}/src/pytorch/Test*.py
   ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/Test*.py
   ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/getNeighborPairs.py
-  ${CMAKE_BINARY_DIR}/test)
-add_custom_command(TARGET ${LIBRARY} POST_BUILD
+  ${CMAKE_BINARY_DIR}/test
   COMMAND ${CMAKE_COMMAND} -E copy_directory
   ${CMAKE_SOURCE_DIR}/src/pytorch/molecules
-  ${CMAKE_BINARY_DIR}/test/molecules)
+  ${CMAKE_BINARY_DIR}/test/molecules
+)
 
 # Add tests for all scripts in the test directory
 file(GLOB_RECURSE PYTHON_TEST_PATHS ${CMAKE_BINARY_DIR}/test/Test*.py)
