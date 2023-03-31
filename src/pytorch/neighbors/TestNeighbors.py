@@ -150,7 +150,6 @@ def test_too_many_neighbors(device, dtype):
     with pytest.raises(RuntimeError):
         # checkErrors = True will raise due to exceeding neighbours
         getNeighborPairs(positions, cutoff=1, max_num_neighbors=1, check_errors=True)
-        pt.cuda.synchronize()
 
     # checkErrors = False will never throw due to exceeding neighbours. In addition, the call will be compatible with CUDA graphs
     neighbors, deltas, distances, number_found_pairs = getNeighborPairs(positions, cutoff=1, max_num_neighbors=1, check_errors=False)
