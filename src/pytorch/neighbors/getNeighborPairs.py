@@ -76,9 +76,9 @@ def getNeighborPairs(
         the distance is set to `NaN`.
 
     number_found_pairs: `torch.Tensor`
-        Contains the total  number of pairs found,  which might exceed
-        the  requested  max_num_neighbors,  leaving the  rest  of  the
-        output in an undefined state.
+        Contains the total number of pairs found in an unspecified order,
+        which might exceed the  requested  max_num_neighbors. In this case, the first number_found_pairs
+        pairs in the output are valid pairs, but the remaining pairs are omitted.
 
     Exceptions
     ----------
