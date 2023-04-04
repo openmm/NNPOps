@@ -56,10 +56,10 @@ def test_neighbor_values(device, dtype, num_atoms, cutoff, all_pairs):
 
     # Find the number of neighbors
     num_neighbors = np.count_nonzero(np.logical_not(np.isnan(ref_distances)))
-    max_num_neighbors = -1 if all_pairs else max(int(np.ceil(num_neighbors / num_atoms)), 1)
+    max_num_pairs = -1 if all_pairs else max(int(num_neighbors), 1)
 
     # Compute results
-    neighbors, deltas, distances, _ = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=max_num_neighbors)
+    neighbors, deltas, distances, _ = getNeighborPairs(positions, cutoff=cutoff, max_num_pairs=max_num_pairs)
 
     # Check device
     assert neighbors.device == positions.device
@@ -83,7 +83,7 @@ def test_neighbor_values(device, dtype, num_atoms, cutoff, all_pairs):
         neighbors, deltas, distances = sort_neighbors(neighbors, deltas, distances)
 
         # Resize the reference
-        ref_neighbors, ref_deltas, ref_distances = resize_neighbors(ref_neighbors, ref_deltas, ref_distances, num_atoms * max_num_neighbors)
+        ref_neighbors, ref_deltas, ref_distances = resize_neighbors(ref_neighbors, ref_deltas, ref_distances, max_num_pairs)
 
     assert np.all(ref_neighbors == neighbors)
     assert np.allclose(ref_deltas, deltas, equal_nan=True)
@@ -149,25 +149,23 @@ def test_too_many_neighbors(device, dtype):
     positions = pt.zeros((4, 3,), device=device, dtype=dtype)
     with pytest.raises(RuntimeError):
         # checkErrors = True will raise due to exceeding neighbours
-        getNeighborPairs(positions, cutoff=1, max_num_neighbors=1, check_errors=True)
+        getNeighborPairs(positions, cutoff=1, max_num_pairs=1, check_errors=True)
 
     # checkErrors = False will never throw due to exceeding neighbours. In addition, the call will be compatible with CUDA graphs
-    neighbors, deltas, distances, number_found_pairs = getNeighborPairs(positions, cutoff=1, max_num_neighbors=1, check_errors=False)
+    neighbors, deltas, distances, number_found_pairs = getNeighborPairs(positions, cutoff=1, max_num_pairs=1, check_errors=False)
     assert number_found_pairs == 6
 
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 @pytest.mark.parametrize('dtype', [pt.float32, pt.float64])
-def test_max_neighbors_means_per_particle(device, dtype):
+def test_max_pairs_means_total(device, dtype):
     if not pt.cuda.is_available() and device == 'cuda':
         pytest.skip('No GPU')
     # 4 points result into 6 pairs.
     positions = pt.zeros((4, 3,), device=device, dtype=dtype)
     with pytest.raises(RuntimeError):
         # checkErrors = True should raise due to exceeding neighbours
-        # As of now this will not raise, since 6<num_atoms*max_num_neighbors=8
-        getNeighborPairs(positions, cutoff=1, max_num_neighbors=2, check_errors=True)
-    #This should not fail, there are 4 neighbors per particle
-    getNeighborPairs(positions, cutoff=1, max_num_neighbors=4, check_errors=True)
+        getNeighborPairs(positions, cutoff=1, max_num_pairs=5, check_errors=True)
+    getNeighborPairs(positions, cutoff=1, max_num_pairs=6, check_errors=True)
 
 def test_is_cuda_graph_compatible():
     if not pt.cuda.is_available():
@@ -198,11 +196,11 @@ def test_is_cuda_graph_compatible():
     s.wait_stream(pt.cuda.current_stream())
     with pt.cuda.stream(s):
         for _ in range(3):
-            neighbors, deltas, distances, _ = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=num_neighbors+1)
+            neighbors, deltas, distances, _ = getNeighborPairs(positions, cutoff=cutoff, max_num_pairs=num_neighbors+1)
     pt.cuda.synchronize()
 
     with pt.cuda.graph(graph):
-        neighbors, deltas, distances, _ = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=num_neighbors+1)
+        neighbors, deltas, distances, _ = getNeighborPairs(positions, cutoff=cutoff, max_num_pairs=num_neighbors+1)
 
     graph.replay()
     pt.cuda.synchronize()
@@ -239,10 +237,10 @@ def test_periodic_neighbors(device, dtype):
 
     # Find the number of neighbors
     num_neighbors = np.count_nonzero(np.logical_not(np.isnan(ref_distances)))
-    max_num_neighbors = max(int(np.ceil(num_neighbors / num_atoms)), 1)
+    max_num_pairs = max(int(num_neighbors), 1)
 
     # Compute results
-    neighbors, deltas, distances, _ = getNeighborPairs(positions, cutoff=cutoff, max_num_neighbors=max_num_neighbors, box_vectors=box_vectors)
+    neighbors, deltas, distances, _ = getNeighborPairs(positions, cutoff=cutoff, max_num_pairs=max_num_pairs, box_vectors=box_vectors)
 
     # Check device
     assert neighbors.device == positions.device
@@ -265,7 +263,7 @@ def test_periodic_neighbors(device, dtype):
     neighbors, deltas, distances = sort_neighbors(neighbors, deltas, distances)
 
     # Resize the reference
-    ref_neighbors, ref_deltas, ref_distances = resize_neighbors(ref_neighbors, ref_deltas, ref_distances, num_atoms * max_num_neighbors)
+    ref_neighbors, ref_deltas, ref_distances = resize_neighbors(ref_neighbors, ref_deltas, ref_distances, max_num_pairs)
 
     assert np.all(ref_neighbors == neighbors)
     assert np.allclose(ref_deltas, deltas, equal_nan=True)

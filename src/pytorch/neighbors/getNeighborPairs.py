@@ -5,21 +5,20 @@ from typing import Optional, Tuple
 def getNeighborPairs(
     positions: Tensor,
     cutoff: float,
-    max_num_neighbors: int = -1,
+    max_num_pairs: int = -1,
     box_vectors: Optional[Tensor] = None,
     check_errors: bool = False
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     """Returns indices and distances of atom pairs within a given cutoff distance.
 
-    If `max_num_neighbors == -1` (default), all the atom pairs are returned,
+    If `max_num_pairs == -1` (default), all the atom pairs are returned,
     i.e. `num_pairs = num_atoms * (num_atoms + 1) / 2`. This is intended for
     the small molecules, where almost all the atoms are within the cutoff
     distance of each other.
 
-    If `max_num_neighbors > 0`, a fixed number of the atom pair are returned,
-    i.e. `num_pairs = num_atoms * max_num_neighbors`. This is indeded for large
-    molecule, where most of the atoms are beyond the cutoff distance of each
-    other.
+    If  `max_num_pairs >  0`, a  fixed number  of the  atom pairs  are
+    returned.  This is  indeded for large molecule, where  most of the
+    atoms are beyond the cutoff distance of each other.
 
     This function optionally supports periodic boundary conditions with
     arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
@@ -42,15 +41,15 @@ def getNeighborPairs(
         data type has to be`torch.float32` or `torch.float64`.
     cutoff: float
         Maximum distance between atom pairs.
-    max_num_neighbors: int, optional
-        Maximum number of neighbors per atom. If set to `-1` (default),
+    max_num_pairs: int, optional
+        Maximum number of pairs (total number of neighbors). If set to `-1` (default),
         all possible combinations of atom pairs are included.
     box_vectors: `torch.Tensor`, optional
         The vectors defining the periodic box.  This must have shape `(3, 3)`,
         where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
         If this is omitted, periodic boundary conditions are not applied.
     check_errors: bool, optional
-        If True, a RuntimeError is raised if more than max_num_neighbors pairs are found.
+        If True, a RuntimeError is raised if more than max_num_pairs pairs are found.
         The error checking requires synchronization, which adds cost and makes this function
         incompatible with CUDA graphs. If this argument is False, no error checking is performed.
         This makes it faster and compatible with CUDA graphs, but it is your responsibility
@@ -76,14 +75,15 @@ def getNeighborPairs(
         the distance is set to `NaN`.
 
     number_found_pairs: `torch.Tensor`
-        Contains the total number of pairs found in an unspecified order,
-        which might exceed the  requested  max_num_neighbors*num_atoms.
-        In this case, the first number_found_pairs pairs in the output are
-        valid pairs, but the remaining pairs are omitted.
+        Contains the  total number  of pairs found.  Be aware  that if
+        check_errors   is   False,   this   might   be   larger   than
+        max_num_pairs. In  that case,  the output  tensors contain
+        only a subset of the pairs that were found, and the others are
+        omitted. Which pairs get omitted may vary between invocations.
 
     Exceptions
     ----------
-    If `max_num_neighbors > 0` and too small, `RuntimeError` is raised if check_errors=True.
+    If `max_num_pairs > 0` and too small, `RuntimeError` is raised if check_errors=True.
 
     Note
     ----
@@ -93,7 +93,7 @@ def getNeighborPairs(
     For  this  to  be  true, check_errors must be False.
 
     The CUDA implementation returns the atom pairs in non-determinist order,
-    if `max_num_neighbors > 0`.
+    if `max_num_pairs > 0`.
 
 
     Examples
@@ -119,7 +119,7 @@ def getNeighborPairs(
              [1., 0., 0.]]),
      tensor([1., nan, 1.]), tensor([3], dtype=torch.int32))
 
-    >>> getNeighborPairs(positions, cutoff=3.0, max_num_neighbors=2) # doctest: +NORMALIZE_WHITESPACE
+    >>> getNeighborPairs(positions, cutoff=3.0, max_num_pairs=6) # doctest: +NORMALIZE_WHITESPACE
     (tensor([[ 1,  2,  2, -1, -1, -1],
             [ 0,  0,  1, -1, -1, -1]], dtype=torch.int32), tensor([[1., 0., 0.],
             [2., 0., 0.],
@@ -128,7 +128,7 @@ def getNeighborPairs(
             [nan, nan, nan],
             [nan, nan, nan]]), tensor([1., 2., 1., nan, nan, nan]), tensor([6], dtype=torch.int32))
 
-    >>> getNeighborPairs(positions, cutoff=1.5, max_num_neighbors=2) # doctest: +NORMALIZE_WHITESPACE
+    >>> getNeighborPairs(positions, cutoff=1.5, max_num_pairs=6) # doctest: +NORMALIZE_WHITESPACE
     (tensor([[ 1,  2, -1, -1, -1, -1],
              [ 0,  1, -1, -1, -1, -1]], dtype=torch.int32), tensor([[1., 0., 0.],
             [1., 0., 0.],
@@ -142,6 +142,6 @@ def getNeighborPairs(
     if box_vectors is None:
         box_vectors = empty((0, 0), device=positions.device, dtype=positions.dtype)
     neighbors, deltas, distances, number_found_pairs = ops.neighbors.getNeighborPairs(
-        positions, cutoff, max_num_neighbors, box_vectors, check_errors
+        positions, cutoff, max_num_pairs, box_vectors, check_errors
     )
     return neighbors, deltas, distances, number_found_pairs

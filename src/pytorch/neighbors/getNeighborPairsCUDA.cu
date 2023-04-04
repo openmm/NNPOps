@@ -105,7 +105,7 @@ public:
     static tensor_list forward(AutogradContext* ctx,
                                const Tensor& positions,
                                const Scalar& cutoff,
-                               const Scalar& max_num_neighbors,
+                               const Scalar& max_num_pairs,
                                const Tensor& box_vectors,
 			       bool checkErrors) {
         const auto stream = getCurrentCUDAStream(positions.get_device());
@@ -114,9 +114,8 @@ public:
         TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
         TORCH_CHECK(positions.size(1) == 3, "Expected the 2nd dimension size of \"positions\" to be 3");
         TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
-	int max_num_neighbors_ = max_num_neighbors.to<int>();
-        TORCH_CHECK(max_num_neighbors_ > 0 || max_num_neighbors_ == -1,
-            "Expected \"max_num_neighbors\" to be positive or equal to -1");
+        TORCH_CHECK(max_num_pairs.toInt() > 0 || max_num_pairs.toInt() == -1,
+            "Expected \"max_num_pairs\" to be positive or equal to -1");
 
         const bool use_periodic = (box_vectors.size(0) != 0);
         if (use_periodic) {
@@ -125,19 +124,19 @@ public:
         }
 
         // Decide the algorithm
-        const bool store_all_pairs = max_num_neighbors_ == -1;
+        const bool store_all_pairs = max_num_pairs.toInt() == -1;
         const int num_atoms = positions.size(0);
         const int num_all_pairs = num_atoms * (num_atoms - 1) / 2;
-        const int max_num_pairs = store_all_pairs ? num_all_pairs : (num_atoms * max_num_neighbors_);
+	const int max_num_pairs_ = store_all_pairs ? num_all_pairs : (max_num_pairs.toInt());
 
         const int num_threads = 128;
         const int num_blocks = max((num_all_pairs + num_threads - 1) / num_threads, 1);
 
         const TensorOptions options = positions.options();
         const Tensor i_curr_pair = zeros(1, options.dtype(kInt32));
-        const Tensor neighbors = full({2, max_num_pairs}, -1, options.dtype(kInt32));
-        const Tensor deltas = full({max_num_pairs, 3}, NAN, options);
-        const Tensor distances = full(max_num_pairs, NAN, options);
+        const Tensor neighbors = full({2, max_num_pairs_}, -1, options.dtype(kInt32));
+        const Tensor deltas = full({max_num_pairs_, 3}, NAN, options);
+        const Tensor distances = full(max_num_pairs_, NAN, options);
 
         AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "getNeighborPairs::forward", [&]() {
 	  const scalar_t cutoff_ = cutoff.to<scalar_t>();
@@ -157,7 +156,7 @@ public:
         // Synchronize and check the number of pairs found. Note that this is incompatible with CUDA graphs
         if (checkErrors) {
             int num_found_pairs = i_curr_pair.item<int32_t>();
-            TORCH_CHECK(num_found_pairs < max_num_pairs, "Too many neighbor pairs found. Maximum is " + std::to_string(max_num_pairs), " but found " + std::to_string(num_found_pairs));
+            TORCH_CHECK(num_found_pairs <= max_num_pairs_, "Too many neighbor pairs found. Maximum is " + std::to_string(max_num_pairs_), " but found " + std::to_string(num_found_pairs));
         }
         ctx->save_for_backward({neighbors, deltas, distances});
         ctx->saved_data["num_atoms"] = num_atoms;
@@ -198,9 +197,9 @@ public:
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
   m.impl("getNeighborPairs",
-	 [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_neighbors,
+	 [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_pairs,
 	    const Tensor& box_vectors, const bool &checkErrors){
-	     const tensor_list results = Autograd::apply(positions, cutoff, max_num_neighbors,
+	     const tensor_list results = Autograd::apply(positions, cutoff, max_num_pairs,
 							 box_vectors, checkErrors);
 	     return make_tuple(results[0], results[1], results[2], results[3]);
 	 });
