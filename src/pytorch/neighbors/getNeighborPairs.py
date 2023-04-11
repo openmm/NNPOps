@@ -17,7 +17,7 @@ def getNeighborPairs(
     distance of each other.
 
     If  `max_num_pairs >  0`, a  fixed number  of the  atom pairs  are
-    returned.  This is  indeded for large molecule, where  most of the
+    returned.  This is  intended for large molecule, where  most of the
     atoms are beyond the cutoff distance of each other.
 
     This function optionally supports periodic boundary conditions with
