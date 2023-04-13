@@ -41,9 +41,9 @@ jobs:
             pytorch: "1.12.*"
 
           # Latest supported versions (with CUDA)
-          - name: Linux (CUDA 11.7, Python 3.10, PyTorch 2.0)
+          - name: Linux (CUDA 11.8, Python 3.10, PyTorch 2.0)
             enable_cuda: true
-            cuda: "11.7.0"
+            cuda: "11.8.*"
             gcc: "10.3.*"
             nvcc: "11.7.0"
             python: "3.10.*"
@@ -54,7 +54,7 @@ jobs:
             enable_cuda: false
             gcc: "10.3.*"
             python: "3.10.*"
-            pytorch: "1.13.*"
+            pytorch: "2.*"
 
     steps:
     - name: Check out
