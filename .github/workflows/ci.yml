@@ -43,21 +43,21 @@ jobs:
             pytorch: "1.12.*"
 
           # Latest supported versions (with CUDA)
-          - name: Linux (CUDA 11.8.0, Python 3.10, PyTorch 2.0)
+          - name: Linux (CUDA 11.8, Python 3.10, PyTorch 2.0)
             enable_cuda: true
-            cuda: "11.8.0"
+            cuda: "11.8"
             gcc: "10.3.*"
-            nvcc: "11.7.0"
+            nvcc: "11.8"
             python: "3.10.*"
             torchani: "2.2.*"
-            pytorch: "2.*"
+            pytorch: "2.0.*"
 
           # Latest supported versions (without CUDA)
-          - name: Linux (no CUDA, Python 3.10, PyTorch 1.13)
+          - name: Linux (no CUDA, Python 3.10, PyTorch 2.0)
             enable_cuda: false
             gcc: "10.3.*"
             python: "3.10.*"
-            pytorch: "2.*"
+            pytorch: "2.0.*"
             torchani: "2.2.*"
 
     steps:
