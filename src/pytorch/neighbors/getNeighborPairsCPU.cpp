@@ -16,10 +16,11 @@ using torch::Tensor;
 using torch::outer;
 using torch::round;
 
-static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
-                                             const Scalar& cutoff,
-                                             const Scalar& max_num_neighbors,
-                                             const Tensor& box_vectors) {
+static tuple<Tensor, Tensor, Tensor, Tensor> forward(const Tensor& positions,
+						     const Scalar& cutoff,
+						     const Scalar& max_num_pairs,
+						     const Tensor& box_vectors,
+						     bool checkErrors) {
 
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
     TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
@@ -47,9 +48,9 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
         TORCH_CHECK(v[1][1] >= 2*v[2][1], "Invalid box vectors: box_vectors[1][1] < 2*box_vectors[2][1]");
     }
 
-    const int max_num_neighbors_ = max_num_neighbors.to<int>();
-    TORCH_CHECK(max_num_neighbors_ > 0 || max_num_neighbors_ == -1,
-        "Expected \"max_num_neighbors\" to be positive or equal to -1");
+    const int max_num_pairs_ = max_num_pairs.to<int>();
+    TORCH_CHECK(max_num_pairs_ > 0 || max_num_pairs_ == -1,
+        "Expected \"max_num_pairs\" to be positive or equal to -1");
 
     const int num_atoms = positions.size(0);
     const int num_pairs = num_atoms * (num_atoms - 1) / 2;
@@ -68,7 +69,7 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
     }
     Tensor distances = frobenius_norm(deltas, 1);
 
-    if (max_num_neighbors_ == -1) {
+    if (max_num_pairs_ == -1) {
         const Tensor mask = distances > cutoff;
         neighbors.index_put_({Slice(), mask}, -1);
         deltas = deltas.clone(); // Break an autograd loop
@@ -82,20 +83,26 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions,
         deltas = deltas.index({mask, Slice()});
         distances = distances.index({mask});
 
-        const int num_pad = num_atoms * max_num_neighbors_ - distances.size(0);
-        TORCH_CHECK(num_pad >= 0,
-            "The maximum number of pairs has been exceed! Increase \"max_num_neighbors\"");
-
+        const int num_pad = max_num_pairs_ - distances.size(0);
+        if (checkErrors) {
+            TORCH_CHECK(num_pad >= 0,
+                "The maximum number of pairs has been exceed! Increase \"max_num_pairs\"");
+        }
         if (num_pad > 0) {
             neighbors = hstack({neighbors, full({2, num_pad}, -1, neighbors.options())});
             deltas = vstack({deltas, full({num_pad, 3}, NAN, deltas.options())});
             distances = hstack({distances, full({num_pad}, NAN, distances.options())});
         }
     }
-
-    return {neighbors, deltas, distances};
+    Tensor num_pairs_found = torch::empty(1, indices.options().dtype(kInt32));
+    num_pairs_found[0] = distances.size(0);
+    return {neighbors, deltas, distances, num_pairs_found};
 }
 
 TORCH_LIBRARY_IMPL(neighbors, CPU, m) {
-    m.impl("getNeighborPairs", &forward);
+  m.impl("getNeighborPairs",
+	   [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_pairs,
+	      const Tensor& box_vectors, const bool &checkErrors){
+	       return forward(positions, cutoff, max_num_pairs, box_vectors, checkErrors);
+	 });
 }
