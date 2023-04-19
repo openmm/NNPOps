@@ -50,6 +50,9 @@ jobs:
     runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
     timeout-minutes: 1200 # 20 hrs
     steps:
+    env:
+      HOME: /home/ec2-user
+
     - name: Check out
       uses: actions/checkout@v3
 
