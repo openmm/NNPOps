@@ -53,6 +53,12 @@ jobs:
     - name: Check out
       uses: actions/checkout@v3
 
+    - name: setup home env
+      run: |
+        echo $HOME
+        export HOME=/home/ec2-user
+        echo $HOME
+
     - name: Install CUDA Toolkit
       uses: Jimver/cuda-toolkit@v0.2.10
       with:
