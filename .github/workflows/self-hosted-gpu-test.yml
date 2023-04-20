@@ -58,7 +58,7 @@ jobs:
     - name: Install CUDA Toolkit
       uses: Jimver/cuda-toolkit@v0.2.10
       with:
-        cuda: "11.8.0"
+        cuda: "11.7.0"
         linux-local-args: '["--toolkit", "--override"]'
 
     - name: Install Micromamba
@@ -66,10 +66,10 @@ jobs:
       with:
         environment-name: nnpops
         extra-specs: |
-            cudatoolkit==11.8.0
+            cudatoolkit==11.7.0
             gxx_linux-64==10.3.*
             torchani==2.2.*
-            nvcc_linux-64==11.8
+            nvcc_linux-64==11.7
             python==3.10.*
             pytorch-gpu==2.0.*
 
