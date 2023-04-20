@@ -9,5 +9,4 @@ dependencies:
   - torchani
   - pytest
   - python
-  - pytorch-gpu
   - sysroot_linux-64 2.17

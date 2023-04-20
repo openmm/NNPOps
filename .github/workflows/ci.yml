@@ -90,17 +90,13 @@ jobs:
     - name: Install Micromamba (without cuda)
       if: ${{ !matrix.enable_cuda }}
       uses: mamba-org/provision-with-micromamba@main
-      env:
-        # Needed to install pytorch-gpu on a machine without a GPU
-        CONDA_OVERRIDE_CUDA: ${{ matrix.nvcc }}
       with:
         environment-name: nnpops
         extra-specs: |
             gxx_linux-64==${{ matrix.gcc }}
             torchani==${{ matrix.torchani }}
-            nvcc_linux-64==${{ matrix.nvcc }}
             python==${{ matrix.python }}
-            pytorch-gpu==${{ matrix.pytorch }}
+            pytorch-cpu==${{ matrix.pytorch }}
 
     - name: List micromamba environment
       run: |
