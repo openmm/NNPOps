@@ -61,6 +61,7 @@ jobs:
         HOME: /home/ec2-user
       with:
         environment-name: nnpops
+        environment-file: devtools/conda-envs/ci-environment.yml
         extra-specs: |
             cudatoolkit==11.7.*
             gxx_linux-64==10.3.*

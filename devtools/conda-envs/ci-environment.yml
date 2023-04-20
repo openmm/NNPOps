@@ -1,0 +1,11 @@
+channels:
+  - conda-forge
+dependencies:
+  - cmake >=3.20
+  - gxx_linux-64
+  - make
+  - mdtraj
+  - torchani
+  - pytest
+  - python
+  - sysroot_linux-64 2.17
