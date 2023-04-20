@@ -93,6 +93,7 @@ jobs:
       uses: mamba-org/provision-with-micromamba@main
       with:
         environment-name: nnpops
+        environment-file: devtools/conda-envs/ci-environment.yml
         extra-specs: |
             gxx_linux-64==${{ matrix.gcc }}
             torchani==${{ matrix.torchani }}
