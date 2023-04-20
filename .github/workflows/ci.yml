@@ -80,6 +80,8 @@ jobs:
       with:
         environment-name: nnpops
         environment-file: devtools/conda-envs/ci-environment.yml 
+        cache-env: true
+        cache-downloads: true
         extra-specs: |
             cudatoolkit==${{ matrix.cuda }}
             gxx_linux-64==${{ matrix.gcc }}
@@ -94,6 +96,8 @@ jobs:
       with:
         environment-name: nnpops
         environment-file: devtools/conda-envs/ci-environment.yml
+        cache-env: true
+        cache-downloads: true
         extra-specs: |
             gxx_linux-64==${{ matrix.gcc }}
             torchani==${{ matrix.torchani }}
