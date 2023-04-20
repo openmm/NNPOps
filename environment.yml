@@ -5,7 +5,6 @@ dependencies:
   - gxx_linux-64
   - make
   - mdtraj
-  - nvcc_linux-64
   - torchani
   - pytest
   - python
