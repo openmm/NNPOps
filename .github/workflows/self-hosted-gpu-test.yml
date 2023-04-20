@@ -65,7 +65,6 @@ jobs:
         miniforge-variant: Mambaforge
           
     - name: Prepare dependencies (with CUDA)
-      if: ${{ matrix.enable_cuda }}
       run: |
         sed -i -e "/cudatoolkit/c\  - cudatoolkit 11.7.*" \
                -e "/gxx_linux-64/c\  - gxx_linux-64 10.3.*" \
