@@ -71,13 +71,8 @@ jobs:
 
     - name: Configure, compile, and install
       run: |
-
-        echo $CONDA_PREFIX
         eval "$(micromamba shell hook --shell=bash)"
         micromamba activate nnpops
-        echo "conda prefix |"
-        echo $CONDA_PREFIX
-        echo "conda prefix /"
         mkdir build && cd build
         cmake .. \
               -DENABLE_CUDA=true \
