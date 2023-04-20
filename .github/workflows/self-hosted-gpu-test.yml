@@ -54,13 +54,6 @@ jobs:
     - name: Check out
       uses: actions/checkout@v3
 
-
-    - name: Install CUDA Toolkit
-      uses: Jimver/cuda-toolkit@v0.2.10
-      with:
-        cuda: "11.7.0"
-        linux-local-args: '["--toolkit", "--override"]'
-
     - name: Install Micromamba
       uses: mamba-org/provision-with-micromamba@main
       with:
