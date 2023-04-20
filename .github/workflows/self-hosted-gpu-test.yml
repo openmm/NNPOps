@@ -51,6 +51,9 @@ jobs:
     timeout-minutes: 1200 # 20 hrs
     steps:
 
+    env:
+      HOME: /home/ec2-user
+
     - name: Check out
       uses: actions/checkout@v3
 
