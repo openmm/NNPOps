@@ -71,6 +71,10 @@ jobs:
 
     - name: Configure, compile, and install
       run: |
+
+        echo $CONDA_PREFIX
+        micromamba activate nnpops
+        echo $CONDA_PREFIX
         mkdir build && cd build
         cmake .. \
               -DENABLE_CUDA=true \
@@ -80,6 +84,7 @@ jobs:
 
     - name: Test
       run: |
+        micromamba activate nnpops
         cd build
         ctest --verbose
 
