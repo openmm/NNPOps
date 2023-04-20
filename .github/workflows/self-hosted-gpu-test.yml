@@ -64,6 +64,7 @@ jobs:
     - name: Install Micromamba
       uses: mamba-org/provision-with-micromamba@main
       with:
+        environment-name: nnpops
         extra-specs: |
             cudatoolkit==11.8.0
             gxx_linux-64==10.3.*
