@@ -79,7 +79,9 @@ jobs:
       run: cat environment.yml
 
     - name: Install dependencies
-      run: mamba env create -n nnpops -f environment.yml
+      run: |
+        mamba env create -n nnpops -f environment.yml
+        conda init
 
     - name: List conda environment
       run: |
