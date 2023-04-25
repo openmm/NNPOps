@@ -59,6 +59,13 @@ jobs:
       uses: conda-incubator/setup-miniconda@v2
       env:
         HOME: /home/ec2-user
+        cudatoolkit: "11.7.*"
+        gxx_linux-64: "10.3.*"
+        torchani: "2.2.*"
+        nvcc_linux-64: "11.7.*"
+        python: "3.10.*"
+        pytorch-gpu: "2.0.*"
+
       with:
         activate-environment: ""
         auto-activate-base: true
@@ -66,12 +73,12 @@ jobs:
           
     - name: Prepare dependencies (with CUDA)
       run: |
-        sed -i -e "/cudatoolkit/c\  - cudatoolkit 11.7.*" \
-               -e "/gxx_linux-64/c\  - gxx_linux-64 10.3.*" \
-               -e "/torchani/c\  - torchani 2.2*" \
-               -e "/nvcc_linux-64/c\  - nvcc_linux-64 11.7.*" \
-               -e "/python/c\  - python 3.10.*" \
-               -e "/pytorch-gpu/c\  - pytorch-gpu 2.0.*" \
+        sed -i -e "/cudatoolkit/c\  - cudatoolkit ${{ env.cudatoolkit }}" \
+               -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ env.gxx_linux-64 }}" \
+               -e "/torchani/c\  - torchani ${{ env.torchani }}" \
+               -e "/nvcc_linux-64/c\  - nvcc_linux-64 ${{ env.nvcc_linux-64 }}" \
+               -e "/python/c\  - python ${{ env.python }}" \
+               -e "/pytorch-gpu/c\  - pytorch-gpu ${{ env.pytorch-gpu }}" \
                environment.yml
 
     - name: Show dependency file
