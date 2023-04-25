@@ -59,12 +59,6 @@ jobs:
       uses: conda-incubator/setup-miniconda@v2
       env:
         HOME: /home/ec2-user
-        cudatoolkit: "11.7.*"
-        gxx_linux-64: "10.3.*"
-        torchani: "2.2.*"
-        nvcc_linux-64: "11.7.*"
-        python: "3.10.*"
-        pytorch-gpu: "2.0.*"
 
       with:
         activate-environment: ""
@@ -72,6 +66,13 @@ jobs:
         miniforge-variant: Mambaforge
           
     - name: Prepare dependencies (with CUDA)
+      env:
+        cudatoolkit: "11.7.*"
+        gxx_linux-64: "10.3.*"
+        torchani: "2.2.*"
+        nvcc_linux-64: "11.7.*"
+        python: "3.10.*"
+        pytorch-gpu: "2.0.*"
       run: |
         sed -i -e "/cudatoolkit/c\  - cudatoolkit ${{ env.cudatoolkit }}" \
                -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ env.gxx_linux-64 }}" \
