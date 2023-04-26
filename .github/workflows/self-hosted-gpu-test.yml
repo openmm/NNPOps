@@ -3,11 +3,7 @@ on:
   push:
     branches:
       - master
-      - feat/add_aws_testing 
   workflow_dispatch:
-  schedule:
-    # weekly tests
-    - cron: "0 0 * * SUN"
 
 defaults:
   run:
@@ -48,7 +44,7 @@ jobs:
     name: Do the job on the runner
     needs: start-runner # required to start the main job when the runner is ready
     runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
-    timeout-minutes: 60 # 1 hr
+    timeout-minutes: 25 
     steps:
 
     
