@@ -1,0 +1,130 @@
+name: self-hosted-gpu-test
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash -l {0}
+
+jobs:
+  start-runner:
+    name: Start self-hosted EC2 runner
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.start-ec2-runner.outputs.label }}
+      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Try to start EC2 runner
+        id: start-ec2-runner
+        uses: machulav/ec2-github-runner@main
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-04d16a12bbc76ff0b
+          ec2-instance-type: g4dn.xlarge
+          subnet-id: subnet-0dee8543e12afe0cd # us-east-1a
+          security-group-id: sg-0f9809618550edb98
+          # iam-role-name: self-hosted-runner # optional, requires additional permissions
+          aws-resource-tags: > # optional, requires additional permissions
+            [
+              {"Key": "Name", "Value": "ec2-github-runner"},
+              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
+            ]
+
+  do-the-job:
+    name: Do the job on the runner
+    needs: start-runner # required to start the main job when the runner is ready
+    runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
+    timeout-minutes: 25 
+    steps:
+
+    
+    - name: Check out
+      uses: actions/checkout@v3
+
+    - name: Install Miniconda
+      uses: conda-incubator/setup-miniconda@v2
+      env:
+        HOME: /home/ec2-user
+
+      with:
+        activate-environment: ""
+        auto-activate-base: true
+        miniforge-variant: Mambaforge
+          
+    - name: Prepare dependencies (with CUDA)
+      env:
+        cudatoolkit: "11.7.*"
+        gxx_linux-64: "10.3.*"
+        torchani: "2.2.*"
+        nvcc_linux-64: "11.7.*"
+        python: "3.10.*"
+        pytorch-gpu: "2.0.*"
+      run: |
+        sed -i -e "/cudatoolkit/c\  - cudatoolkit ${{ env.cudatoolkit }}" \
+               -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ env.gxx_linux-64 }}" \
+               -e "/torchani/c\  - torchani ${{ env.torchani }}" \
+               -e "/nvcc_linux-64/c\  - nvcc_linux-64 ${{ env.nvcc_linux-64 }}" \
+               -e "/python/c\  - python ${{ env.python }}" \
+               -e "/pytorch-gpu/c\  - pytorch-gpu ${{ env.pytorch-gpu }}" \
+               environment.yml
+
+    - name: Show dependency file
+      run: cat environment.yml
+
+    - name: Install dependencies
+      run: |
+        mamba env create -n nnpops -f environment.yml
+        conda init
+
+    - name: List conda environment
+      run: |
+        conda activate nnpops
+        conda list
+
+    - name: Configure, compile, and install
+      run: |
+        conda activate nnpops
+        mkdir build && cd build
+        cmake .. \
+              -DENABLE_CUDA=true \
+              -DTorch_DIR=$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')/Torch \
+              -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
+        make install
+
+    - name: Test
+      run: |
+        conda activate nnpops
+        cd build
+        ctest --verbose
+
+  stop-runner:
+    name: Stop self-hosted EC2 runner
+    needs:
+      - start-runner # required to get output from the start-runner job
+      - do-the-job # required to wait when the main job is done
+    runs-on: ubuntu-latest
+    if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Stop EC2 runner
+        uses: machulav/ec2-github-runner@main
+        with:
+          mode: stop
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          label: ${{ needs.start-runner.outputs.label }}
+          ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}
