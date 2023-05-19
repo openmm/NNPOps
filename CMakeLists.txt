@@ -63,6 +63,7 @@ add_custom_target(copy_test ALL
   ${CMAKE_SOURCE_DIR}/src/pytorch/Test*.py
   ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/Test*.py
   ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/getNeighborPairs.py
+  ${CMAKE_SOURCE_DIR}/src/pytorch/pme/Test*.py
   ${CMAKE_BINARY_DIR}/test
   COMMAND ${CMAKE_COMMAND} -E copy_directory
   ${CMAKE_SOURCE_DIR}/src/pytorch/molecules
@@ -91,3 +92,6 @@ install(FILES src/pytorch/__init__.py
 install(FILES src/pytorch/neighbors/__init__.py
               src/pytorch/neighbors/getNeighborPairs.py
         DESTINATION ${Python3_SITEARCH}/${NAME}/neighbors)
+install(FILES src/pytorch/pme/__init__.py
+              src/pytorch/pme/pme.py
+        DESTINATION ${Python3_SITEARCH}/${NAME}/pme)
