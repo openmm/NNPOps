@@ -23,6 +23,8 @@ set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
               src/pytorch/neighbors/getNeighborPairsCPU.cpp
               src/pytorch/neighbors/getNeighborPairsCUDA.cu
               src/pytorch/neighbors/neighbors.cpp
+              src/pytorch/pme/pmeCPU.cpp
+              src/pytorch/pme/pme.cpp
               src/schnet/CpuCFConv.cpp
               src/schnet/CudaCFConv.cu)
 

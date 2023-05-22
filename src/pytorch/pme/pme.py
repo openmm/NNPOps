@@ -1,5 +1,6 @@
 from ..neighbors import getNeighborPairs
 import torch
+import math
 
 class PME:
     def __init__(self, gridx: int, gridy: int, gridz: int, order: int, alpha: float, coulomb: float):
@@ -54,3 +55,8 @@ class PME:
         c = self.coulomb * charges[neighbors[0]] * charges[neighbors[1]]
         r = distances[indices]
         return torch.sum(c * torch.erfc(self.alpha*r) / r)
+
+    def compute_reciprocal(self, positions: torch.Tensor, charges: torch.Tensor, box_vectors: torch.Tensor):
+        self_energy = -torch.sum(charges**2)*self.coulomb*self.alpha/math.sqrt(torch.pi)
+        return self_energy + torch.ops.pme.pme_reciprocal(positions, charges, box_vectors, self.gridx, self.gridy, self.gridz,
+                                            self.order, self.alpha, self.coulomb, self.moduli[0], self.moduli[1], self.moduli[2])
