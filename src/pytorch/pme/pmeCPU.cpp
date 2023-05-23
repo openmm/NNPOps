@@ -256,7 +256,7 @@ public:
                         dpos[0] += ddx*dy*dz*g;
                         dpos[1] += dx*ddy*dz*g;
                         dpos[2] += dx*dy*ddz*g;
-                        dq += dx*dy*dz;
+                        dq += dx*dy*dz*g;
                     }
                 }
             }
