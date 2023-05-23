@@ -23,6 +23,49 @@ static void invertBoxVectors(const Tensor& box_vectors, float recipBoxVectors[3]
     recipBoxVectors[2][2] = box[0][0]*box[1][1]*scale;
 }
 
+static void computeSpline(int atom, const torch::TensorAccessor<float, 2>& pos, const torch::TensorAccessor<float, 2>& box,
+                          const float recipBoxVectors[3][3], const int gridSize[3], int gridIndex[3], vector<array<float, 3> >& data,
+                          vector<array<float, 3> >& ddata, int pmeOrder) {
+    // Find the position relative to the nearest grid point.
+
+    float posInBox[3], t[3], dr[3];
+    int ti[3];
+    for (int i = 0; i < 3; i++)
+         posInBox[i] = pos[atom][i]-box[i][i]*floor(pos[atom][i]*recipBoxVectors[i][i]);
+    for (int i = 0; i < 3; i++) {
+        t[i] = posInBox[0]*recipBoxVectors[0][i] + posInBox[1]*recipBoxVectors[1][i] + posInBox[2]*recipBoxVectors[2][i];
+        t[i] = (t[i]-floor(t[i]))*gridSize[i];
+        ti[i] = (int) t[i];
+        dr[i] = t[i]-ti[i];
+        gridIndex[i] = ti[i]%gridSize[i];
+    }
+
+    // Compute the B-spline coefficients.
+
+    float scale = 1.0f/(pmeOrder-1);
+    for (int i = 0; i < 3; i++) {
+        data[pmeOrder-1][i] = 0;
+        data[1][i] = dr[i];
+        data[0][i] = 1-dr[i];
+        for (int j = 3; j < pmeOrder; j++) {
+            float div = 1.0f/(j-1);
+            data[j-1][i] = div*dr[i]*data[j-2][i];
+            for (int k = 1; k < j-1; k++)
+                data[j-k-1][i] = div*((dr[i]+k)*data[j-k-2][i]+(j-k-dr[i])*data[j-k-1][i]);
+            data[0][i] = div*(1-dr[i])*data[0][i];
+        }
+        if (ddata.size() > 0) {
+            ddata[0][i] = -data[0][i];
+            for (int j = 1; j < pmeOrder; j++)
+                ddata[j][i] = data[j-1][i]-data[j][i];
+        }
+        data[pmeOrder-1][i] = scale*dr[i]*data[pmeOrder-2][i];
+        for (int j = 1; j < pmeOrder-1; j++)
+            data[pmeOrder-j-1][i] = scale*((dr[i]+j)*data[pmeOrder-j-2][i]+(pmeOrder-j-dr[i])*data[pmeOrder-j-1][i]);
+        data[0][i] = scale*(1-dr[i])*data[0][i];
+    }
+}
+
 class PmeFunction : public Function<PmeFunction> {
 public:
     static Tensor forward(AutogradContext *ctx,
@@ -38,12 +81,6 @@ public:
                           const Tensor& xmoduli,
                           const Tensor& ymoduli,
                           const Tensor& zmoduli) {
-        ctx->save_for_backward({positions, charges, box_vectors, xmoduli, ymoduli, zmoduli});
-        ctx->saved_data["gridx"] = gridx;
-        ctx->saved_data["gridy"] = gridy;
-        ctx->saved_data["gridz"] = gridz;
-        ctx->saved_data["order"] = order;
-        ctx->saved_data["alpha"] = alpha;
         int numAtoms = positions.size(0);
         int pmeOrder = (int) order.toInt();
         auto box = box_vectors.accessor<float,2>();
@@ -53,50 +90,22 @@ public:
         float recipBoxVectors[3][3];
         invertBoxVectors(box_vectors, recipBoxVectors);
         vector<float> grid(gridSize[0]*gridSize[1]*gridSize[2], 0);
+        float sqrtCoulomb = sqrt(coulomb.toDouble());
 
         // Spread the charge on the grid.
 
         for (int atom = 0; atom < numAtoms; atom++) {
-            // Find the position relative to the nearest grid point.
-
-            float posInBox[3], t[3], dr[3];
-            int ti[3], gridIndex[3];
-            for (int i = 0; i < 3; i++)
-                 posInBox[i] = pos[atom][i]-box[i][i]*floor(pos[atom][i]*recipBoxVectors[i][i]);
-            for (int i = 0; i < 3; i++) {
-                t[i] = posInBox[0]*recipBoxVectors[0][i] + posInBox[1]*recipBoxVectors[1][i] + posInBox[2]*recipBoxVectors[2][i];
-                t[i] = (t[i]-floor(t[i]))*gridSize[i];
-                ti[i] = (int) t[i];
-                dr[i] = t[i]-ti[i];
-                gridIndex[i] = ti[i]%gridSize[i];
-            }
-
             // Compute the B-spline coefficients.
 
-            vector<array<float, 3> > data(pmeOrder);
-            float scale = 1.0f/(pmeOrder-1);
-            for (int i = 0; i < 3; i++) {
-                data[pmeOrder-1][i] = 0;
-                data[1][i] = dr[i];
-                data[0][i] = 1-dr[i];
-                for (int j = 3; j < pmeOrder; j++) {
-                    float div = 1.0f/(j-1);
-                    data[j-1][i] = div*dr[i]*data[j-2][i];
-                    for (int k = 1; k < j-1; k++)
-                        data[j-k-1][i] = div*((dr[i]+k)*data[j-k-2][i]+(j-k-dr[i])*data[j-k-1][i]);
-                    data[0][i] = div*(1-dr[i])*data[0][i];
-                }
-                data[pmeOrder-1][i] = scale*dr[i]*data[pmeOrder-2][i];
-                for (int j = 1; j < pmeOrder-1; j++)
-                    data[pmeOrder-j-1][i] = scale*((dr[i]+j)*data[pmeOrder-j-2][i]+(pmeOrder-j-dr[i])*data[pmeOrder-j-1][i]);
-                data[0][i] = scale*(1-dr[i])*data[0][i];
-            }
+            int gridIndex[3];
+            vector<array<float, 3> > data(pmeOrder), ddata;
+            computeSpline(atom, pos, box, recipBoxVectors, gridSize, gridIndex, data, ddata, pmeOrder);
 
             // Spread the charge from this atom onto each grid point.
 
             for (int ix = 0; ix < pmeOrder; ix++) {
                 int xindex = (gridIndex[0]+ix) % gridSize[0];
-                float dx = charge[atom]*data[ix][0];
+                float dx = charge[atom]*sqrtCoulomb*data[ix][0];
                 for (int iy = 0; iy < pmeOrder; iy++) {
                     int yindex = (gridIndex[1]+iy) % gridSize[1];
                     float dxdy = dx*data[iy][1];
@@ -120,7 +129,7 @@ public:
 
         int zsize = gridSize[2]/2+1;
         int yzsize = gridSize[1]*zsize;
-        float scaleFactor = (float) (M_PI*box[0][0]*box[1][1]*box[2][2]/coulomb.toDouble());
+        float scaleFactor = (float) (M_PI*box[0][0]*box[1][1]*box[2][2]);
         float recipExpFactor = (float) (M_PI*M_PI/(alpha.toDouble()*alpha.toDouble()));
         vector<float> eterm(gridSize[0]*yzsize);
         auto xmod = xmoduli.accessor<float,1>();
@@ -175,10 +184,16 @@ public:
             }
         }
 
-        // Perform the convolution and store it for later use.
+        // Perform the convolution and store data for later use.
 
         recipGrid *= torch::from_blob(eterm.data(), {gridSize[0], gridSize[1], zsize}, options);
-        ctx->saved_data["recipGrid"] = recipGrid;
+        ctx->save_for_backward({positions, charges, box_vectors, xmoduli, ymoduli, zmoduli, recipGrid});
+        ctx->saved_data["gridx"] = gridx;
+        ctx->saved_data["gridy"] = gridy;
+        ctx->saved_data["gridz"] = gridz;
+        ctx->saved_data["order"] = order;
+        ctx->saved_data["alpha"] = alpha;
+        ctx->saved_data["coulomb"] = coulomb;
         return {torch::tensor(0.5*energy, options)};
     }
 
@@ -190,13 +205,71 @@ public:
         Tensor xmoduli = saved[3];
         Tensor ymoduli = saved[4];
         Tensor zmoduli = saved[5];
-        int gridx = (int) ctx->saved_data["gridx"].toInt();
-        int gridy = (int) ctx->saved_data["gridy"].toInt();
-        int gridz = (int) ctx->saved_data["gridz"].toInt();
-        int order = (int) ctx->saved_data["order"].toInt();
-        double alpha = ctx->saved_data["alpha"].toDouble();
-        return {torch::Tensor(), torch::Tensor(), torch::Tensor(), torch::Tensor(), torch::Tensor(), torch::Tensor(),
-                torch::Tensor(), torch::Tensor(), torch::Tensor(), torch::Tensor(), torch::Tensor()};
+        Tensor recipGrid = saved[6];
+        int gridSize[3] = {(int) ctx->saved_data["gridx"].toInt(), (int) ctx->saved_data["gridy"].toInt(), (int) ctx->saved_data["gridz"].toInt()};
+        int pmeOrder = (int) ctx->saved_data["order"].toInt();
+        float alpha = (float) ctx->saved_data["alpha"].toDouble();
+        float sqrtCoulomb = sqrt(ctx->saved_data["coulomb"].toDouble());
+        int numAtoms = positions.size(0);
+        auto box = box_vectors.accessor<float,2>();
+        auto pos = positions.accessor<float,2>();
+        auto charge = charges.accessor<float,1>();
+        float recipBoxVectors[3][3];
+        invertBoxVectors(box_vectors, recipBoxVectors);
+
+        // Take the inverse Fourier transform.
+
+        Tensor realGrid = torch::fft::irfftn(recipGrid)*(gridSize[0]*gridSize[1]*gridSize[2]);
+        auto grid = realGrid.accessor<float,3>();
+
+        // Compute the derivatives.
+
+        TensorOptions options = torch::TensorOptions().device(positions.device()); // Data type of float by default
+        Tensor posDeriv = torch::empty({numAtoms, 3}, options);
+        Tensor chargeDeriv = torch::empty({numAtoms}, options);
+        auto posDeriv_a = posDeriv.accessor<float,2>();
+        auto chargeDeriv_a = chargeDeriv.accessor<float,1>();
+        for (int atom = 0; atom < numAtoms; atom++) {
+            // Compute the B-spline coefficients.
+
+            int gridIndex[3];
+            vector<array<float, 3> > data(pmeOrder), ddata(pmeOrder);
+            computeSpline(atom, pos, box, recipBoxVectors, gridSize, gridIndex, data, ddata, pmeOrder);
+
+            // Compute the derivatives on this atom.
+
+            float dpos[3] = {0, 0, 0};
+            float dq = 0;
+            for (int ix = 0; ix < pmeOrder; ix++) {
+                int xindex = (gridIndex[0]+ix) % gridSize[0];
+                float dx = data[ix][0];
+                float ddx = ddata[ix][0];
+                for (int iy = 0; iy < pmeOrder; iy++) {
+                    int yindex = (gridIndex[1]+iy) % gridSize[1];
+                    float dy = data[iy][1];
+                    float ddy = ddata[iy][1];
+                    for (int iz = 0; iz < pmeOrder; iz++) {
+                        int zindex = (gridIndex[2]+iz) % gridSize[2];
+                        float dz = data[iz][2];
+                        float ddz = ddata[iz][2];
+                        float g = grid[xindex][yindex][zindex];
+                        dpos[0] += ddx*dy*dz*g;
+                        dpos[1] += dx*ddy*dz*g;
+                        dpos[2] += dx*dy*ddz*g;
+                        dq += dx*dy*dz;
+                    }
+                }
+            }
+            float scale = charge[atom]*sqrtCoulomb;
+            posDeriv_a[atom][0] = scale*(dpos[0]*gridSize[0]*recipBoxVectors[0][0]);
+            posDeriv_a[atom][1] = scale*(dpos[0]*gridSize[0]*recipBoxVectors[1][0] + dpos[1]*gridSize[1]*recipBoxVectors[1][1]);
+            posDeriv_a[atom][2] = scale*(dpos[0]*gridSize[0]*recipBoxVectors[2][0] + dpos[1]*gridSize[1]*recipBoxVectors[2][1] + dpos[2]*gridSize[2]*recipBoxVectors[2][2]);
+            chargeDeriv_a[atom] = dq*sqrtCoulomb;
+        }
+        posDeriv *= grad_outputs[0];
+        chargeDeriv *= grad_outputs[0];
+        torch::Tensor ignore;
+        return {posDeriv, chargeDeriv, ignore, ignore, ignore, ignore, ignore, ignore, ignore, ignore, ignore, ignore};
     }
 };
 
