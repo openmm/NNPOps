@@ -89,6 +89,11 @@ foreach(TEST_DIR ${PYTHON_TEST_DIRS})
   endforeach()
 endforeach()
 
+add_custom_command(
+  TARGET copy_test POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/getNeighborPairs.py ${CMAKE_BINARY_DIR}/test/getNeighborPairs.py
+)
+
 add_test(TestGetNeighborPairs  pytest -v --doctest-modules ${CMAKE_BINARY_DIR}/test/getNeighborPairs.py)
 
 # Installation
