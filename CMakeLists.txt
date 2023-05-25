@@ -56,25 +56,39 @@ foreach(TEST_PATH ${TEST_PATHS})
     add_test(${TEST_NAME} ${TEST_NAME})
 endforeach()
 
+# List of directories containing  test scripts
+set(PYTHON_TEST_DIRS
+  ${CMAKE_SOURCE_DIR}/src/pytorch/
+  ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors
+)
+
 # Move test scripts to a test folder in the build directory, create test folder if necessary
 add_custom_target(copy_test ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/test
-  COMMAND ${CMAKE_COMMAND} -E copy
-  ${CMAKE_SOURCE_DIR}/src/pytorch/Test*.py
-  ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/Test*.py
-  ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/getNeighborPairs.py
-  ${CMAKE_BINARY_DIR}/test
+)
+
+# Add the data directory as well
+add_custom_command(
+  TARGET copy_test POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
   ${CMAKE_SOURCE_DIR}/src/pytorch/molecules
   ${CMAKE_BINARY_DIR}/test/molecules
 )
 
-# Add tests for all scripts in the test directory
-file(GLOB_RECURSE PYTHON_TEST_PATHS ${CMAKE_BINARY_DIR}/test/Test*.py)
-foreach(TEST_PATH ${PYTHON_TEST_PATHS})
-		cmake_path(GET TEST_PATH STEM TEST_NAME)
-		add_test(${TEST_NAME} pytest -v ${CMAKE_BINARY_DIR}/test/${TEST_NAME}.py)
+# Copy each test to the binary dir and add it
+foreach(TEST_DIR ${PYTHON_TEST_DIRS})
+  file(GLOB TEST_SCRIPTS ${TEST_DIR}/Test*.py)
+  foreach(TEST_SCRIPT ${TEST_SCRIPTS})
+    get_filename_component(TEST_NAME ${TEST_SCRIPT} NAME_WE)
+    file(RELATIVE_PATH RELATIVE_TEST_PATH ${CMAKE_SOURCE_DIR}/src/pytorch ${TEST_SCRIPT})
+    add_custom_command(
+      TARGET copy_test POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy ${TEST_SCRIPT} ${CMAKE_BINARY_DIR}/test/${RELATIVE_TEST_PATH}
+    )
+    add_test(NAME ${TEST_NAME} COMMAND pytest -v ${CMAKE_BINARY_DIR}/test/${RELATIVE_TEST_PATH})
+  endforeach()
 endforeach()
+
 add_test(TestGetNeighborPairs  pytest -v --doctest-modules ${CMAKE_BINARY_DIR}/test/getNeighborPairs.py)
 
 # Installation
