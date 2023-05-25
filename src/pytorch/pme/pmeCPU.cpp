@@ -66,7 +66,7 @@ static void computeSpline(int atom, const torch::TensorAccessor<float, 2>& pos, 
     }
 }
 
-class PmeFunction : public Function<PmeFunction> {
+class PmeFunctionCpu : public Function<PmeFunctionCpu> {
 public:
     static Tensor forward(AutogradContext *ctx,
                           const Tensor& positions,
@@ -125,17 +125,16 @@ public:
         Tensor recipGrid = torch::fft::rfftn(realGrid);
         auto recip = recipGrid.accessor<c10::complex<float>,3>();
 
-        // Calculate the reciprocal eterm.
+        // Perform the convolution and calculate the energy.
 
+        double energy = 0.0;
         int zsize = gridSize[2]/2+1;
         int yzsize = gridSize[1]*zsize;
         float scaleFactor = (float) (M_PI*box[0][0]*box[1][1]*box[2][2]);
         float recipExpFactor = (float) (M_PI*M_PI/(alpha.toDouble()*alpha.toDouble()));
-        vector<float> eterm(gridSize[0]*yzsize);
         auto xmod = xmoduli.accessor<float,1>();
         auto ymod = ymoduli.accessor<float,1>();
         auto zmod = zmoduli.accessor<float,1>();
-        int firstz = 1;
         for (int kx = 0; kx < gridSize[0]; kx++) {
             int mx = (kx < (gridSize[0]+1)/2) ? kx : kx-gridSize[0];
             float mhx = mx*recipBoxVectors[0][0];
@@ -145,48 +144,24 @@ public:
                 float mhy = mx*recipBoxVectors[1][0] + my*recipBoxVectors[1][1];
                 float mhx2y2 = mhx*mhx + mhy*mhy;
                 float bxby = bx*ymod[ky];
-                for (int kz = firstz; kz < zsize; kz++) {
+                for (int kz = 0; kz < zsize; kz++) {
                     int index = kx*yzsize + ky*zsize + kz;
                     int mz = (kz < (gridSize[2]+1)/2) ? kz : kz-gridSize[2];
                     float mhz = mx*recipBoxVectors[2][0] + my*recipBoxVectors[2][1] + mz*recipBoxVectors[2][2];
                     float bz = zmod[kz];
                     float m2 = mhx2y2 + mhz*mhz;
                     float denom = m2*bxby*bz;
-                    eterm[index] = exp(-recipExpFactor*m2)/denom;
+                    float eterm = (index == 0 ? 0 : exp(-recipExpFactor*m2)/denom);
+                    float scale = (kz > 0 && kz <= (gridSize[2]-1)/2 ? 2 : 1);
+                    c10::complex<float>& g = recip[kx][ky][kz];
+                    energy += scale * eterm * (g.real()*g.real() + g.imag()*g.imag());
+                    g *= eterm;
                 }
-                firstz = 0;
             }
         }
 
-        // Compute the energy
+        // Store data for later use.
 
-        double energy = 0.0;
-        firstz = 1;
-        for (int kx = 0; kx < gridSize[0]; kx++) {
-            for (int ky = 0; ky < gridSize[1]; ky++) {
-                for (int kz = firstz; kz < gridSize[2]; kz++) {
-                    int kx1, ky1, kz1;
-                    if (kz >= gridSize[2]/2+1) {
-                        kx1 = (kx == 0 ? kx : gridSize[0]-kx);
-                        ky1 = (ky == 0 ? ky : gridSize[1]-ky);
-                        kz1 = gridSize[2]-kz;
-                    }
-                    else {
-                        kx1 = kx;
-                        ky1 = ky;
-                        kz1 = kz;
-                    }
-                    c10::complex<float> g = recip[kx1][ky1][kz1];
-                    int index = kx1*yzsize + ky1*zsize + kz1;
-                    energy += eterm[index] * (g.real()*g.real() + g.imag()*g.imag());
-                }
-                firstz = 0;
-            }
-        }
-
-        // Perform the convolution and store data for later use.
-
-        recipGrid *= torch::from_blob(eterm.data(), {gridSize[0], gridSize[1], zsize}, options);
         ctx->save_for_backward({positions, charges, box_vectors, xmoduli, ymoduli, zmoduli, recipGrid});
         ctx->saved_data["gridx"] = gridx;
         ctx->saved_data["gridy"] = gridy;
@@ -285,7 +260,7 @@ Tensor pme_reciprocal(const Tensor& positions,
                       const Tensor& xmoduli,
                       const Tensor& ymoduli,
                       const Tensor& zmoduli) {
-    return PmeFunction::apply(positions, charges, box_vectors, gridx, gridy, gridz, order, alpha, coulomb, xmoduli, ymoduli, zmoduli);
+    return PmeFunctionCpu::apply(positions, charges, box_vectors, gridx, gridy, gridz, order, alpha, coulomb, xmoduli, ymoduli, zmoduli);
 }
 
 TORCH_LIBRARY_IMPL(pme, CPU, m) {

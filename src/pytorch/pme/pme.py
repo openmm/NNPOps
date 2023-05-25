@@ -57,6 +57,8 @@ class PME:
         return torch.sum(c * torch.erfc(self.alpha*r) / r)
 
     def compute_reciprocal(self, positions: torch.Tensor, charges: torch.Tensor, box_vectors: torch.Tensor):
+        for i in range(3):
+            self.moduli[i] = self.moduli[i].to(positions.device)
         self_energy = -torch.sum(charges**2)*self.coulomb*self.alpha/math.sqrt(torch.pi)
         return self_energy + torch.ops.pme.pme_reciprocal(positions, charges, box_vectors, self.gridx, self.gridy, self.gridz,
                                             self.order, self.alpha, self.coulomb, self.moduli[0], self.moduli[1], self.moduli[2])
