@@ -27,7 +27,7 @@ __device__ void invertBoxVectors(const Accessor<float, 2>& box, float recipBoxVe
     recipBoxVectors[1][0] = -box[1][0]*box[2][2]*scale;
     recipBoxVectors[1][1] = box[0][0]*box[2][2]*scale;
     recipBoxVectors[1][2] = 0;
-    recipBoxVectors[2][0] = box[1][0]*box[2][1]-box[1][1]*box[2][0]*scale;
+    recipBoxVectors[2][0] = (box[1][0]*box[2][1]-box[1][1]*box[2][0])*scale;
     recipBoxVectors[2][1] = -box[0][0]*box[2][1]*scale;
     recipBoxVectors[2][2] = box[0][0]*box[1][1]*scale;
 }
@@ -38,10 +38,14 @@ __device__ void computeSpline(int atom, const Accessor<float, 2> pos, const Acce
                           float ddata[][3], int pmeOrder) {
     // Find the position relative to the nearest grid point.
 
-    float posInBox[3], t[3], dr[3];
+    float posInBox[3] = {pos[atom][0], pos[atom][1], pos[atom][2]};
+    for (int i = 2; i >= 0; i--) {
+        float scale = floor(posInBox[i]*recipBoxVectors[i][i]);
+        for (int j = 0; j < 3; j++)
+            posInBox[j] -= scale*box[i][j];
+    }
+    float t[3], dr[3];
     int ti[3];
-    for (int i = 0; i < 3; i++)
-         posInBox[i] = pos[atom][i]-box[i][i]*floor(pos[atom][i]*recipBoxVectors[i][i]);
     for (int i = 0; i < 3; i++) {
         t[i] = posInBox[0]*recipBoxVectors[0][i] + posInBox[1]*recipBoxVectors[1][i] + posInBox[2]*recipBoxVectors[2][i];
         t[i] = (t[i]-floor(t[i]))*gridSize[i];
@@ -284,7 +288,7 @@ public:
 
         // Take the inverse Fourier transform.
 
-        Tensor realGrid = torch::fft::irfftn(recipGrid)*(gridSize[0]*gridSize[1]*gridSize[2]);
+        Tensor realGrid = torch::fft::irfftn(recipGrid, {gridSize[0], gridSize[1], gridSize[2]}, c10::nullopt, "forward");
 
         // Compute the derivatives.
 
