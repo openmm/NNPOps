@@ -3,6 +3,16 @@ import pytest
 import numpy as np
 from NNPOps.pme import PME
 
+class PmeModule(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.pme = PME(14, 15, 16, 5, 4.985823141035867, 138.935)
+
+    def forward(self, positions, charges, box_vectors):
+        edir = self.pme.compute_direct(positions, charges, 0.5, box_vectors)
+        erecip = self.pme.compute_reciprocal(positions, charges, box_vectors)
+        return edir-erecip
+
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 def test_rectangular(device):
     """Test PME on a rectangular box."""
@@ -155,3 +165,60 @@ def test_charge_deriv(device):
     drecip2 = charges.grad.clone().detach().cpu().numpy()
     assert np.allclose(2.5*ddir, ddir2)
     assert np.allclose(2.5*drecip, drecip2)
+
+@pytest.mark.parametrize('device', ['cpu', 'cuda'])
+def test_jit(device):
+    """Test that the model can be JIT compiled."""
+    if not torch.cuda.is_available() and device == 'cuda':
+        pytest.skip('No GPU')
+    m1 = PmeModule()
+    m2 = torch.jit.script(m1)
+    torch.manual_seed(10)
+    positions = 3*torch.rand((9, 3), dtype=torch.float32, device=device)-1
+    positions.requires_grad_()
+    charges = torch.tensor([(i-4)*0.1 for i in range(9)], dtype=torch.float32, device=device)
+    box_vectors = torch.tensor([[1, 0, 0], [0,1.1, 0], [0, 0, 1.2]], dtype=torch.float32, device=device)
+    e1 = m1(positions, charges, box_vectors)
+    e2 = m2(positions, charges, box_vectors)
+    assert np.allclose(e1.detach().cpu().numpy(), e2.detach().cpu().numpy())
+    e1.backward()
+    d1 = positions.grad.detach().cpu().numpy()
+    positions.grad.zero_()
+    e2.backward()
+    d2 = positions.grad.detach().cpu().numpy()
+    assert np.allclose(d1, d2)
+
+def test_cuda_graph():
+    """Test that PME works with CUDA graphs."""
+    if not torch.cuda.is_available():
+        pytest.skip('No GPU')
+    device = 'cuda'
+    pme =  PmeModule()
+    torch.manual_seed(10)
+    positions = 3*torch.rand((9, 3), dtype=torch.float32, device=device)-1
+    positions.requires_grad_()
+    charges = torch.tensor([(i-4)*0.1 for i in range(9)], dtype=torch.float32, device=device)
+    box_vectors = torch.tensor([[1, 0, 0], [0,1.1, 0], [0, 0, 1.2]], dtype=torch.float32, device=device)
+
+    # Warmup before capturing graph.
+
+    s = torch.cuda.Stream()
+    s.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(s):
+        for i in range(3):
+            e = pme(positions, charges, box_vectors)
+            e.backward()
+    torch.cuda.current_stream().wait_stream(s)
+
+    # Capture the graph.
+
+    g = torch.cuda.CUDAGraph()
+    positions.grad.zero_()
+    with torch.cuda.graph(g):
+        e = pme(positions, charges, box_vectors)
+        e.backward()
+
+    # Replay the graph.
+
+    g.replay()
+    torch.cuda.synchronize()
