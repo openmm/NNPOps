@@ -70,7 +70,75 @@ static void computeSpline(int atom, const torch::TensorAccessor<float, 2>& pos, 
     }
 }
 
-class PmeFunctionCpu : public Function<PmeFunctionCpu> {
+
+class PmeDirectFunctionCpu : public Function<PmeDirectFunctionCpu> {
+public:
+    static Tensor forward(AutogradContext *ctx,
+                          const Tensor& positions,
+                          const Tensor& charges,
+                          const Tensor& neighbors,
+                          const Tensor& deltas,
+                          const Tensor& distances,
+                          const Tensor& exclusions,
+                          const Scalar& alpha_s,
+                          const Scalar& coulomb_s) {
+        int numAtoms = charges.size(0);
+        int numPairs = neighbors.size(1);
+        int maxExclusions = exclusions.size(1);
+        auto pair = neighbors.accessor<int,2>();
+        auto delta = deltas.accessor<float,2>();
+        auto r = distances.accessor<float,1>();
+        auto charge = charges.accessor<float,1>();
+        auto excl = exclusions.accessor<int,2>();
+        float alpha = alpha_s.toDouble();
+        float coulomb = coulomb_s.toDouble();
+
+        // Loop over interactions to compute energy and derivatives.
+
+        TensorOptions options = torch::TensorOptions().device(neighbors.device());
+        Tensor posDeriv = torch::zeros({numAtoms, 3}, options);
+        Tensor chargeDeriv = torch::zeros({numAtoms}, options);
+        auto posDeriv_a = posDeriv.accessor<float,2>();
+        auto chargeDeriv_a = chargeDeriv.accessor<float,1>();
+        double energy = 0.0;
+        for (int i = 0; i < numPairs; i++) {
+            int atom1 = pair[0][i];
+            if (atom1 > -1) {
+                int atom2 = pair[1][i];
+                float invR = 1/r[i];
+                float alphaR = alpha*r[i];
+                float expAlphaRSqr = exp(-alphaR*alphaR);
+                float erfcAlphaR = erfc(alphaR);
+                float prefactor = coulomb*invR;
+                float c1 = charge[atom1];
+                float c2 = charge[atom2];
+                energy += prefactor*erfcAlphaR*c1*c2;
+                chargeDeriv_a[atom1] += prefactor*erfcAlphaR*c2;
+                chargeDeriv_a[atom2] += prefactor*erfcAlphaR*c1;
+                float dEdR = prefactor*c1*c2*(erfcAlphaR+alphaR*expAlphaRSqr*M_2_SQRTPI)*invR*invR;
+                for (int j = 0; j < 3; j++) {
+                    posDeriv_a[atom1][j] -= dEdR*delta[i][j];
+                    posDeriv_a[atom2][j] += dEdR*delta[i][j];
+                }
+            }
+        }
+
+        // Store data for later use.
+
+        ctx->save_for_backward({posDeriv, chargeDeriv});
+        return {torch::tensor(energy, options)};
+    }
+
+    static tensor_list backward(AutogradContext *ctx, tensor_list grad_outputs) {
+        auto saved = ctx->get_saved_variables();
+        Tensor posDeriv = saved[0];
+        Tensor chargeDeriv = saved[1];
+        torch::Tensor ignore;
+        return {posDeriv*grad_outputs[0], chargeDeriv*grad_outputs[0], ignore, ignore, ignore, ignore, ignore, ignore};
+    }
+};
+
+class PmeReciprocalFunctionCpu : public Function<PmeReciprocalFunctionCpu> {
 public:
     static Tensor forward(AutogradContext *ctx,
                           const Tensor& positions,
@@ -245,12 +313,21 @@ public:
             posDeriv_a[atom][2] = scale*(dpos[0]*gridSize[0]*recipBoxVectors[2][0] + dpos[1]*gridSize[1]*recipBoxVectors[2][1] + dpos[2]*gridSize[2]*recipBoxVectors[2][2]);
             chargeDeriv_a[atom] = dq*sqrtCoulomb;
         }
-        posDeriv *= grad_outputs[0];
-        chargeDeriv *= grad_outputs[0];
         torch::Tensor ignore;
-        return {posDeriv, chargeDeriv, ignore, ignore, ignore, ignore, ignore, ignore, ignore, ignore, ignore, ignore};
+        return {posDeriv*grad_outputs[0], chargeDeriv*grad_outputs[0], ignore, ignore, ignore, ignore, ignore, ignore, ignore, ignore, ignore, ignore};
     }
 };
+
+Tensor pme_direct(const Tensor& positions,
+                  const Tensor& charges,
+                  const Tensor& neighbors,
+                  const Tensor& deltas,
+                  const Tensor& distances,
+                  const Tensor& exclusions,
+                  const Scalar& alpha,
+                  const Scalar& coulomb) {
+    return PmeDirectFunctionCpu::apply(positions, charges, neighbors, deltas, distances, exclusions, alpha, coulomb);
+}
 
 Tensor pme_reciprocal(const Tensor& positions,
                       const Tensor& charges,
@@ -264,9 +341,10 @@ Tensor pme_reciprocal(const Tensor& positions,
                       const Tensor& xmoduli,
                       const Tensor& ymoduli,
                       const Tensor& zmoduli) {
-    return PmeFunctionCpu::apply(positions, charges, box_vectors, gridx, gridy, gridz, order, alpha, coulomb, xmoduli, ymoduli, zmoduli);
+    return PmeReciprocalFunctionCpu::apply(positions, charges, box_vectors, gridx, gridy, gridz, order, alpha, coulomb, xmoduli, ymoduli, zmoduli);
 }
 
 TORCH_LIBRARY_IMPL(pme, CPU, m) {
+    m.impl("pme_direct", pme_direct);
     m.impl("pme_reciprocal", pme_reciprocal);
 }

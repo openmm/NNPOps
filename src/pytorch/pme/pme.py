@@ -1,15 +1,17 @@
 from ..neighbors import getNeighborPairs
 import torch
 import math
+from typing import Optional
 
 class PME:
-    def __init__(self, gridx: int, gridy: int, gridz: int, order: int, alpha: float, coulomb: float):
+    def __init__(self, gridx: int, gridy: int, gridz: int, order: int, alpha: float, coulomb: float, exclusions: Optional[torch.Tensor] = None):
         self.gridx = gridx
         self.gridy = gridy
         self.gridz = gridz
         self.order = order
         self.alpha = alpha
         self.coulomb = coulomb
+        self.exclusions = exclusions
 
         # Initialize the bspline moduli.
 
@@ -50,11 +52,7 @@ class PME:
 
     def compute_direct(self, positions: torch.Tensor, charges: torch.Tensor, cutoff: float, box_vectors: torch.Tensor, max_num_pairs: int = -1):
         neighbors, deltas, distances, number_found_pairs = getNeighborPairs(positions, cutoff, max_num_pairs, box_vectors)
-        indices = torch.isfinite(distances)
-        neighbors = neighbors[:, indices].to(torch.long)
-        c = self.coulomb * charges[neighbors[0]] * charges[neighbors[1]]
-        r = distances[indices]
-        return torch.sum(c * torch.erfc(self.alpha*r) / r)
+        return torch.ops.pme.pme_direct(positions, charges, neighbors, deltas, distances, torch.zeros(1, 1, dtype=torch.int32), self.alpha, self.coulomb)
 
     def compute_reciprocal(self, positions: torch.Tensor, charges: torch.Tensor, box_vectors: torch.Tensor):
         for i in range(3):
