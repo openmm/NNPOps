@@ -18,6 +18,46 @@ using torch::Scalar;
         throw runtime_error(string("Encountered error ")+cudaGetErrorName(result)+" at "+__FILE__+":"+to_string(__LINE__));\
     }
 
+static int getMaxBlocks() {
+    // Get an upper limit on how many thread blocks we try to launch based on the size of the GPU.
+
+    int device, numMultiprocessors;
+    CHECK_RESULT(cudaGetDevice(&device));
+    CHECK_RESULT(cudaDeviceGetAttribute(&numMultiprocessors, cudaDevAttrMultiProcessorCount, device));
+    return numMultiprocessors*4;
+}
+
+__global__ void computeDirect(const Accessor<float, 1> charge, Accessor<int, 2> neighbors, const Accessor<float, 2> deltas,
+                              const Accessor<float, 1> distances, const Accessor<int, 2> exclusions, Accessor<float, 2> posDeriv,
+                              Accessor<float, 1> chargeDeriv, Accessor<float, 1> energyBuffer, float alpha, float coulomb) {
+    int numNeighbors = neighbors.size(1);
+    float energy = 0;
+
+    for (int index = blockIdx.x*blockDim.x+threadIdx.x; index < numNeighbors; index += blockDim.x*gridDim.x) {
+        int atom1 = neighbors[0][index];
+        int atom2 = neighbors[1][index];
+        float r = distances[index];
+        if (atom1 > -1) {
+            float invR = 1/r;
+            float alphaR = alpha*r;
+            float expAlphaRSqr = exp(-alphaR*alphaR);
+            float erfcAlphaR = erfc(alphaR);
+            float prefactor = coulomb*invR;
+            float c1 = charge[atom1];
+            float c2 = charge[atom2];
+            energy += prefactor*erfcAlphaR*c1*c2;
+            atomicAdd(&chargeDeriv[atom1], prefactor*erfcAlphaR*c2);
+            atomicAdd(&chargeDeriv[atom2], prefactor*erfcAlphaR*c1);
+            float dEdR = prefactor*c1*c2*(erfcAlphaR+alphaR*expAlphaRSqr*M_2_SQRTPI)*invR*invR;
+            for (int j = 0; j < 3; j++) {
+                atomicAdd(&posDeriv[atom1][j], -dEdR*deltas[index][j]);
+                atomicAdd(&posDeriv[atom2][j], dEdR*deltas[index][j]);
+            }
+        }
+    }
+    energyBuffer[blockIdx.x*blockDim.x+threadIdx.x] = energy;
+}
+
 __device__ void invertBoxVectors(const Accessor<float, 2>& box, float recipBoxVectors[3][3]) {
     float determinant = box[0][0]*box[1][1]*box[2][2];
     float scale = 1.0/determinant;
@@ -31,7 +71,6 @@ __device__ void invertBoxVectors(const Accessor<float, 2>& box, float recipBoxVe
     recipBoxVectors[2][1] = -box[0][0]*box[2][1]*scale;
     recipBoxVectors[2][2] = box[0][0]*box[1][1]*scale;
 }
-
 
 __device__ void computeSpline(int atom, const Accessor<float, 2> pos, const Accessor<float, 2> box,
                           const float recipBoxVectors[3][3], const int gridSize[3], int gridIndex[3], float data[][3],
@@ -196,6 +235,46 @@ __global__ void interpolateForce(const Accessor<float, 2> pos, const Accessor<fl
     }
 }
 
+class PmeDirectFunctionCuda : public Function<PmeDirectFunctionCuda> {
+public:
+    static Tensor forward(AutogradContext *ctx,
+                          const Tensor& positions,
+                          const Tensor& charges,
+                          const Tensor& neighbors,
+                          const Tensor& deltas,
+                          const Tensor& distances,
+                          const Tensor& exclusions,
+                          const Scalar& alpha,
+                          const Scalar& coulomb) {
+        const auto stream = c10::cuda::getCurrentCUDAStream(positions.get_device());
+        const c10::cuda::CUDAStreamGuard guard(stream);
+        int numAtoms = charges.size(0);
+        int numPairs = neighbors.size(1);
+        TensorOptions options = torch::TensorOptions().device(neighbors.device());
+        Tensor posDeriv = torch::zeros({numAtoms, 3}, options);
+        Tensor chargeDeriv = torch::zeros({numAtoms}, options);
+        int blockSize = 128;
+        int numBlocks = max(1, min(getMaxBlocks(), (numPairs+blockSize-1)/blockSize));
+        Tensor energy = torch::zeros(numBlocks*blockSize, options);
+        computeDirect<<<numBlocks, blockSize, 0, stream>>>(get_accessor<float, 1>(charges), get_accessor<int, 2>(neighbors), get_accessor<float, 2>(deltas),
+            get_accessor<float, 1>(distances), get_accessor<int, 2>(exclusions), get_accessor<float, 2>(posDeriv),
+            get_accessor<float, 1>(chargeDeriv), get_accessor<float, 1>(energy), alpha.toDouble(), coulomb.toDouble());
+
+        // Store data for later use.
+
+        ctx->save_for_backward({posDeriv, chargeDeriv});
+        return {torch::sum(energy)};
+    }
+
+    static tensor_list backward(AutogradContext *ctx, tensor_list grad_outputs) {
+        auto saved = ctx->get_saved_variables();
+        Tensor posDeriv = saved[0];
+        Tensor chargeDeriv = saved[1];
+        torch::Tensor ignore;
+        return {posDeriv*grad_outputs[0], chargeDeriv*grad_outputs[0], ignore, ignore, ignore, ignore, ignore, ignore};
+    }
+};
+
 class PmeFunctionCuda : public Function<PmeFunctionCuda> {
 public:
     static Tensor forward(AutogradContext *ctx,
@@ -218,19 +297,12 @@ public:
         int gridSize[3] = {(int) gridx.toInt(), (int) gridy.toInt(), (int) gridz.toInt()};
         float sqrtCoulomb = sqrt(coulomb.toDouble());
 
-        // Set an upper limit on how many thread blocks we try to launch based on the size of the GPU.
-
-        int device, numMultiprocessors;
-        CHECK_RESULT(cudaGetDevice(&device));
-        CHECK_RESULT(cudaDeviceGetAttribute(&numMultiprocessors, cudaDevAttrMultiProcessorCount, device));
-        int maxBlocks = numMultiprocessors*4;
-
         // Spread the charge on the grid.
 
         TensorOptions options = torch::TensorOptions().device(positions.device());
         Tensor realGrid = torch::zeros({gridSize[0], gridSize[1], gridSize[2]}, options);
         int blockSize = 128;
-        int numBlocks = max(1, min(maxBlocks, numAtoms/blockSize));
+        int numBlocks = max(1, min(getMaxBlocks(), (numAtoms+blockSize-1)/blockSize));
         TORCH_CHECK(pmeOrder == 4 || pmeOrder == 5, "Only pmeOrder 4 or 5 is supported with CUDA");
         if (pmeOrder == 4)
             spreadCharge<4><<<numBlocks, blockSize, 0, stream>>>(get_accessor<float, 2>(positions), get_accessor<float, 1>(charges),
@@ -279,13 +351,6 @@ public:
         const c10::cuda::CUDAStreamGuard guard(stream);
         int numAtoms = positions.size(0);
 
-        // Set an upper limit on how many thread blocks we try to launch based on the size of the GPU.
-
-        int device, numMultiprocessors;
-        CHECK_RESULT(cudaGetDevice(&device));
-        CHECK_RESULT(cudaDeviceGetAttribute(&numMultiprocessors, cudaDevAttrMultiProcessorCount, device));
-        int maxBlocks = numMultiprocessors*4;
-
         // Take the inverse Fourier transform.
 
         Tensor realGrid = torch::fft::irfftn(recipGrid, {gridSize[0], gridSize[1], gridSize[2]}, c10::nullopt, "forward");
@@ -296,7 +361,7 @@ public:
         Tensor posDeriv = torch::empty({numAtoms, 3}, options);
         Tensor chargeDeriv = torch::empty({numAtoms}, options);
         int blockSize = 128;
-        int numBlocks = max(1, min(maxBlocks, numAtoms/blockSize));
+        int numBlocks = max(1, min(getMaxBlocks(), (numAtoms+blockSize-1)/blockSize));
         TORCH_CHECK(pmeOrder == 4 || pmeOrder == 5, "Only pmeOrder 4 or 5 is supported with CUDA");
         if (pmeOrder == 4)
             interpolateForce<4><<<numBlocks, blockSize, 0, stream>>>(get_accessor<float, 2>(positions), get_accessor<float, 1>(charges),
@@ -312,6 +377,17 @@ public:
         return {posDeriv, chargeDeriv, ignore, ignore, ignore, ignore, ignore, ignore, ignore, ignore, ignore, ignore};
     }
 };
+
+Tensor pme_direct_cuda(const Tensor& positions,
+                       const Tensor& charges,
+                       const Tensor& neighbors,
+                       const Tensor& deltas,
+                       const Tensor& distances,
+                       const Tensor& exclusions,
+                       const Scalar& alpha,
+                       const Scalar& coulomb) {
+    return PmeDirectFunctionCuda::apply(positions, charges, neighbors, deltas, distances, exclusions, alpha, coulomb);
+}
 
 Tensor pme_reciprocal_cuda(const Tensor& positions,
                            const Tensor& charges,
@@ -329,5 +405,6 @@ Tensor pme_reciprocal_cuda(const Tensor& positions,
 }
 
 TORCH_LIBRARY_IMPL(pme, AutogradCUDA, m) {
+    m.impl("pme_direct", pme_direct_cuda);
     m.impl("pme_reciprocal", pme_reciprocal_cuda);
 }

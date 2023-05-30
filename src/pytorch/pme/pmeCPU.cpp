@@ -318,33 +318,33 @@ public:
     }
 };
 
-Tensor pme_direct(const Tensor& positions,
-                  const Tensor& charges,
-                  const Tensor& neighbors,
-                  const Tensor& deltas,
-                  const Tensor& distances,
-                  const Tensor& exclusions,
-                  const Scalar& alpha,
-                  const Scalar& coulomb) {
+Tensor pme_direct_cpu(const Tensor& positions,
+                      const Tensor& charges,
+                      const Tensor& neighbors,
+                      const Tensor& deltas,
+                      const Tensor& distances,
+                      const Tensor& exclusions,
+                      const Scalar& alpha,
+                      const Scalar& coulomb) {
     return PmeDirectFunctionCpu::apply(positions, charges, neighbors, deltas, distances, exclusions, alpha, coulomb);
 }
 
-Tensor pme_reciprocal(const Tensor& positions,
-                      const Tensor& charges,
-                      const Tensor& box_vectors,
-                      const Scalar& gridx,
-                      const Scalar& gridy,
-                      const Scalar& gridz,
-                      const Scalar& order,
-                      const Scalar& alpha,
-                      const Scalar& coulomb,
-                      const Tensor& xmoduli,
-                      const Tensor& ymoduli,
-                      const Tensor& zmoduli) {
+Tensor pme_reciprocal_cpu(const Tensor& positions,
+                          const Tensor& charges,
+                          const Tensor& box_vectors,
+                          const Scalar& gridx,
+                          const Scalar& gridy,
+                          const Scalar& gridz,
+                          const Scalar& order,
+                          const Scalar& alpha,
+                          const Scalar& coulomb,
+                          const Tensor& xmoduli,
+                          const Tensor& ymoduli,
+                          const Tensor& zmoduli) {
     return PmeReciprocalFunctionCpu::apply(positions, charges, box_vectors, gridx, gridy, gridz, order, alpha, coulomb, xmoduli, ymoduli, zmoduli);
 }
 
 TORCH_LIBRARY_IMPL(pme, CPU, m) {
-    m.impl("pme_direct", pme_direct);
-    m.impl("pme_reciprocal", pme_reciprocal);
+    m.impl("pme_direct", pme_direct_cpu);
+    m.impl("pme_reciprocal", pme_reciprocal_cpu);
 }
