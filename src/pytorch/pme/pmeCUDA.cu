@@ -27,21 +27,27 @@ static int getMaxBlocks() {
     return numMultiprocessors*4;
 }
 
-__global__ void computeDirect(const Accessor<float, 1> charge, Accessor<int, 2> neighbors, const Accessor<float, 2> deltas,
+__global__ void computeDirect(const Accessor<float, 2> pos, const Accessor<float, 1> charge, Accessor<int, 2> neighbors, const Accessor<float, 2> deltas,
                               const Accessor<float, 1> distances, const Accessor<int, 2> exclusions, Accessor<float, 2> posDeriv,
                               Accessor<float, 1> chargeDeriv, Accessor<float, 1> energyBuffer, float alpha, float coulomb) {
+    int numAtoms = pos.size(0);
     int numNeighbors = neighbors.size(1);
-    float energy = 0;
+    int maxExclusions = exclusions.size(1);
+    double energy = 0;
 
     for (int index = blockIdx.x*blockDim.x+threadIdx.x; index < numNeighbors; index += blockDim.x*gridDim.x) {
         int atom1 = neighbors[0][index];
         int atom2 = neighbors[1][index];
         float r = distances[index];
-        if (atom1 > -1) {
+        bool include = (atom1 > -1);
+        for (int j = 0; include && j < maxExclusions && exclusions[atom1][j] >= atom2; j++)
+            if (exclusions[atom1][j] == atom2)
+                include = false;
+        if (include) {
             float invR = 1/r;
             float alphaR = alpha*r;
-            float expAlphaRSqr = exp(-alphaR*alphaR);
-            float erfcAlphaR = erfc(alphaR);
+            float expAlphaRSqr = expf(-alphaR*alphaR);
+            float erfcAlphaR = erfcf(alphaR);
             float prefactor = coulomb*invR;
             float c1 = charge[atom1];
             float c2 = charge[atom2];
@@ -52,6 +58,36 @@ __global__ void computeDirect(const Accessor<float, 1> charge, Accessor<int, 2> 
             for (int j = 0; j < 3; j++) {
                 atomicAdd(&posDeriv[atom1][j], -dEdR*deltas[index][j]);
                 atomicAdd(&posDeriv[atom2][j], dEdR*deltas[index][j]);
+            }
+        }
+    }
+
+    // Subtract excluded interactions to compensate for the part that is
+    // incorrectly added in reciprocal space.
+
+    float dr[3];
+    for (int index = blockIdx.x*blockDim.x+threadIdx.x; index < numAtoms*maxExclusions; index += blockDim.x*gridDim.x) {
+        int atom1 = index/maxExclusions;
+        int atom2 = exclusions[atom1][index-atom1*maxExclusions];
+        if (atom2 > atom1) {
+            for (int j = 0; j < 3; j++)
+                dr[j] = pos[atom1][j]-pos[atom2][j];
+            float r2 = dr[0]*dr[0] + dr[1]*dr[1] + dr[2]*dr[2];
+            float invR = rsqrtf(r2);
+            float r = invR*r2;
+            float alphaR = alpha*r;
+            float expAlphaRSqr = expf(-alphaR*alphaR);
+            float erfAlphaR = erff(alphaR);
+            float prefactor = coulomb*invR;
+            float c1 = charge[atom1];
+            float c2 = charge[atom2];
+            energy -= prefactor*erfAlphaR*c1*c2;
+            atomicAdd(&chargeDeriv[atom1], -prefactor*erfAlphaR*c2);
+            atomicAdd(&chargeDeriv[atom2], -prefactor*erfAlphaR*c1);
+            float dEdR = prefactor*c1*c2*(erfAlphaR-alphaR*expAlphaRSqr*M_2_SQRTPI)*invR*invR;
+            for (int j = 0; j < 3; j++) {
+                atomicAdd(&posDeriv[atom1][j], dEdR*dr[j]);
+                atomicAdd(&posDeriv[atom2][j], -dEdR*dr[j]);
             }
         }
     }
@@ -158,7 +194,7 @@ __global__ void reciprocalConvolution(const Accessor<float, 2> box, Accessor<c10
     invertBoxVectors(box, recipBoxVectors);
     const unsigned int gridSize = gridx*gridy*(gridz/2+1);
     const float recipScaleFactor = recipBoxVectors[0][0]*recipBoxVectors[1][1]*recipBoxVectors[2][2]/M_PI;
-    float energy = 0;
+    double energy = 0;
 
     for (int index = blockIdx.x*blockDim.x+threadIdx.x; index < gridSize; index += blockDim.x*gridDim.x) {
         int kx = index/(gridy*(gridz/2+1));
@@ -256,9 +292,10 @@ public:
         int blockSize = 128;
         int numBlocks = max(1, min(getMaxBlocks(), (numPairs+blockSize-1)/blockSize));
         Tensor energy = torch::zeros(numBlocks*blockSize, options);
-        computeDirect<<<numBlocks, blockSize, 0, stream>>>(get_accessor<float, 1>(charges), get_accessor<int, 2>(neighbors), get_accessor<float, 2>(deltas),
-            get_accessor<float, 1>(distances), get_accessor<int, 2>(exclusions), get_accessor<float, 2>(posDeriv),
-            get_accessor<float, 1>(chargeDeriv), get_accessor<float, 1>(energy), alpha.toDouble(), coulomb.toDouble());
+        computeDirect<<<numBlocks, blockSize, 0, stream>>>(get_accessor<float, 2>(positions), get_accessor<float, 1>(charges),
+            get_accessor<int, 2>(neighbors), get_accessor<float, 2>(deltas), get_accessor<float, 1>(distances),
+            get_accessor<int, 2>(exclusions), get_accessor<float, 2>(posDeriv), get_accessor<float, 1>(chargeDeriv),
+            get_accessor<float, 1>(energy), alpha.toDouble(), coulomb.toDouble());
 
         // Store data for later use.
 

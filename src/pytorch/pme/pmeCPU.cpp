@@ -85,6 +85,7 @@ public:
         int numAtoms = charges.size(0);
         int numPairs = neighbors.size(1);
         int maxExclusions = exclusions.size(1);
+        auto pos = positions.accessor<float,2>();
         auto pair = neighbors.accessor<int,2>();
         auto delta = deltas.accessor<float,2>();
         auto r = distances.accessor<float,1>();
@@ -103,12 +104,16 @@ public:
         double energy = 0.0;
         for (int i = 0; i < numPairs; i++) {
             int atom1 = pair[0][i];
-            if (atom1 > -1) {
-                int atom2 = pair[1][i];
+            int atom2 = pair[1][i];
+            bool include = (atom1 > -1);
+            for (int j = 0; include && j < maxExclusions && excl[atom1][j] >= atom2; j++)
+                if (excl[atom1][j] == atom2)
+                    include = false;
+            if (include) {
                 float invR = 1/r[i];
                 float alphaR = alpha*r[i];
-                float expAlphaRSqr = exp(-alphaR*alphaR);
-                float erfcAlphaR = erfc(alphaR);
+                float expAlphaRSqr = expf(-alphaR*alphaR);
+                float erfcAlphaR = erfcf(alphaR);
                 float prefactor = coulomb*invR;
                 float c1 = charge[atom1];
                 float c2 = charge[atom2];
@@ -119,6 +124,34 @@ public:
                 for (int j = 0; j < 3; j++) {
                     posDeriv_a[atom1][j] -= dEdR*delta[i][j];
                     posDeriv_a[atom2][j] += dEdR*delta[i][j];
+                }
+            }
+        }
+
+        // Subtract excluded interactions to compensate for the part that is
+        // incorrectly added in reciprocal space.
+
+        float dr[3];
+        for (int atom1 = 0; atom1 < numAtoms; atom1++) {
+            for (int i = 0; i < maxExclusions && excl[atom1][i] > atom1; i++) {
+                int atom2 = excl[atom1][i];
+                for (int j = 0; j < 3; j++)
+                    dr[j] = pos[atom1][j]-pos[atom2][j];
+                float rr = sqrt(dr[0]*dr[0] + dr[1]*dr[1] + dr[2]*dr[2]);
+                float invR = 1/rr;
+                float alphaR = alpha*rr;
+                float expAlphaRSqr = expf(-alphaR*alphaR);
+                float erfAlphaR = erff(alphaR);
+                float prefactor = coulomb*invR;
+                float c1 = charge[atom1];
+                float c2 = charge[atom2];
+                energy -= prefactor*erfAlphaR*c1*c2;
+                chargeDeriv_a[atom1] -= prefactor*erfAlphaR*c2;
+                chargeDeriv_a[atom2] -= prefactor*erfAlphaR*c1;
+                float dEdR = prefactor*c1*c2*(erfAlphaR-alphaR*expAlphaRSqr*M_2_SQRTPI)*invR*invR;
+                for (int j = 0; j < 3; j++) {
+                    posDeriv_a[atom1][j] += dEdR*dr[j];
+                    posDeriv_a[atom2][j] -= dEdR*dr[j];
                 }
             }
         }
@@ -223,7 +256,7 @@ public:
                     float bz = zmod[kz];
                     float m2 = mhx2y2 + mhz*mhz;
                     float denom = m2*bxby*bz;
-                    float eterm = (index == 0 ? 0 : exp(-recipExpFactor*m2)/denom);
+                    float eterm = (index == 0 ? 0 : expf(-recipExpFactor*m2)/denom);
                     float scale = (kz > 0 && kz <= (gridSize[2]-1)/2 ? 2 : 1);
                     c10::complex<float>& g = recip[kx][ky][kz];
                     energy += scale * eterm * (g.real()*g.real() + g.imag()*g.imag());
