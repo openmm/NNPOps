@@ -96,7 +96,7 @@ __global__ void computeDirect(const Accessor<float, 2> pos, const Accessor<float
 
 __device__ void invertBoxVectors(const Accessor<float, 2>& box, float recipBoxVectors[3][3]) {
     float determinant = box[0][0]*box[1][1]*box[2][2];
-    float scale = 1.0/determinant;
+    float scale = 1.0f/determinant;
     recipBoxVectors[0][0] = box[1][1]*box[2][2]*scale;
     recipBoxVectors[0][1] = 0;
     recipBoxVectors[0][2] = 0;
@@ -158,8 +158,10 @@ __device__ void computeSpline(int atom, const Accessor<float, 2> pos, const Acce
 template <int PME_ORDER>
 __global__ void spreadCharge(const Accessor<float, 2> pos, const Accessor<float, 1> charge, const Accessor<float, 2> box,
                              Accessor<float, 3> grid, int gridx, int gridy, int gridz, float sqrtCoulomb) {
-    float recipBoxVectors[3][3];
-    invertBoxVectors(box, recipBoxVectors);
+    __shared__ float recipBoxVectors[3][3];
+    if (threadIdx.x == 0)
+        invertBoxVectors(box, recipBoxVectors);
+    __syncthreads();
     float data[PME_ORDER][3];
     int numAtoms = pos.size(0);
     for (int atom = blockIdx.x*blockDim.x+threadIdx.x; atom < numAtoms; atom += blockDim.x*gridDim.x) {
@@ -218,15 +220,17 @@ __global__ void reciprocalConvolution(const Accessor<float, 2> box, Accessor<c10
         energy += scale * eterm * (g.real()*g.real() + g.imag()*g.imag());
         g *= eterm;
     }
-    energyBuffer[blockIdx.x*blockDim.x+threadIdx.x] = energy;
+    energyBuffer[blockIdx.x*blockDim.x+threadIdx.x] = 0.5f*energy;
 }
 
 template <int PME_ORDER>
 __global__ void interpolateForce(const Accessor<float, 2> pos, const Accessor<float, 1> charge, const Accessor<float, 2> box,
                                  const Accessor<float, 3> grid, int gridx, int gridy, int gridz, float sqrtCoulomb,
                                  Accessor<float, 2> posDeriv, Accessor<float, 1> chargeDeriv) {
-    float recipBoxVectors[3][3];
-    invertBoxVectors(box, recipBoxVectors);
+    __shared__ float recipBoxVectors[3][3];
+    if (threadIdx.x == 0)
+        invertBoxVectors(box, recipBoxVectors);
+    __syncthreads();
     float data[PME_ORDER][3];
     float ddata[PME_ORDER][3];
     int numAtoms = pos.size(0);
@@ -341,12 +345,9 @@ public:
         int blockSize = 128;
         int numBlocks = max(1, min(getMaxBlocks(), (numAtoms+blockSize-1)/blockSize));
         TORCH_CHECK(pmeOrder == 4 || pmeOrder == 5, "Only pmeOrder 4 or 5 is supported with CUDA");
-        if (pmeOrder == 4)
-            spreadCharge<4><<<numBlocks, blockSize, 0, stream>>>(get_accessor<float, 2>(positions), get_accessor<float, 1>(charges),
-                    get_accessor<float, 2>(box_vectors), get_accessor<float, 3>(realGrid), gridSize[0], gridSize[1], gridSize[2], sqrtCoulomb);
-        else
-            spreadCharge<5><<<numBlocks, blockSize, 0, stream>>>(get_accessor<float, 2>(positions), get_accessor<float, 1>(charges),
-                    get_accessor<float, 2>(box_vectors), get_accessor<float, 3>(realGrid), gridSize[0], gridSize[1], gridSize[2], sqrtCoulomb);
+        auto spread = (pmeOrder == 4 ? spreadCharge<4> : spreadCharge<5>);
+        spread<<<numBlocks, blockSize, 0, stream>>>(get_accessor<float, 2>(positions), get_accessor<float, 1>(charges),
+                get_accessor<float, 2>(box_vectors), get_accessor<float, 3>(realGrid), gridSize[0], gridSize[1], gridSize[2], sqrtCoulomb);
 
         // Take the Fourier transform.
 
@@ -368,7 +369,7 @@ public:
         ctx->saved_data["order"] = order;
         ctx->saved_data["alpha"] = alpha;
         ctx->saved_data["coulomb"] = coulomb;
-        return {0.5*torch::sum(energy)};
+        return {torch::sum(energy)};
     }
 
     static tensor_list backward(AutogradContext *ctx, tensor_list grad_outputs) {

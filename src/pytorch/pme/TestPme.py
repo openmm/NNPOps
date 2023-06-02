@@ -11,7 +11,7 @@ class PmeModule(torch.nn.Module):
     def forward(self, positions, charges, box_vectors):
         edir = self.pme.compute_direct(positions, charges, 0.5, box_vectors)
         erecip = self.pme.compute_reciprocal(positions, charges, box_vectors)
-        return edir-erecip
+        return edir+erecip
 
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 def test_rectangular(device):
