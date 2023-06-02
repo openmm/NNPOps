@@ -391,7 +391,8 @@ public:
 
         // Take the inverse Fourier transform.
 
-        Tensor realGrid = torch::fft::irfftn(recipGrid, {gridSize[0], gridSize[1], gridSize[2]}, c10::nullopt, "forward");
+        int64_t targetGridSize[3] = {gridSize[0], gridSize[1], gridSize[2]};
+        Tensor realGrid = torch::fft::irfftn(recipGrid, targetGridSize, c10::nullopt, "forward");
 
         // Compute the derivatives.
 
