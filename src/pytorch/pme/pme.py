@@ -33,7 +33,9 @@ class PME:
     excluded.
 
     When performing backpropagation, this class computes derivatives with respect to atomic positions and charges, but
-    not to any other parameters (box vectors, alpha, etc.).
+    not to any other parameters (box vectors, alpha, etc.).  In addition, it only computes first derivatives.
+    Attempting to compute a second derivative will throw an exception.  This means that if you use PME during training,
+    the loss function can only depend on energy, not forces.
 
     When you create an instance of this class, you must specify the value of Coulomb's constant 1/(4*pi*eps0).  Its
     value depends on the units used for energy and distance.  The value you specify thus sets the unit system.  Here are

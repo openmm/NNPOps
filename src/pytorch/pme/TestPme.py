@@ -291,3 +291,28 @@ def test_cuda_graph():
 
     g.replay()
     torch.cuda.synchronize()
+
+
+@pytest.mark.parametrize('device', ['cpu', 'cuda'])
+def test_double_derivative(device):
+    """Test that asking for a second derivative throws an excepion."""
+    if not torch.cuda.is_available() and device == 'cuda':
+        pytest.skip('No GPU')
+    positions = 3*torch.rand((9, 3), dtype=torch.float32, device=device)-1
+    positions.requires_grad_()
+    charges = torch.tensor([(i-4)*0.1 for i in range(9)], dtype=torch.float32, device=device)
+    charges.requires_grad_()
+    box_vectors = torch.tensor([[1, 0, 0], [0,1.1, 0], [0, 0, 1.2]], dtype=torch.float32, device=device)
+    pme = PME(14, 16, 15, 5, 5.0, 138.935, torch.zeros(9, 0, dtype=torch.int32))
+    edir = pme.compute_direct(positions, charges, 0.5, box_vectors)
+    erecip = pme.compute_reciprocal(positions, charges, box_vectors)
+    ddir = torch.autograd.grad(edir, positions, retain_graph=True)
+    drecip = torch.autograd.grad(erecip, positions, retain_graph=True)
+    with pytest.raises(Exception):
+        torch.autograd.grad(ddir, positions, retain_graph=True)
+    with pytest.raises(Exception):
+        torch.autograd.grad(drecip, positions, retain_graph=True)
+    with pytest.raises(Exception):
+        torch.autograd.grad(ddir, charges, retain_graph=True)
+    with pytest.raises(Exception):
+        torch.autograd.grad(drecip, charges, retain_graph=True)
