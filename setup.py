@@ -25,6 +25,8 @@ class CMakeExtension(Extension):
         super().__init__(name, sources=[])
         self.sourcedir = os.fspath(Path(sourcedir).resolve())
         #Store a list of extra arguments to pass to CMake, prepend -D to each
+        if extra_args is not None:
+            print("Extra args: ", extra_args)
         self.extra_args = [f"-D{key}={value}" for key, value in extra_args.items()] if extra_args else []
 
 
@@ -164,9 +166,6 @@ version = "0.5"
 setup(
     name="nnpops",
     version=version,
-    ext_modules=[CMakeExtension("cmake_example", ".", extra_args)],
-    cmdclass={"build_ext": CMakeBuild},
-    zip_safe=False,
-    extras_require={"test": ["pytest>=6.0"]},
-    python_requires=">=3.7",
+    ext_modules=[CMakeExtension(name="cmake_example", sourcedir=".", extra_args=extra_args)],
+    cmdclass={"build_ext": CMakeBuild}
 )

@@ -8,3 +8,4 @@ requires = [
     "GitPython"
 ]
 build-backend = "setuptools.build_meta"
+python_requires = ">=3.7"
