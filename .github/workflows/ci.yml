@@ -117,12 +117,14 @@ jobs:
     - name: Pip build (without CUDA)
       if: ${{ !matrix.enable_cuda }}
       run: |
-        pip -vvv wheel  . --extra-index-url https://download.pytorch.org/whl/cpu 
+        pip -vvv wheel --wheel-dir=$(pwd) -b build_pip . --extra-index-url https://download.pytorch.org/whl/cpu
+        rm -rf build
         
     - name: Pip build (with CUDA)
       if: ${{ matrix.enable_cuda }}
       run: |
-        pip -vvv wheel . 
+        pip -vvv wheel --wheel-dir=$(pwd) -b build_pip .
+        rm -rf build_pip
 
     - name: Configure, compile, and install
       run: |
