@@ -117,12 +117,14 @@ jobs:
     - name: Pip build (without CUDA)
       if: ${{ !matrix.enable_cuda }}
       run: |
+        conda activate nnpops
         pip -vvv wheel --wheel-dir=$(pwd) . --extra-index-url https://download.pytorch.org/whl/cpu
         rm -rf build
         
     - name: Pip build (with CUDA)
       if: ${{ matrix.enable_cuda }}
       run: |
+        conda activate nnpops
         pip -vvv wheel --wheel-dir=$(pwd) .
         rm -rf build
 
