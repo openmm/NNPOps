@@ -131,8 +131,7 @@ extra_args = {}
 
 extra_args["CMAKE_C_COMPILER"] = os.environ.get("CC", "")
 extra_args["CMAKE_CXX_COMPILER"] = os.environ.get("CXX", "")
-#If ENABLE_CUDA is in the env
-if "ENABLE_CUDA" in os.environ:
+if torch.backends.cuda.is_built():
     extra_args["ENABLE_CUDA"] = "ON"
     ARCHES = [52, 60, 61, 70]
     DEPRECATED_IN_11 = [35, 50]
