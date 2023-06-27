@@ -25,8 +25,7 @@ class CMakeExtension(Extension):
         super().__init__(name, sources=[])
         self.sourcedir = os.fspath(Path(sourcedir).resolve())
         #Store a list of extra arguments to pass to CMake, prepend -D to each
-        self.extra_args = extra_args
-        self.extra_args = ([f"-D{key}={value}" for key, value in extra_args.items()] if extra_args else [""])
+        self.extra_args = [f"-D{key}={value}" for key, value in extra_args.items()] if extra_args else []
 
 
 
@@ -150,7 +149,7 @@ if torch.backends.cuda.is_built():
         ARCHES += [75]
     elif cuda_version_major >= 10:
         LATEST_ARCH = 75
-        ARCHES = DEPRECATED_IN_11 + ARCHES
+        ARCHES += DEPRECATED_IN_11
     else:
         raise RuntimeError("Unsupported CUDA version")
     CMAKE_CUDA_ARCHS = ";".join([str(arch) for arch in ARCHES] + [f"{LATEST_ARCH}-real", f"{LATEST_ARCH}-virtual"])
