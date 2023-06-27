@@ -158,8 +158,9 @@ else:
     extra_args["ENABLE_CUDA"] = "OFF"
 
 extra_args["CMAKE_PREFIX_PATH"] = torch.utils.cmake_prefix_path
-tag = git.Repo(search_parent_directories=True).git.describe("--tags", always=True)
-version = tag.lstrip('v').split('-')[0]
+#tag = git.Repo(search_parent_directories=True).git.describe("--tags", always=True)
+#version = tag.lstrip('v').split('-')[0]
+version = "0.5"
 setup(
     name="nnpops",
     version=version,
