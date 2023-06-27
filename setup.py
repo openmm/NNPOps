@@ -129,8 +129,6 @@ class CMakeBuild(build_ext):
 
 extra_args = {}
 
-extra_args["CMAKE_C_COMPILER"] = os.environ.get("CC", "")
-extra_args["CMAKE_CXX_COMPILER"] = os.environ.get("CXX", "")
 if torch.backends.cuda.is_built():
     extra_args["ENABLE_CUDA"] = "ON"
     ARCHES = [52, 60, 61, 70]
@@ -153,7 +151,7 @@ if torch.backends.cuda.is_built():
         raise RuntimeError("Unsupported CUDA version")
     CMAKE_CUDA_ARCHS = ";".join([str(arch) for arch in ARCHES] + [f"{LATEST_ARCH}-real", f"{LATEST_ARCH}-virtual"])
     extra_args["CMAKE_CUDA_ARCHITECTURES"] = "50"
-    extra_args["CMAKE_CUDA_HOST_COMPILER"] = extra_args["CMAKE_CXX_COMPILER"]
+    #extra_args["CMAKE_CUDA_HOST_COMPILER"] = extra_args["CMAKE_CXX_COMPILER"]
 else:
     extra_args["ENABLE_CUDA"] = "OFF"
 
