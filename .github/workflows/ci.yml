@@ -129,3 +129,13 @@ jobs:
         conda activate nnpops
         cd build
         ctest --verbose --exclude-regex TestCuda
+        
+    - name: Pip build (without CUDA)
+      if: ${{ !matrix.enable_cuda }}
+      run: |
+        pip -vvv wheel --wheel-dir=$(pwd) nnpops --extra-index-url https://download.pytorch.org/whl/cpu
+    - name: Pip build (with CUDA)
+      if: ${{ matrix.enable_cuda }}
+      run: |
+        ENABLE_CUDA=ON pip -vvv wheel --wheel-dir=$(pwd) nnpops
+        
