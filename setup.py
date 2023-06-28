@@ -8,7 +8,7 @@ from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 import torch
 
-from typing import Optional
+from typing import Optional, Dict
 # Convert distutils Windows platform specifiers to CMake -A arguments
 PLAT_TO_CMAKE = {
     "win32": "Win32",
@@ -21,7 +21,7 @@ PLAT_TO_CMAKE = {
 # The name must be the _single_ output extension from the CMake build.
 # If you need multiple extensions, see scikit-build.
 class CMakeExtension(Extension):
-    def __init__(self, name: str, sourcedir: str = "", extra_args: Optional[dict[str, str]] = None) -> None:
+    def __init__(self, name: str, sourcedir: str = "", extra_args: Optional[Dict[str, str]] = None) -> None:
         super().__init__(name, sources=[])
         self.sourcedir = os.fspath(Path(sourcedir).resolve())
         #Store a list of extra arguments to pass to CMake, prepend -D to each
