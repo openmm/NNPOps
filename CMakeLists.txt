@@ -23,6 +23,9 @@ set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
               src/pytorch/neighbors/getNeighborPairsCPU.cpp
               src/pytorch/neighbors/getNeighborPairsCUDA.cu
               src/pytorch/neighbors/neighbors.cpp
+              src/pytorch/pme/pmeCPU.cpp
+              src/pytorch/pme/pmeCUDA.cu
+              src/pytorch/pme/pme.cpp
               src/schnet/CpuCFConv.cpp
               src/schnet/CudaCFConv.cu)
 
@@ -110,3 +113,6 @@ install(FILES src/pytorch/__init__.py
 install(FILES src/pytorch/neighbors/__init__.py
               src/pytorch/neighbors/getNeighborPairs.py
         DESTINATION ${Python3_SITEARCH}/${NAME}/neighbors)
+install(FILES src/pytorch/pme/__init__.py
+              src/pytorch/pme/pme.py
+        DESTINATION ${Python3_SITEARCH}/${NAME}/pme)
