@@ -154,7 +154,7 @@ if torch.backends.cuda.is_built():
         ARCHES += DEPRECATED_IN_11
     else:
         raise RuntimeError("Unsupported CUDA version")
-    CMAKE_CUDA_ARCHS = '\"' + ";".join([str(arch) for arch in ARCHES] + [f"{LATEST_ARCH}-real", f"{LATEST_ARCH}-virtual"]) + '\"'
+    CMAKE_CUDA_ARCHS = ";".join([str(arch) for arch in ARCHES] + [f"{LATEST_ARCH}-real", f"{LATEST_ARCH}-virtual"])
     extra_args["CMAKE_CUDA_ARCHITECTURES"] = CMAKE_CUDA_ARCHS
 else:
     extra_args["ENABLE_CUDA"] = "OFF"
