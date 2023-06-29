@@ -118,6 +118,7 @@ jobs:
       if: ${{ !matrix.enable_cuda }}
       run: |
         conda activate nnpops
+        sed -i -e '/"torch/c "torch==${{ matrix.pytorch }}",' pyproject.toml
         pip -vvv wheel --wheel-dir=$(pwd) . --extra-index-url https://download.pytorch.org/whl/cpu
         rm -rf build
         
@@ -125,6 +126,7 @@ jobs:
       if: ${{ matrix.enable_cuda }}
       run: |
         conda activate nnpops
+        sed -i -e '/"torch/c "torch==${{ matrix.pytorch }}",' pyproject.toml
         pip -vvv wheel --wheel-dir=$(pwd) .
         rm -rf build
 
