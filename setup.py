@@ -3,7 +3,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-import git
+#import git
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 import torch
@@ -51,7 +51,7 @@ class CMakeBuild(build_ext):
         # EXAMPLE_VERSION_INFO shows you how to pass a value into the C++ code
         # from Python.
         cmake_args = [
-            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}{os.sep}",
+            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}{os.sep}{ext.name}",
             f"-DPYTHON_EXECUTABLE={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
         ]
@@ -162,10 +162,13 @@ else:
 extra_args["CMAKE_PREFIX_PATH"] = torch.utils.cmake_prefix_path
 #tag = git.Repo(search_parent_directories=True).git.describe("--tags", always=True)
 #version = tag.lstrip('v').split('-')[0]
-version = "0.5"
 setup(
-    name="nnpops",
-    version=version,
-    ext_modules=[CMakeExtension(name="cmake_example", sourcedir=".", extra_args=extra_args)],
-    cmdclass={"build_ext": CMakeBuild}
+    ext_modules=[CMakeExtension(name="NNPOps", sourcedir=".", extra_args=extra_args)],
+    cmdclass={"build_ext": CMakeBuild},
+    packages=["NNPOps", "NNPOps.neighbors", "NNPOps.pme"],
+    package_dir={
+        'NNPOps': 'src/pytorch',
+        'NNPOps.neighbors': 'src/pytorch/neighbors',
+        'NNPOps.pme': 'src/pytorch/pme'},
+    package_data={'NNPOps': ['lib/*.so', 'lib/*.dll', 'lib/*.dylib']},
 )

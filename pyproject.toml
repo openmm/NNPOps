@@ -9,3 +9,14 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 python_requires = ">=3.7"
+
+[project]
+name = "nnpops"
+version = "0.5"
+dependencies = [
+    "numpy",
+    "torch>=2.0",
+    "torchani>=2.2"
+]
+[project.optional-dependencies]
+test = ["pytest>=5.0"]
