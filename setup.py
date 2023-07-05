@@ -160,6 +160,8 @@ else:
     extra_args["ENABLE_CUDA"] = "OFF"
 
 extra_args["CMAKE_PREFIX_PATH"] = torch.utils.cmake_prefix_path
+torch_version = os.environ.get("TORCH_VERSION", torch.__version__)
+cuda_version = os.environ.get("CUDA_VERSION", torch.version.cuda)
 #tag = git.Repo(search_parent_directories=True).git.describe("--tags", always=True)
 #version = tag.lstrip('v').split('-')[0]
 setup(
@@ -171,4 +173,5 @@ setup(
         'NNPOps.neighbors': 'src/pytorch/neighbors',
         'NNPOps.pme': 'src/pytorch/pme'},
     package_data={'NNPOps': ['lib/*.so', 'lib/*.dll', 'lib/*.dylib']},
+    install_requires=[f"torch=={torch_version}", f"nvidia-cuda-nvcc-cu{cuda_version}"],
 )
