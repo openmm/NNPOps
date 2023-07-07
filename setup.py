@@ -134,30 +134,31 @@ if "CC" in os.environ:
     extra_args["CMAKE_C_COMPILER"] = os.environ.get("CC", "")
 if "CXX" in os.environ:
     extra_args["CMAKE_CXX_COMPILER"] = os.environ.get("CXX", "")
-if torch.backends.cuda.is_built():
-    extra_args["ENABLE_CUDA"] = "ON"
-    ARCHES = [52, 60, 61, 70]
-    DEPRECATED_IN_11 = [35, 50]
-    cuda_version_major= int(torch.version.cuda.split(".")[0])
-    cuda_version_minor= int(torch.version.cuda.split(".")[1])
-    if cuda_version_major >= 11 or (cuda_version_major == 11 and cuda_version_minor >= 1):
-        LATEST_ARCH = 90
-        ARCHES += [75, 80, 86]
-    elif cuda_version_major == 11 and cuda_version_minor >= 1:
-        LATEST_ARCH = 86
-        ARCHES += [75, 80]
-    elif cuda_version_major == 11 and cuda_version_minor >= 0:
-        LATEST_ARCH = 80
-        ARCHES += [75]
-    elif cuda_version_major >= 10:
-        LATEST_ARCH = 75
-        ARCHES += DEPRECATED_IN_11
-    else:
-        raise RuntimeError("Unsupported CUDA version")
-    CMAKE_CUDA_ARCHS = ";".join([str(arch) for arch in ARCHES] + [f"{LATEST_ARCH}-real", f"{LATEST_ARCH}-virtual"])
-    extra_args["CMAKE_CUDA_ARCHITECTURES"] = "OFF" #CMAKE_CUDA_ARCHS
-else:
-    extra_args["ENABLE_CUDA"] = "OFF"
+# if torch.backends.cuda.is_built():
+#     extra_args["ENABLE_CUDA"] = "ON"
+#     ARCHES = [52, 60, 61, 70]
+#     DEPRECATED_IN_11 = [35, 50]
+#     cuda_version_major= int(torch.version.cuda.split(".")[0])
+#     cuda_version_minor= int(torch.version.cuda.split(".")[1])
+#     if cuda_version_major >= 11 or (cuda_version_major == 11 and cuda_version_minor >= 1):
+#         LATEST_ARCH = 90
+#         ARCHES += [75, 80, 86]
+#     elif cuda_version_major == 11 and cuda_version_minor >= 1:
+#         LATEST_ARCH = 86
+#         ARCHES += [75, 80]
+#     elif cuda_version_major == 11 and cuda_version_minor >= 0:
+#         LATEST_ARCH = 80
+#         ARCHES += [75]
+#     elif cuda_version_major >= 10:
+#         LATEST_ARCH = 75
+#         ARCHES += DEPRECATED_IN_11
+#     else:
+#         raise RuntimeError("Unsupported CUDA version")
+#     CMAKE_CUDA_ARCHS = ";".join([str(arch) for arch in ARCHES] + [f"{LATEST_ARCH}-real", f"{LATEST_ARCH}-virtual"])
+#     extra_args["CMAKE_CUDA_ARCHITECTURES"] = "OFF" #CMAKE_CUDA_ARCHS
+# else:
+extra_args["CMAKE_CUDA_ARCHITECTURES"] = "OFF"
+extra_args["ENABLE_CUDA"] = "OFF"
 
 extra_args["CMAKE_PREFIX_PATH"] = torch.utils.cmake_prefix_path
 torch_version = os.environ.get("TORCH_VERSION", torch.__version__)

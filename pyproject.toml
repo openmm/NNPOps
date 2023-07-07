@@ -5,7 +5,10 @@ requires = [
     "ninja",
     "cmake>=3.23",
     "GitPython",
-    "nvidia-pyindex"
+    "nvidia-pyindex",
+    "torch>=1.11",
+    "Cython"
+    
 ]
 build-backend = "setuptools.build_meta"
 python_requires = ">=3.7"

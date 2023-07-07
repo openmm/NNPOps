@@ -24,7 +24,6 @@ jobs:
         env:
           CIBW_BUILD: cp${{ matrix.python }}-linux
           CIBW_ENVIRONMENT: TORCH_VERSION=${{ matrix.torch }} CUDA_VERSION=${{ matrix.cuda }}
-          
         with:
           package-dir: .
           output-dir: wheelhouse
