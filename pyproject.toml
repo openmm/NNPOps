@@ -1,0 +1,27 @@
+[build-system]
+requires = [
+    "setuptools>=42",
+    "wheel",
+    "ninja",
+    "cmake>=3.23",
+    "GitPython",
+    "nvidia-pyindex",
+    "torch>=1.11",
+    "Cython"
+    
+]
+build-backend = "setuptools.build_meta"
+python_requires = ">=3.7"
+
+[project]
+name = "nnpops"
+version = "0.5"
+dependencies = [
+    "numpy",
+    "torch>=1.11",
+    "torchani>=2.2",
+    "mdtraj"
+]
+
+[project.optional-dependencies]
+test = ["pytest>=5.0"]

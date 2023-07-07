@@ -12,3 +12,4 @@ dependencies:
   - python 3.10.*
   - pytorch-gpu 2.0.*
   - sysroot_linux-64 2.17
+  - pip

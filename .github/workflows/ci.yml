@@ -114,6 +114,22 @@ jobs:
         conda activate nnpops
         conda list
 
+    - name: Pip build (without CUDA)
+      if: ${{ !matrix.enable_cuda }}
+      run: |
+        conda activate nnpops
+        sed -i -e '/"torch/c "torch==${{ matrix.pytorch }}",' pyproject.toml
+        pip -vvv wheel --wheel-dir=$(pwd) . --extra-index-url https://download.pytorch.org/whl/cpu
+        rm -rf build
+        
+    - name: Pip build (with CUDA)
+      if: ${{ matrix.enable_cuda }}
+      run: |
+        conda activate nnpops
+        sed -i -e '/"torch/c "torch==${{ matrix.pytorch }}",' pyproject.toml
+        pip -vvv wheel --wheel-dir=$(pwd) .
+        rm -rf build
+
     - name: Configure, compile, and install
       run: |
         conda activate nnpops
@@ -129,3 +145,4 @@ jobs:
         conda activate nnpops
         cd build
         ctest --verbose --exclude-regex TestCuda
+                

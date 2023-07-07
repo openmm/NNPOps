@@ -9,7 +9,7 @@ if(ENABLE_CUDA)
 endif(ENABLE_CUDA)
 
 # Find dependencies
-find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 find_package(Torch REQUIRED)
 enable_testing()
 

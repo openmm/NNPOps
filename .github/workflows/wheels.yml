@@ -1,0 +1,43 @@
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  build_wheels:
+    name: Build wheels on cp${{ matrix.python }}-linux
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest] #, windows-2019, macos-11]
+        python: ['3.10']
+        torch: ['1.12']
+        cuda: ['11']
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.13.1
+        env:
+          CIBW_SKIP: "cp36-* *-win32 *i686"
+          
+          CIBW_ENVIRONMENT: TORCH_VERSION=${{ matrix.torch }} CUDA_VERSION=${{ matrix.cuda }}
+        with:
+          package-dir: .
+          output-dir: wheelhouse
+
+          
+        # env:
+        #   CIBW_SOME_OPTION: value
+        #    ...
+        # with:
+        #   package-dir: .
+        #   output-dir: wheelhouse
+        #   config-file: "{package}/pyproject.toml"
+
+      # - uses: actions/upload-artifact@v3
+      #   with:
+      #     path: ./wheelhouse/*.whl
