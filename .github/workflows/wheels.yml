@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest] #, windows-2019, macos-11]
-        python: ['3.9']
+        python: ['39']
         torch: ['1.12']
         cuda: ['11']
     steps:
@@ -23,6 +23,8 @@ jobs:
         uses: pypa/cibuildwheel@v2.13.1
         env:
           CIBW_BUILD: cp${{ matrix.python }}-*
+          CIBW_SKIP: "cp36-* *-win32 *i686"
+          
           CIBW_ENVIRONMENT: TORCH_VERSION=${{ matrix.torch }} CUDA_VERSION=${{ matrix.cuda }}
         with:
           package-dir: .
