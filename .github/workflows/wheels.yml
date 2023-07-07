@@ -5,13 +5,14 @@ on: [push, pull_request]
 jobs:
   build_wheels:
     name: Build wheels on cp${{ matrix.python }}-${{ matrix.platform_id }}-${{ matrix.manylinux_image }}
+
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-22.04] #, windows-2019, macos-11]
-        python: [37 38 39 310 311]
-        torch: [1.11, 1.12, 2.0.0]
-        cuda: [10, 11, 12]
+        python: ['3.7', '3.8', '3.9', '3.10', '3.11']
+        torch: ['1.11', '1.12', '2.0.0']
+        cuda: ['10', '11', '12']
     steps:
       - uses: actions/checkout@v3
       - name: Setup Python
