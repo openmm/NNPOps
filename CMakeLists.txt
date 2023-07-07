@@ -63,6 +63,7 @@ endforeach()
 set(PYTHON_TEST_DIRS
   ${CMAKE_SOURCE_DIR}/src/pytorch/
   ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors
+  ${CMAKE_SOURCE_DIR}/src/pytorch/pme
 )
 
 # Move test scripts to a test folder in the build directory, create test folder if necessary
