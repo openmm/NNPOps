@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest] #, windows-2019, macos-11]
-        python: ['39']
+        python: ['310']
         torch: ['1.12']
         cuda: ['11']
     steps:
