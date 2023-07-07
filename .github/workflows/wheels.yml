@@ -10,9 +10,9 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest] #, windows-2019, macos-11]
-        python: ['3.7', '3.8', '3.9', '3.10', '3.11']
-        torch: ['1.11', '1.12', '2.0.0']
-        cuda: ['10', '11', '12']
+        python: ['3.9']
+        torch: ['1.12']
+        cuda: ['11']
     steps:
       - uses: actions/checkout@v3
       - name: Setup Python
@@ -22,7 +22,7 @@ jobs:
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.13.1
         env:
-          CIBW_BUILD: cp${{ matrix.python }}-linux
+          CIBW_BUILD: cp${{ matrix.python }}-*
           CIBW_ENVIRONMENT: TORCH_VERSION=${{ matrix.torch }} CUDA_VERSION=${{ matrix.cuda }}
         with:
           package-dir: .
