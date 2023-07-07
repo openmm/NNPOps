@@ -18,7 +18,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python }}
+          python-version: '3.9'
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.13.1
         env:
