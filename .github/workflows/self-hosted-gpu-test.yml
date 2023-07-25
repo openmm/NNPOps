@@ -105,6 +105,7 @@ jobs:
       run: |
         conda activate nnpops
         cd build
+        export CUBLAS_WORKSPACE_CONFIG=:4096:8
         ctest --verbose
 
   stop-runner:
