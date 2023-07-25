@@ -85,6 +85,18 @@ def test_gradients(deviceString):
     #     return torch.sum(conv(neighbors, pos, input))
     # assert torch.autograd.gradcheck(func, positions)
 
+class DeterministicTorch:
+    def __enter__(self):
+        if torch.are_deterministic_algorithms_enabled():
+            self._already_enabled = True
+            return
+        self._already_enabled = False
+        torch.use_deterministic_algorithms(True)
+
+    def __exit__(self, type, value, traceback):
+        if not self._already_enabled:
+            torch.use_deterministic_algorithms(False)
+
 @pytest.mark.parametrize('deviceString', ['cpu', 'cuda'])
 def test_model_serialization(deviceString):
 
@@ -94,35 +106,35 @@ def test_model_serialization(deviceString):
     device = torch.device(deviceString)
     numAtoms = 7
     numFilters = 5
+    with DeterministicTorch():
+        neighbors_ref, conv_ref = getCFConv(numFilters, device)
+        positions = (10*torch.rand(numAtoms, 3, dtype=torch.float32, device=device) - 5).detach()
+        positions.requires_grad = True
+        input = torch.rand(numAtoms, numFilters, dtype=torch.float32, device=device)
 
-    neighbors_ref, conv_ref = getCFConv(numFilters, device)
-    positions = (10*torch.rand(numAtoms, 3, dtype=torch.float32, device=device) - 5).detach()
-    positions.requires_grad = True
-    input = torch.rand(numAtoms, numFilters, dtype=torch.float32, device=device)
+        neighbors_ref.build(positions)
+        output_ref = conv_ref(neighbors_ref, positions, input)
+        total_ref = torch.sum(output_ref)
+        total_ref.backward()
+        grad_ref = positions.grad.clone()
 
-    neighbors_ref.build(positions)
-    output_ref = conv_ref(neighbors_ref, positions, input)
-    total_ref = torch.sum(output_ref)
-    total_ref.backward()
-    grad_ref = positions.grad.clone()
+        with tempfile.NamedTemporaryFile() as fd1, tempfile.NamedTemporaryFile() as fd2:
 
-    with tempfile.NamedTemporaryFile() as fd1, tempfile.NamedTemporaryFile() as fd2:
+            torch.jit.script(neighbors_ref).save(fd1.name)
+            neighbors = torch.jit.load(fd1.name).to(device)
 
-        torch.jit.script(neighbors_ref).save(fd1.name)
-        neighbors = torch.jit.load(fd1.name).to(device)
+            torch.jit.script(conv_ref).save(fd2.name)
+            conv = torch.jit.load(fd2.name).to(device)
 
-        torch.jit.script(conv_ref).save(fd2.name)
-        conv = torch.jit.load(fd2.name).to(device)
+            neighbors.build(positions)
+            output = conv(neighbors, positions, input)
+            total = torch.sum(output)
+            positions.grad.zero_()
+            total.backward()
+            grad = positions.grad.clone()
 
-        neighbors.build(positions)
-        output = conv(neighbors, positions, input)
-        total = torch.sum(output)
-        positions.grad.zero_()
-        total.backward()
-        grad = positions.grad.clone()
-
-    assert torch.allclose(output, output_ref, rtol=1e-07)
-    if deviceString == 'cuda':
-        assert torch.allclose(grad, grad_ref, rtol=1e-07, atol=1e-6) # Numerical noise
-    else:
-        assert torch.allclose(grad, grad_ref, rtol=1e-07)
+            assert torch.allclose(output, output_ref, rtol=1e-07)
+            if deviceString == 'cuda':
+                assert torch.allclose(grad, grad_ref, rtol=1e-07, atol=1e-6) # Numerical noise
+            else:
+                assert torch.allclose(grad, grad_ref, rtol=1e-07)
