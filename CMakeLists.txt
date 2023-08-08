@@ -37,7 +37,11 @@ target_include_directories(${LIBRARY} PRIVATE ${Python3_INCLUDE_DIRS}
                                               src/ani src/pytorch src/schnet)
 target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${Python3_LIBRARIES})
 if(ENABLE_CUDA)
+  if(CMAKE_CUDA_COMPILER_VERSION VERSION_LESS 11)
+    set_property(TARGET ${LIBRARY} PROPERTY CUDA_STANDARD 14)
+  else()
     set_property(TARGET ${LIBRARY} PROPERTY CUDA_STANDARD 17)
+  endif()
     target_compile_definitions(${LIBRARY} PRIVATE ENABLE_CUDA)
 endif(ENABLE_CUDA)
 
