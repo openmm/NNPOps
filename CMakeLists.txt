@@ -32,12 +32,12 @@ set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
 # Build the library
 set(LIBRARY ${NAME}PyTorch)
 add_library(${LIBRARY} SHARED ${SRC_FILES})
-set_property(TARGET ${LIBRARY} PROPERTY CXX_STANDARD 14)
+set_property(TARGET ${LIBRARY} PROPERTY CXX_STANDARD 17)
 target_include_directories(${LIBRARY} PRIVATE ${Python3_INCLUDE_DIRS}
                                               src/ani src/pytorch src/schnet)
 target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${Python3_LIBRARIES})
 if(ENABLE_CUDA)
-    set_property(TARGET ${LIBRARY} PROPERTY CUDA_STANDARD 14)
+    set_property(TARGET ${LIBRARY} PROPERTY CUDA_STANDARD 17)
     target_compile_definitions(${LIBRARY} PRIVATE ENABLE_CUDA)
 endif(ENABLE_CUDA)
 
