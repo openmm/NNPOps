@@ -43,12 +43,12 @@ jobs:
             pytorch: "1.12.*"
 
           # Latest supported versions (with CUDA)
-          - name: Linux (CUDA 12.2, Python 3.10, PyTorch 2.0)
+          - name: Linux (CUDA 12.2, Python 3.11, PyTorch 2.0)
             enable_cuda: true
             cuda: "12.2.0"
             gcc: "10.3.*"
-            nvcc: "11.8"
-            python: "3.10.*"
+            nvcc: "12"
+            python: "3.11.*"
             torchani: "2.2.*"
             pytorch: "2.0.*"
 
@@ -68,7 +68,8 @@ jobs:
       uses: Jimver/cuda-toolkit@v0.2.11
       with:
         cuda: ${{ matrix.cuda }}
-        linux-local-args: '["--toolkit", "--override"]' 
+        linux-local-args: '["--toolkit", "--override"]'
+        method: 'network'
       if: ${{ matrix.enable_cuda }}
 
     - name: Install Miniconda
