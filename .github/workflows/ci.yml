@@ -47,7 +47,7 @@ jobs:
             enable_cuda: true
             cuda: "12.2.0"
             gcc: "10.3.*"
-            nvcc: "12"
+            nvcc: ""
             python: "3.11.*"
             torchani: "2.2.*"
             pytorch: "2.0.*"
@@ -69,7 +69,6 @@ jobs:
       with:
         cuda: ${{ matrix.cuda }}
         linux-local-args: '["--toolkit", "--override"]'
-        method: 'network'
       if: ${{ matrix.enable_cuda }}
 
     - name: Install Miniconda
@@ -85,7 +84,6 @@ jobs:
         sed -i -e "/cudatoolkit/c\  - cudatoolkit ${{ matrix.cuda }}" \
                -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
                -e "/torchani/c\  - torchani ${{ matrix.torchani }}" \
-               -e "/nvcc_linux-64/c\  - nvcc_linux-64 ${{ matrix.nvcc }}" \
                -e "/python/c\  - python ${{ matrix.python }}" \
                -e "/pytorch-gpu/c\  - pytorch-gpu ${{ matrix.pytorch }}" \
                environment.yml
@@ -96,7 +94,6 @@ jobs:
         sed -i -e "/cudatoolkit/c\  # - cudatoolkit" \
                -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
                -e "/torchani/c\  - torchani ${{ matrix.torchani }}" \
-               -e "/nvcc_linux-64/c\  # - nvcc_linux-64" \
                -e "/python/c\  - python ${{ matrix.python }}" \
                -e "/pytorch-gpu/c\  - pytorch-cpu ${{ matrix.pytorch }}" \
                environment.yml
