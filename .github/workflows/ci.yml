@@ -67,7 +67,7 @@ jobs:
     - name: Install CUDA Toolkit
       uses: Jimver/cuda-toolkit@v0.2.11
       with:
-        cuda: ${{ matrix.cuda }} 
+        cuda: ${{ matrix.cuda }}
         linux-local-args: '["--toolkit", "--override"]' 
       if: ${{ matrix.enable_cuda }}
 
