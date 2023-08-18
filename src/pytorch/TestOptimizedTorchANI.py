@@ -136,3 +136,21 @@ def test_model_serialization(deviceString, molFile):
 
     assert energy_error < 5e-7
     assert grad_error < 5e-3
+
+def test_device_change():
+    # Give OptimizedTorchANI a chance to initialize using the gpu,
+    # then move the positions to the cpu and call it again
+    # Skip if CUDA is not available
+    if not torch.cuda.is_available():
+        pytest.skip('CUDA is not available')
+    device = torch.device('cuda')
+    mol = mdtraj.load(os.path.join(molecules, f'1hvj_ligand.mol2'))
+    atomicNumbers = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
+    atomicPositions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
+    from NNPOps import OptimizedTorchANI
+    nnp_ref = torchani.models.ANI2x(periodic_table_index=True).to(device)
+    nnp_ref = OptimizedTorchANI(nnp_ref, atomicNumbers).to(device)
+    energy_gpu = nnp_ref((atomicNumbers, atomicPositions)).energies
+    atomicPositions = atomicPositions.to("cpu")
+    energy_cpu = nnp_ref((atomicNumbers, atomicPositions)).energies
+    assert torch.allclose(energy_gpu, energy_cpu.to(device))
