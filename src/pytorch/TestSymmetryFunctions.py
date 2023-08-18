@@ -177,3 +177,38 @@ def test_non_default_stream(molFile):
 
     assert energy_error < 5e-7
     assert grad_error < 5e-3
+
+
+def test_device_change():
+    # Give SymmetryFunctions a chance to initialize using the gpu,
+    # then move the positions to the cpu and call it again
+    # Skip if CUDA is not available
+    if not torch.cuda.is_available():
+        pytest.skip('CUDA is not available')
+    from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
+    from NNPOps.SpeciesConverter import TorchANISpeciesConverter
+    device = torch.device('cuda')
+
+    mol = mdtraj.load(os.path.join(molecules, f'1hvj_ligand.mol2'))
+    atomicNumbers = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
+    atomicPositions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
+    model = torchani.models.ANI2x(periodic_table_index=True).to(device)
+
+    species_converter = TorchANISpeciesConverter(
+        model.species_converter, atomicNumbers
+    )
+
+    aev_computer = TorchANISymmetryFunctions(
+        model.species_converter, model.aev_computer, atomicNumbers
+    )
+    species = species_converter((atomicNumbers, atomicPositions))
+    gpu_res = aev_computer(species)
+    device = torch.device('cpu')
+    species = (
+        species[0],
+        species[1].to(species[0].device),
+    )
+    cpu_res = aev_computer(species)
+
+    assert torch.allclose(gpu_res[0], cpu_res[0].to(gpu_res[0].device))
+    assert torch.allclose(gpu_res[1], cpu_res[1].to(gpu_res[1].device))
