@@ -68,6 +68,7 @@ jobs:
       uses: Jimver/cuda-toolkit@v0.2.11
       with:
         cuda: ${{ matrix.cuda }}
+        method: "network"
         linux-local-args: '["--toolkit", "--override"]' 
       if: ${{ matrix.enable_cuda }}
 
