@@ -2,13 +2,11 @@
 High-performance PyTorch operations for neural network potentials
 '''
 import os.path
-import sys
-import torch.utils.cpp_extension
+import torch
+from torch.utils.cpp_extension import CLIB_PREFIX, IS_MACOS, LIB_EXT
 
-_LIBRARY_NAME = f'NNPOpsPyTorch.{torch.utils.cpp_extension}'
-
-if not sys.platform.lower().startswith("win"):
-    _LIBRARY_NAME = f'lib{_LIBRARY_NAME}'
+_LIBRARY_EXT = LIB_EXT if not IS_MACOS else ".dylib"
+_LIBRARY_NAME = f'{CLIB_PREFIX}NNPOpsPyTorch{_LIBRARY_EXT}'
 
 torch.ops.load_library(os.path.join(os.path.dirname(__file__), _LIBRARY_NAME))
 
