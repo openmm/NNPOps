@@ -114,13 +114,14 @@ jobs:
     - name: Prepare dependencies (Mac)
       if: ${{ contains(matrix.os, 'macos') }}
       run: |
-        sed -i '' -e "s/- cudatoolkit/# - cudatoolkit/" \
-                  -e "s/- gxx_linux-64/# - gxx_linux-64/" \
-                  -e "s/- nvcc_linux-64/# - nvcc_linux-64/" \
-                  -e "s/- sysroot_linux-64/# - sysroot_linux-64/" \
+        sed -i '' -e "/- cudatoolkit/d" \
+                  -e "/- gxx_linux-64/d" \
+                  -e "/- nvcc_linux-64/d" \
+                  -e "/- sysroot_linux-64/d" \
                   -e "s/- python 3.10.\*/- python ${{ matrix.python }}.*/" \
                   -e "s/- pytorch-gpu 2.0.\*/- pytorch-cpu ${{ matrix.pytorch }}/" \
                   environment.yml
+
     - name: Show dependency file
       run: cat environment.yml
 
