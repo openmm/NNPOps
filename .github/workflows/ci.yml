@@ -121,6 +121,8 @@ jobs:
                   -e "s/- python 3.10.\*/- python ${{ matrix.python }}.*/" \
                   -e "s/- pytorch-gpu 2.0.\*/- pytorch-cpu ${{ matrix.pytorch }}/" \
                   environment.yml
+        
+        echo "- compilers" >> environment.yml
 
     - name: Show dependency file
       run: cat environment.yml
