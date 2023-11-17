@@ -56,10 +56,7 @@ jobs:
       run: cat environment.yml
 
     - name: Install dependencies
-      run: mamba env create -n nnpops -f environment.yml
-      env:
-        # Needed to install pytorch-gpu on a machine without a GPU
-        CONDA_OVERRIDE_CUDA: ${{ matrix.nvcc }}
+      run: CONDA_OVERRIDE_CUDA=${{ matrix.nvcc }} mamba env create -n nnpops -f environment.yml
 
     - name: List conda environment
       run: |
