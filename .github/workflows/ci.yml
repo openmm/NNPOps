@@ -64,11 +64,13 @@ jobs:
     - name: Check out
       uses: actions/checkout@v2
 
-    - name: Install CUDA Toolkit
+    - name: Install CUDA Toolkit      
       uses: Jimver/cuda-toolkit@v0.2.11
       with:
         cuda: ${{ matrix.cuda }}
-        linux-local-args: '["--toolkit", "--override"]' 
+        method: 'network' # Use the network method for installing subpackages
+        linux-local-args: '["--toolkit", "--override"]'
+        sub-packages: '["nvcc"]' # Example subpackages
       if: ${{ matrix.enable_cuda }}
 
     - name: Install Miniconda
