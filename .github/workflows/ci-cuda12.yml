@@ -58,20 +58,21 @@ jobs:
       env:
         # Needed to install pytorch-gpu on a machine without a GPU
         CONDA_OVERRIDE_CUDA: ${{ matrix.cuda }}
-
     - name: List conda environment
       run: |
         conda activate nnpops
         conda list
 
     - name: Configure, compile, and install
+      # CUDA_INC_PATH is required because of a bug in the torch CMake files
       run: |
         conda activate nnpops
         mkdir build && cd build
         cmake .. \
               -DENABLE_CUDA=${{ matrix.enable_cuda }} \
               -DTorch_DIR=$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')/Torch \
-              -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
+              -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
+              -DCUDA_INC_PATH=$CONDA_PREFIX/targets/x86_64-linux/include
         make install
 
     - name: Test
