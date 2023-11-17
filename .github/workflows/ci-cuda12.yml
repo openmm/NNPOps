@@ -1,4 +1,4 @@
-name: CI
+name: CI-CUDA12
 
 on:
   push:
@@ -16,50 +16,24 @@ defaults:
 jobs:
   build:
     name: ${{ matrix.name }}
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-
-          # Oldest supported versions
-          - name: Linux (CUDA 10.2, Python 3.8, PyTorch 1.11)
+          # Latest supported versions (with CUDA)
+          - name: Linux (CUDA 12, Python 3.11, PyTorch 2.1)
             enable_cuda: true
-            cuda: "10.2.89"
-            gcc: "8.5.*"
-            nvcc: "10.2"
-            python: "3.8.*"
-            torchani: "2.2.*"
-            pytorch: "1.11.*"
-
-          # Older supported versions
-          - name: Linux (CUDA 11.2, Python 3.9, PyTorch 1.12)
-            enable_cuda: true
-            cuda: "11.2.2"
-            gcc: "10.3.*"
-            nvcc: "11.2"
-            python: "3.9.*"
-            torchani: "2.2.*"
-            pytorch: "1.12.*"
-
-          # Latest supported versions (without CUDA)
-          - name: Linux (no CUDA, Python 3.11, PyTorch 2.1)
-            enable_cuda: false
+            cuda: "12.*"
             gcc: "11.*"
+            nvcc: "12.*"
             python: "3.11.*"
-            pytorch: "2.1.*"
             torchani: "2.2.*"
+            pytorch: "2.1.*"
 
     steps:
     - name: Check out
       uses: actions/checkout@v2
-
-    - name: Install CUDA Toolkit      
-      uses: Jimver/cuda-toolkit@v0.2.11
-      with:
-        cuda: ${{ matrix.cuda }}
-        linux-local-args: '["--toolkit", "--override"]'
-      if: ${{ matrix.enable_cuda }}
 
     - name: Install Miniconda
       uses: conda-incubator/setup-miniconda@v2
@@ -71,23 +45,12 @@ jobs:
     - name: Prepare dependencies (with CUDA)
       if: ${{ matrix.enable_cuda }}
       run: |
-        sed -i -e "/cudatoolkit/c\  - cudatoolkit ${{ matrix.cuda }}" \
+        sed -i -e "/cudatoolkit/c\  - cuda ${{ matrix.cuda }}" \
                -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
                -e "/torchani/c\  - torchani ${{ matrix.torchani }}" \
                -e "/nvcc_linux-64/c\  - nvcc_linux-64 ${{ matrix.nvcc }}" \
                -e "/python/c\  - python ${{ matrix.python }}" \
                -e "/pytorch-gpu/c\  - pytorch-gpu ${{ matrix.pytorch }}" \
-               environment.yml
-
-    - name: Prepare dependencies (without CUDA)
-      if: ${{ !matrix.enable_cuda }}
-      run: |
-        sed -i -e "/cudatoolkit/c\  # - cudatoolkit" \
-               -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
-               -e "/torchani/c\  - torchani ${{ matrix.torchani }}" \
-               -e "/nvcc_linux-64/c\  # - nvcc_linux-64" \
-               -e "/python/c\  - python ${{ matrix.python }}" \
-               -e "/pytorch-gpu/c\  - pytorch-cpu ${{ matrix.pytorch }}" \
                environment.yml
 
     - name: Show dependency file
@@ -119,3 +82,4 @@ jobs:
         conda activate nnpops
         cd build
         ctest --verbose --exclude-regex TestCuda
+
