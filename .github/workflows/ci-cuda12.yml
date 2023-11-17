@@ -49,7 +49,7 @@ jobs:
                -e "/python/c\  - python ${{ matrix.python }}" \
                -e "/pytorch-gpu/c\  - pytorch-gpu ${{ matrix.pytorch }}" \
                environment.yml
-        echo "cuda-nvtx-dev" >> environment.yml
+        echo "  - cuda-nvtx-dev" >> environment.yml
     - name: Show dependency file
       run: cat environment.yml
 
