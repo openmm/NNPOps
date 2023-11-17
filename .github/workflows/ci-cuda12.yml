@@ -24,7 +24,7 @@ jobs:
           # Latest supported versions (with CUDA)
           - name: Linux (CUDA 12, Python 3.11, PyTorch 2.1)
             enable_cuda: true
-            cuda: "12.*"
+            cuda: "12"
             gcc: "11.*"
             python: "3.11.*"
             torchani: "2.2.*"
