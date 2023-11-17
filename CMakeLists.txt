@@ -11,6 +11,22 @@ endif(ENABLE_CUDA)
 # Find dependencies
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 find_package(Torch REQUIRED)
+# Specify the C++ version we are building for. Latest pytorch versions require C++17
+message(STATUS "Found Torch: ${Torch_VERSION}")
+if(${Torch_VERSION} VERSION_GREATER_EQUAL "2.1.0")
+    set(CMAKE_CXX_STANDARD 17)
+    if(ENABLE_CUDA)
+      set(CMAKE_CUDA_STANDARD 17)
+    endif(ENABLE_CUDA)
+    message(STATUS "Setting C++ standard to C++17")
+else()
+    set(CMAKE_CXX_STANDARD 14)
+    if(ENABLE_CUDA)
+      set(CMAKE_CUDA_STANDARD 14)
+    endif(ENABLE_CUDA)
+    message(STATUS "Setting C++ standard to C++14")
+endif()
+
 enable_testing()
 
 # Source files of the library
@@ -32,21 +48,6 @@ set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
 # Build the library
 set(LIBRARY ${NAME}PyTorch)
 add_library(${LIBRARY} SHARED ${SRC_FILES})
-# Specify the C++ version we are building for. Latest pytorch versions require C++17
-message(STATUS "Found Torch: ${Torch_VERSION}")
-if(${Torch_VERSION} VERSION_GREATER_EQUAL "2.1.0")
-    set(CMAKE_CXX_STANDARD 17)
-    if(ENABLE_CUDA)
-      set(CMAKE_CUDA_STANDARD 17)
-    endif(ENABLE_CUDA)
-    message(STATUS "Setting C++ standard to C++17")
-else()
-    set(CMAKE_CXX_STANDARD 14)
-    if(ENABLE_CUDA)
-      set(CMAKE_CUDA_STANDARD 14)
-    endif(ENABLE_CUDA)
-    message(STATUS "Setting C++ standard to C++14")
-endif()
 
 target_include_directories(${LIBRARY} PRIVATE ${Python3_INCLUDE_DIRS}
                                               src/ani src/pytorch src/schnet)
