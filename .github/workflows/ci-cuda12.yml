@@ -72,7 +72,7 @@ jobs:
               -DENABLE_CUDA=${{ matrix.enable_cuda }} \
               -DTorch_DIR=$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')/Torch \
               -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
-              -DCMAKE_CUDA_ARCHITECTURES=OFF
+              -DTORCH_CUDA_ARCH_LIST=8.9
         make install
 
     - name: Test
