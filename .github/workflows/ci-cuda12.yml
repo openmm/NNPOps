@@ -65,10 +65,11 @@ jobs:
 
     - name: Configure, compile, and install
       # CUDA_INC_PATH is required because conda-forge installs CUDA headers to a non standard place
+      # TORCH_CUDA_ARCH_LIST is set to avoid torch setting an invalid one automatically
       run: |
         conda activate nnpops
         mkdir build && cd build
-        CUDA_INC_PATH=$CONDA_PREFIX/targets/x86_64-linux/include cmake .. \
+        CUDA_INC_PATH=$CONDA_PREFIX/$targetsDir/include cmake .. \
               -DENABLE_CUDA=${{ matrix.enable_cuda }} \
               -DTorch_DIR=$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')/Torch \
               -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
