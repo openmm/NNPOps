@@ -71,7 +71,8 @@ jobs:
         CUDA_INC_PATH=$CONDA_PREFIX/targets/x86_64-linux/include cmake .. \
               -DENABLE_CUDA=${{ matrix.enable_cuda }} \
               -DTorch_DIR=$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')/Torch \
-              -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX 
+              -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
+              -DCMAKE_CUDA_ARCHITECTURES=OFF
         make install
 
     - name: Test
