@@ -11,6 +11,22 @@ endif(ENABLE_CUDA)
 # Find dependencies
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 find_package(Torch REQUIRED)
+# Specify the C++ version we are building for. Latest pytorch versions require C++17
+message(STATUS "Found Torch: ${Torch_VERSION}")
+if(${Torch_VERSION} VERSION_GREATER_EQUAL "2.1.0")
+    set(CMAKE_CXX_STANDARD 17)
+    if(ENABLE_CUDA)
+      set(CMAKE_CUDA_STANDARD 17)
+    endif(ENABLE_CUDA)
+    message(STATUS "Setting C++ standard to C++17")
+else()
+    set(CMAKE_CXX_STANDARD 14)
+    if(ENABLE_CUDA)
+      set(CMAKE_CUDA_STANDARD 14)
+    endif(ENABLE_CUDA)
+    message(STATUS "Setting C++ standard to C++14")
+endif()
+
 enable_testing()
 
 # Source files of the library
@@ -32,12 +48,11 @@ set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
 # Build the library
 set(LIBRARY ${NAME}PyTorch)
 add_library(${LIBRARY} SHARED ${SRC_FILES})
-set_property(TARGET ${LIBRARY} PROPERTY CXX_STANDARD 14)
+
 target_include_directories(${LIBRARY} PRIVATE ${Python3_INCLUDE_DIRS}
                                               src/ani src/pytorch src/schnet)
 target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${Python3_LIBRARIES})
 if(ENABLE_CUDA)
-    set_property(TARGET ${LIBRARY} PROPERTY CUDA_STANDARD 14)
     target_compile_definitions(${LIBRARY} PRIVATE ENABLE_CUDA)
 endif(ENABLE_CUDA)
 
@@ -51,10 +66,6 @@ endif(ENABLE_CUDA)
 foreach(TEST_PATH ${TEST_PATHS})
     cmake_path(GET TEST_PATH STEM TEST_NAME)
     add_executable(${TEST_NAME} ${TEST_PATH})
-    set_property(TARGET ${TEST_NAME} PROPERTY CXX_STANDARD 14)
-    if(ENABLE_CUDA)
-        set_property(TARGET ${TEST_NAME} PROPERTY CUDA_STANDARD 14)
-    endif(ENABLE_CUDA)
     target_link_libraries(${TEST_NAME} ${LIBRARY})
     add_test(${TEST_NAME} ${TEST_NAME})
 endforeach()

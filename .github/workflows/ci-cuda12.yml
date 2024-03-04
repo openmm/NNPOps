@@ -1,0 +1,84 @@
+name: CI-CUDA12
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  schedule:
+    # Run every Sunday at midnight
+    - cron:  '0 0 * * 0'
+
+defaults:
+  run:
+    shell: bash -l {0}
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Latest supported versions (with CUDA)
+          - name: Linux (CUDA 12, Python 3.11, PyTorch 2.1)
+            cuda: "12"
+            gcc: "11.*"
+            python: "3.11.*"
+            torchani: "2.2.*"
+            pytorch: "2.1.*"
+
+    steps:
+    - name: Check out
+      uses: actions/checkout@v2
+
+    - name: Install Miniconda
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        activate-environment: ""
+        auto-activate-base: true
+        miniforge-variant: Mambaforge
+
+    - name: Prepare dependencies (with CUDA)
+      run: |
+        sed -i -e "/cudatoolkit/c\  - cuda ${{ matrix.cuda }}" \
+               -e "/gxx_linux-64/c\  - gxx ${{ matrix.gcc }}" \
+               -e "/torchani/c\  - torchani ${{ matrix.torchani }}" \
+               -e "/nvcc_linux-64/d" \
+               -e "/python/c\  - python ${{ matrix.python }}" \
+               -e "/pytorch-gpu/c\  - pytorch-gpu ${{ matrix.pytorch }}" \
+               environment.yml
+        echo "  - cuda-nvtx-dev" >> environment.yml
+    - name: Show dependency file
+      run: cat environment.yml
+
+    - name: Install dependencies
+      run: mamba env create -n nnpops -f environment.yml
+      env:
+        # Needed to install pytorch-gpu on a machine without a GPU
+        CONDA_OVERRIDE_CUDA: ${{ matrix.cuda }}
+    - name: List conda environment
+      run: |
+        conda activate nnpops
+        conda list
+
+    - name: Configure, compile, and install
+      # CUDA_INC_PATH is required because conda-forge installs CUDA headers to a non standard place
+      # TORCH_CUDA_ARCH_LIST is set to avoid torch setting an invalid one automatically
+      run: |
+        conda activate nnpops
+        mkdir build && cd build
+        CUDA_INC_PATH=$CONDA_PREFIX/$targetsDir/include cmake .. \
+              -DENABLE_CUDA=${{ matrix.enable_cuda }} \
+              -DTorch_DIR=$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')/Torch \
+              -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
+              -DTORCH_CUDA_ARCH_LIST=8.9
+        make install
+
+    - name: Test
+      run: |
+        conda activate nnpops
+        cd build
+        ctest --verbose --exclude-regex TestCuda
+

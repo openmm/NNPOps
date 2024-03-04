@@ -42,33 +42,23 @@ jobs:
             torchani: "2.2.*"
             pytorch: "1.12.*"
 
-          # Latest supported versions (with CUDA)
-          - name: Linux (CUDA 11.8, Python 3.10, PyTorch 2.0)
-            enable_cuda: true
-            cuda: "11.8.0"
-            gcc: "10.3.*"
-            nvcc: "11.8"
-            python: "3.10.*"
-            torchani: "2.2.*"
-            pytorch: "2.0.*"
-
           # Latest supported versions (without CUDA)
-          - name: Linux (no CUDA, Python 3.10, PyTorch 2.0)
+          - name: Linux (no CUDA, Python 3.11, PyTorch 2.1)
             enable_cuda: false
-            gcc: "10.3.*"
-            python: "3.10.*"
-            pytorch: "2.0.*"
+            gcc: "11.*"
+            python: "3.11.*"
+            pytorch: "2.1.*"
             torchani: "2.2.*"
 
     steps:
     - name: Check out
       uses: actions/checkout@v2
 
-    - name: Install CUDA Toolkit
-      uses: Jimver/cuda-toolkit@v0.2.10
+    - name: Install CUDA Toolkit      
+      uses: Jimver/cuda-toolkit@v0.2.11
       with:
         cuda: ${{ matrix.cuda }}
-        linux-local-args: '["--toolkit", "--override"]' 
+        linux-local-args: '["--toolkit", "--override"]'
       if: ${{ matrix.enable_cuda }}
 
     - name: Install Miniconda
