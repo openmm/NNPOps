@@ -49,7 +49,7 @@ class OptimizedTorchANI(torch.nn.Module):
                 pbc: Optional[Tensor] = None) -> SpeciesEnergies:
 
         species_coordinates = self.species_converter(species_coordinates)
-        species_aevs = self.aev_computer(species_coordinates, cell=cell, pbc=pbc)
+        species_aevs = self.aev_computer(species_coordinates, cell, pbc)
         species_energies = self.neural_networks(species_aevs)
         species_energies = self.energy_shifter(species_energies)
 
