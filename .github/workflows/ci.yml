@@ -29,7 +29,7 @@ jobs:
             gcc: "10.3.*"
             nvcc: "11.8"
             python: "3.10.*"
-            torchani: "2.2.*"
+            torchani: "2.2.4"
             pytorch: "2.0.*"
 
           # Latest supported versions (with CUDA)
@@ -39,7 +39,7 @@ jobs:
             gcc: "10.3.*"
             nvcc: "12.*"
             python: "3.13.*"
-            torchani: "2.2.*"
+            torchani: "2.2.4"
             pytorch: "2.5.*"
 
     steps:
