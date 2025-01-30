@@ -55,11 +55,35 @@ jobs:
       uses: actions/checkout@v2
 
     - name: Install CUDA Toolkit
-      uses: Jimver/cuda-toolkit@v0.2.10
+      uses: Jimver/cuda-toolkit@v0.2.21
       with:
         cuda: ${{ matrix.cuda }}
         linux-local-args: '["--toolkit", "--override"]' 
       if: ${{ matrix.enable_cuda }}
+
+    - name: Manage disk space
+      if: startsWith(matrix.os, 'ubuntu')
+      run: |
+        sudo mkdir -p /opt/empty_dir || true
+        for d in \
+                 /opt/ghc \
+                 /opt/hostedtoolcache \
+                 /usr/lib/jvm \
+                 /usr/local/.ghcup \
+                 /usr/local/lib/android \
+                 /usr/local/share/powershell \
+                 /usr/share/dotnet \
+                 /usr/share/swift \
+                 ; do
+          sudo rsync --stats -a --delete /opt/empty_dir/ $d || true
+        done
+        sudo apt-get purge -y -f firefox \
+                                 google-chrome-stable \
+                                 microsoft-edge-stable
+        sudo apt-get autoremove -y >& /dev/null
+        sudo apt-get autoclean -y >& /dev/null
+        sudo docker image prune --all --force
+        df -h
 
     - name: Install Miniconda
       uses: conda-incubator/setup-miniconda@v3
