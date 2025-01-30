@@ -25,7 +25,7 @@ jobs:
           # Oldest supported versions
           - name: Linux (CUDA 11.8, Python 3.10, PyTorch 2.0)
             enable_cuda: true
-            cuda-version: "11-8"
+            cuda-version: "11.8"
             cuda: "11.8.0"
             gcc: "10.3.*"
             nvcc: "11.8"
@@ -36,7 +36,7 @@ jobs:
           # Latest supported versions (with CUDA)
           - name: Linux (CUDA 12, Python 3.13, PyTorch 2.5)
             enable_cuda: true
-            cuda-version: "12-6"
+            cuda-version: "12.6"
             cuda: "12.6.0"
             gcc: "10.3.*"
             nvcc: "12.*"
@@ -92,11 +92,25 @@ jobs:
 
     - name: "Install CUDA"
       if: ${{ matrix.enable_cuda }}
+      env:
+        CUDA_VERSION: ${{ matrix.cuda-version }}
       run: |
-        dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/${{ matrix.cuda-arch }}/cuda-rhel8.repo
-        dnf -y install cuda-compiler-${{ matrix.cuda-version }}.${{ matrix.cuda-arch }} \
-                       cuda-libraries-${{ matrix.cuda-version }}.${{ matrix.cuda-arch }} \
-                       cuda-libraries-devel-${{ matrix.cuda-version }}.${{ matrix.cuda-arch }}
+        sudo apt-key del 7fa2af80
+        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+        sudo dpkg -i cuda-keyring_1.1-1_all.deb
+        sudo apt-get update
+        CUDA_APT=${CUDA_VERSION/./-}
+        sudo apt-get install -y \
+            libgl1-mesa-dev cuda-compiler-${CUDA_APT} \
+            cuda-drivers cuda-driver-dev-${CUDA_APT} \
+            cuda-cudart-${CUDA_APT} cuda-cudart-dev-${CUDA_APT} \
+            libcufft-${CUDA_APT} libcufft-dev-${CUDA_APT} \
+            cuda-nvrtc-${CUDA_APT} cuda-nvrtc-dev-${CUDA_APT} \
+            cuda-nvprof-${CUDA_APT} cuda-profiler-api-${CUDA_APT}
+        sudo apt-get clean
+        export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
+        export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH:-}
+        export PATH=${CUDA_HOME}/bin:${PATH}
 
     - name: Install Miniconda
       uses: conda-incubator/setup-miniconda@v3
