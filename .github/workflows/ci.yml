@@ -54,13 +54,6 @@ jobs:
     - name: Check out
       uses: actions/checkout@v2
 
-    - name: Install CUDA Toolkit
-      uses: Jimver/cuda-toolkit@v0.2.21
-      with:
-        cuda: ${{ matrix.cuda }}
-        linux-local-args: '["--toolkit", "--override"]' 
-      if: ${{ matrix.enable_cuda }}
-
     - name: Manage disk space
       if: startsWith(matrix.os, 'ubuntu')
       run: |
@@ -84,6 +77,13 @@ jobs:
         sudo apt-get autoclean -y >& /dev/null
         sudo docker image prune --all --force
         df -h
+
+    - name: Install CUDA Toolkit
+      uses: Jimver/cuda-toolkit@v0.2.21
+      with:
+        cuda: ${{ matrix.cuda }}
+        linux-local-args: '["--toolkit", "--override"]'
+      if: ${{ matrix.enable_cuda }}
 
     - name: Install Miniconda
       uses: conda-incubator/setup-miniconda@v3
