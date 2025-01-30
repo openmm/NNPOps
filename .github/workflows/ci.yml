@@ -25,7 +25,6 @@ jobs:
           # Oldest supported versions
           - name: Linux (CUDA 11.8, Python 3.10, PyTorch 2.0)
             enable_cuda: true
-            cuda-version: "11.8"
             cuda: "11.8.0"
             gcc: "10.3.*"
             nvcc: "11.8"
@@ -36,18 +35,9 @@ jobs:
           # Latest supported versions (with CUDA)
           - name: Linux (CUDA 12, Python 3.13, PyTorch 2.5)
             enable_cuda: true
-            cuda-version: "12.6"
             cuda: "12.6.0"
             gcc: "10.3.*"
             nvcc: "12.*"
-            python: "3.13.*"
-            torchani: "2.2.*"
-            pytorch: "2.5.*"
-
-          # Latest supported versions (without CUDA)
-          - name: Linux (no CUDA, Python 3.13, PyTorch 2.5)
-            enable_cuda: false
-            gcc: "10.3.*"
             python: "3.13.*"
             torchani: "2.2.*"
             pytorch: "2.5.*"
@@ -59,30 +49,6 @@ jobs:
     - name: Free Disk Space (Ubuntu)
       uses: jlumbroso/free-disk-space@main
 
-#    - name: Manage disk space
-#      if: startsWith(matrix.os, 'ubuntu')
-#      run: |
-#        sudo mkdir -p /opt/empty_dir || true
-#        for d in \
-#                 /opt/ghc \
-#                 /opt/hostedtoolcache \
-#                 /usr/lib/jvm \
-#                 /usr/local/.ghcup \
-#                 /usr/local/lib/android \
-#                 /usr/local/share/powershell \
-#                 /usr/share/dotnet \
-#                 /usr/share/swift \
-#                 ; do
-#          sudo rsync --stats -a --delete /opt/empty_dir/ $d || true
-#        done
-#        sudo apt-get purge -y -f firefox \
-#                                 google-chrome-stable \
-#                                 microsoft-edge-stable
-#        sudo apt-get autoremove -y >& /dev/null
-#        sudo apt-get autoclean -y >& /dev/null
-#        sudo docker image prune --all --force
-#        df -h
-
     - name: Install CUDA Toolkit
       uses: Jimver/cuda-toolkit@v0.2.21
       with:
@@ -90,28 +56,6 @@ jobs:
         linux-local-args: '["--toolkit", "--override"]'
         log-file-suffix: "${{ matrix.cuda }}.txt"
       if: ${{ matrix.enable_cuda }}
-
-#    - name: "Install CUDA"
-#      if: ${{ matrix.enable_cuda }}
-#      env:
-#        CUDA_VERSION: ${{ matrix.cuda-version }}
-#      run: |
-#        sudo apt-key del 7fa2af80
-#        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
-#        sudo dpkg -i cuda-keyring_1.1-1_all.deb
-#        sudo apt-get update
-#        CUDA_APT=${CUDA_VERSION/./-}
-#        sudo apt-get install -y \
-#            libgl1-mesa-dev cuda-compiler-${CUDA_APT} \
-#            cuda-drivers cuda-driver-dev-${CUDA_APT} \
-#            cuda-cudart-${CUDA_APT} cuda-cudart-dev-${CUDA_APT} \
-#            libcufft-${CUDA_APT} libcufft-dev-${CUDA_APT} \
-#            cuda-nvrtc-${CUDA_APT} cuda-nvrtc-dev-${CUDA_APT} \
-#            cuda-nvprof-${CUDA_APT} cuda-profiler-api-${CUDA_APT}
-#        sudo apt-get clean
-#        export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
-#        export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH:-}
-#        export PATH=${CUDA_HOME}/bin:${PATH}
 
     - name: Install Miniconda
       uses: conda-incubator/setup-miniconda@v3
@@ -121,22 +65,12 @@ jobs:
         miniforge-variant: Miniforge3
         use-mamba: true
 
-    - name: Prepare dependencies (with CUDA)
-      if: ${{ matrix.enable_cuda }}
+    - name: Prepare dependencies
       run: |
         sed -i -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
                -e "/torchani/c\  - torchani ${{ matrix.torchani }}" \
                -e "/python/c\  - python ${{ matrix.python }}" \
                -e "/pytorch-gpu/c\  - pytorch-gpu ${{ matrix.pytorch }}" \
-               environment.yml
-
-    - name: Prepare dependencies (without CUDA)
-      if: ${{ !matrix.enable_cuda }}
-      run: |
-        sed -i -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
-               -e "/torchani/c\  - torchani ${{ matrix.torchani }}" \
-               -e "/python/c\  - python ${{ matrix.python }}" \
-               -e "/pytorch-gpu/c\  - pytorch-cpu ${{ matrix.pytorch }}" \
                environment.yml
 
     - name: Show dependency file
