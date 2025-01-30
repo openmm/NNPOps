@@ -25,6 +25,7 @@ jobs:
           # Oldest supported versions
           - name: Linux (CUDA 11.8, Python 3.10, PyTorch 2.0)
             enable_cuda: true
+            cuda-version: "11-8"
             cuda: "11.8.0"
             gcc: "10.3.*"
             nvcc: "11.8"
@@ -35,6 +36,7 @@ jobs:
           # Latest supported versions (with CUDA)
           - name: Linux (CUDA 12, Python 3.13, PyTorch 2.5)
             enable_cuda: true
+            cuda-version: "12-6"
             cuda: "12.6.0"
             gcc: "10.3.*"
             nvcc: "12.*"
@@ -57,36 +59,44 @@ jobs:
     - name: Free Disk Space (Ubuntu)
       uses: jlumbroso/free-disk-space@main
 
-    - name: Manage disk space
-      if: startsWith(matrix.os, 'ubuntu')
-      run: |
-        sudo mkdir -p /opt/empty_dir || true
-        for d in \
-                 /opt/ghc \
-                 /opt/hostedtoolcache \
-                 /usr/lib/jvm \
-                 /usr/local/.ghcup \
-                 /usr/local/lib/android \
-                 /usr/local/share/powershell \
-                 /usr/share/dotnet \
-                 /usr/share/swift \
-                 ; do
-          sudo rsync --stats -a --delete /opt/empty_dir/ $d || true
-        done
-        sudo apt-get purge -y -f firefox \
-                                 google-chrome-stable \
-                                 microsoft-edge-stable
-        sudo apt-get autoremove -y >& /dev/null
-        sudo apt-get autoclean -y >& /dev/null
-        sudo docker image prune --all --force
-        df -h
+#    - name: Manage disk space
+#      if: startsWith(matrix.os, 'ubuntu')
+#      run: |
+#        sudo mkdir -p /opt/empty_dir || true
+#        for d in \
+#                 /opt/ghc \
+#                 /opt/hostedtoolcache \
+#                 /usr/lib/jvm \
+#                 /usr/local/.ghcup \
+#                 /usr/local/lib/android \
+#                 /usr/local/share/powershell \
+#                 /usr/share/dotnet \
+#                 /usr/share/swift \
+#                 ; do
+#          sudo rsync --stats -a --delete /opt/empty_dir/ $d || true
+#        done
+#        sudo apt-get purge -y -f firefox \
+#                                 google-chrome-stable \
+#                                 microsoft-edge-stable
+#        sudo apt-get autoremove -y >& /dev/null
+#        sudo apt-get autoclean -y >& /dev/null
+#        sudo docker image prune --all --force
+#        df -h
 
-    - name: Install CUDA Toolkit
-      uses: Jimver/cuda-toolkit@v0.2.21
-      with:
-        cuda: ${{ matrix.cuda }}
-        linux-local-args: '["--toolkit", "--override"]'
+#    - name: Install CUDA Toolkit
+#      uses: Jimver/cuda-toolkit@v0.2.21
+#      with:
+#        cuda: ${{ matrix.cuda }}
+#        linux-local-args: '["--toolkit", "--override"]'
+#      if: ${{ matrix.enable_cuda }}
+
+    - name: "Install CUDA"
       if: ${{ matrix.enable_cuda }}
+      run: |
+        dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/${{ matrix.cuda-arch }}/cuda-rhel8.repo
+        dnf -y install cuda-compiler-${{ matrix.cuda-version }}.${{ matrix.cuda-arch }} \
+                       cuda-libraries-${{ matrix.cuda-version }}.${{ matrix.cuda-arch }} \
+                       cuda-libraries-devel-${{ matrix.cuda-version }}.${{ matrix.cuda-arch }}
 
     - name: Install Miniconda
       uses: conda-incubator/setup-miniconda@v3
