@@ -37,7 +37,7 @@ jobs:
           - name: Linux (CUDA 12, Python 3.13, PyTorch 2.5)
             enable_cuda: true
             cuda-version: "12.6"
-            cuda: "12.3.0"
+            cuda: "12.6.0"
             gcc: "10.3.*"
             nvcc: "12.*"
             python: "3.13.*"
@@ -88,6 +88,7 @@ jobs:
       with:
         cuda: ${{ matrix.cuda }}
         linux-local-args: '["--toolkit", "--override"]'
+        log-file-suffix: "${{ matrix.cuda }}.txt"
       if: ${{ matrix.enable_cuda }}
 
 #    - name: "Install CUDA"
