@@ -35,7 +35,7 @@ jobs:
           # Latest supported versions (with CUDA)
           - name: Linux (CUDA 12, Python 3.13, PyTorch 2.5)
             enable_cuda: true
-            cuda: "12.8.0"
+            cuda: "12.6.0"
             gcc: "10.3.*"
             nvcc: "12.*"
             python: "3.13.*"
