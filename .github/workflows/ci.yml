@@ -54,6 +54,9 @@ jobs:
     - name: Check out
       uses: actions/checkout@v2
 
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+
     - name: Manage disk space
       if: startsWith(matrix.os, 'ubuntu')
       run: |
