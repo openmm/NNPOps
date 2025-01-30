@@ -23,26 +23,6 @@ jobs:
         include:
 
           # Oldest supported versions
-          - name: Linux (CUDA 10.2, Python 3.8, PyTorch 1.11)
-            enable_cuda: true
-            cuda: "10.2.89"
-            gcc: "8.5.*"
-            nvcc: "10.2"
-            python: "3.8.*"
-            torchani: "2.2.*"
-            pytorch: "1.11.*"
-
-          # Older supported versions
-          - name: Linux (CUDA 11.2, Python 3.9, PyTorch 1.12)
-            enable_cuda: true
-            cuda: "11.2.2"
-            gcc: "10.3.*"
-            nvcc: "11.2"
-            python: "3.9.*"
-            torchani: "2.2.*"
-            pytorch: "1.12.*"
-
-          # Latest supported versions (with CUDA)
           - name: Linux (CUDA 11.8, Python 3.10, PyTorch 2.0)
             enable_cuda: true
             cuda: "11.8.0"
@@ -52,52 +32,45 @@ jobs:
             torchani: "2.2.*"
             pytorch: "2.0.*"
 
-          # Latest supported versions (without CUDA)
-          - name: Linux (no CUDA, Python 3.10, PyTorch 2.0)
-            enable_cuda: false
+          # Latest supported versions (with CUDA)
+          - name: Linux (CUDA 12, Python 3.13, PyTorch 2.5)
+            enable_cuda: true
+            cuda: "12.6.0"
             gcc: "10.3.*"
-            python: "3.10.*"
-            pytorch: "2.0.*"
+            nvcc: "12.*"
+            python: "3.13.*"
             torchani: "2.2.*"
+            pytorch: "2.5.*"
 
     steps:
     - name: Check out
       uses: actions/checkout@v2
 
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+
     - name: Install CUDA Toolkit
-      uses: Jimver/cuda-toolkit@v0.2.10
+      uses: Jimver/cuda-toolkit@v0.2.21
       with:
         cuda: ${{ matrix.cuda }}
-        linux-local-args: '["--toolkit", "--override"]' 
+        linux-local-args: '["--toolkit", "--override"]'
+        log-file-suffix: "${{ matrix.cuda }}.txt"
       if: ${{ matrix.enable_cuda }}
 
     - name: Install Miniconda
-      uses: conda-incubator/setup-miniconda@v2
+      uses: conda-incubator/setup-miniconda@v3
       with:
         activate-environment: ""
         auto-activate-base: true
-        miniforge-variant: Mambaforge
+        miniforge-variant: Miniforge3
+        use-mamba: true
 
-    - name: Prepare dependencies (with CUDA)
-      if: ${{ matrix.enable_cuda }}
+    - name: Prepare dependencies
       run: |
-        sed -i -e "/cudatoolkit/c\  - cudatoolkit ${{ matrix.cuda }}" \
-               -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
+        sed -i -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
                -e "/torchani/c\  - torchani ${{ matrix.torchani }}" \
-               -e "/nvcc_linux-64/c\  - nvcc_linux-64 ${{ matrix.nvcc }}" \
                -e "/python/c\  - python ${{ matrix.python }}" \
                -e "/pytorch-gpu/c\  - pytorch-gpu ${{ matrix.pytorch }}" \
-               environment.yml
-
-    - name: Prepare dependencies (without CUDA)
-      if: ${{ !matrix.enable_cuda }}
-      run: |
-        sed -i -e "/cudatoolkit/c\  # - cudatoolkit" \
-               -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ matrix.gcc }}" \
-               -e "/torchani/c\  - torchani ${{ matrix.torchani }}" \
-               -e "/nvcc_linux-64/c\  # - nvcc_linux-64" \
-               -e "/python/c\  - python ${{ matrix.python }}" \
-               -e "/pytorch-gpu/c\  - pytorch-cpu ${{ matrix.pytorch }}" \
                environment.yml
 
     - name: Show dependency file
