@@ -73,6 +73,7 @@ jobs:
                -e "/torchani/c\  - torchani ${{ matrix.torchani }}" \
                -e "/python/c\  - python ${{ matrix.python }}" \
                -e "/pytorch-gpu/c\  - pytorch-gpu=${{ matrix.pytorch }}=cuda${{ matrix.cuda_version }}*" \
+               -e "/cuda/c\  - cuda ${{ matrix.cuda }}" \
                environment.yml
 
     - name: Show dependency file
