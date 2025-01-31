@@ -5,9 +5,9 @@ dependencies:
   - gxx_linux-64 10.3.*
   - make
   - mdtraj
-  - torchani 2.2.*
+  - torchani
   - pytest
   - python 3.10.*
   - pytorch-gpu 2.0.*
   - sysroot_linux-64 2.17
-
+  - cuda
