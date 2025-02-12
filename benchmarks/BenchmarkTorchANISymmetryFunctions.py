@@ -7,14 +7,14 @@ from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
 
 device = torch.device('cuda')
 
-mol = mdtraj.load('molecules/2iuz_ligand.mol2')
+mol = mdtraj.load('./tests/molecules/2iuz_ligand.mol2')
 species = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
 positions = torch.tensor(mol.xyz * 10, dtype=torch.float32, requires_grad=True, device=device)
 
 nnp = torchani.models.ANI2x(periodic_table_index=True, model_index=None).to(device)
 speciesPositions = nnp.species_converter((species, positions))
 symmFuncRef = nnp.aev_computer
-symmFunc = TorchANISymmetryFunctions(nnp.aev_computer).to(device)
+symmFunc = TorchANISymmetryFunctions(nnp.species_converter, nnp.aev_computer, species).to(device)
 
 aev_ref = symmFuncRef(speciesPositions).aevs
 sum_aev_ref = torch.sum(aev_ref)
