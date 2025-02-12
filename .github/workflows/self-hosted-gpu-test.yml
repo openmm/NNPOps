@@ -44,69 +44,48 @@ jobs:
     name: Do the job on the runner
     needs: start-runner # required to start the main job when the runner is ready
     runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
-    timeout-minutes: 25 
+    timeout-minutes: 25
     steps:
+      - name: Check out
+        uses: actions/checkout@v3
 
-    
-    - name: Check out
-      uses: actions/checkout@v3
+      - name: Install Miniconda
+        uses: conda-incubator/setup-miniconda@v2
+        env:
+          HOME: /home/ec2-user
+        with:
+          python-version: ${{ matrix.python }}
+          channels: conda-forge
+          mamba-version: "*"
+          conda-remove-defaults: "true"
 
-    - name: Install Miniconda
-      uses: conda-incubator/setup-miniconda@v2
-      env:
-        HOME: /home/ec2-user
+      - name: Install build dependencies
+        run: |
+          mamba install -c conda-forge gxx_linux-64="10.3.*" cudatoolkit="11.7.*" nvcc_linux-64="11.7.*" python-build
 
-      with:
-        activate-environment: ""
-        auto-activate-base: true
-        miniforge-variant: Mambaforge
-          
-    - name: Prepare dependencies (with CUDA)
-      env:
-        cudatoolkit: "11.7.*"
-        gxx_linux-64: "10.3.*"
-        torchani: "2.2.*"
-        nvcc_linux-64: "11.7.*"
-        python: "3.10.*"
-        pytorch-gpu: "2.0.*"
-      run: |
-        sed -i -e "/cudatoolkit/c\  - cudatoolkit ${{ env.cudatoolkit }}" \
-               -e "/gxx_linux-64/c\  - gxx_linux-64 ${{ env.gxx_linux-64 }}" \
-               -e "/torchani/c\  - torchani ${{ env.torchani }}" \
-               -e "/nvcc_linux-64/c\  - nvcc_linux-64 ${{ env.nvcc_linux-64 }}" \
-               -e "/python/c\  - python ${{ env.python }}" \
-               -e "/pytorch-gpu/c\  - pytorch-gpu ${{ env.pytorch-gpu }}" \
-               environment.yml
+      - name: Build package
+        run: |
+          python -m build
+        env:
+          ENABLE_CUDA: "1"
 
-    - name: Show dependency file
-      run: cat environment.yml
+      - name: Install package
+        run: |
+          mamba create -n nnpops -y
+          mamba activate nnpops
+          mamba install python=${{ matrix.python }} pytest mdtraj torchani=${{ matrix.torchani }}
+          pip install dist/*.whl
 
-    - name: Install dependencies
-      run: |
-        mamba env create -n nnpops -f environment.yml
-        conda init
+      - name: List conda environment
+        run: |
+          mamba activate nnpops
+          conda list
 
-    - name: List conda environment
-      run: |
-        conda activate nnpops
-        conda list
-
-    - name: Configure, compile, and install
-      run: |
-        conda activate nnpops
-        mkdir build && cd build
-        cmake .. \
-              -DENABLE_CUDA=true \
-              -DTorch_DIR=$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')/Torch \
-              -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
-        make install
-
-    - name: Test
-      run: |
-        conda activate nnpops
-        cd build
-        export CUBLAS_WORKSPACE_CONFIG=:4096:8
-        ctest --verbose
+      - name: Test
+        run: |
+          mamba activate nnpops
+          export CUBLAS_WORKSPACE_CONFIG=:4096:8
+          pytest ./tests/ -v -s --durations=10
 
   stop-runner:
     name: Stop self-hosted EC2 runner
