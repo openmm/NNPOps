@@ -31,7 +31,7 @@ from NNPOps.BatchedNN import TorchANIBatchedNN
 
 device = torch.device('cuda')
 
-mol = mdtraj.load('molecules/2iuz_ligand.mol2')
+mol = mdtraj.load('./tests/molecules/2iuz_ligand.mol2')
 species = torch.tensor([[atom.element.atomic_number for atom in mol.top.atoms]], device=device)
 positions = torch.tensor(mol.xyz, dtype=torch.float32, requires_grad=True, device=device)
 
