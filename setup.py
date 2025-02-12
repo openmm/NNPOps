@@ -9,10 +9,10 @@ import os
 from os.path import join as opj
 
 
-# If WITH_CUDA is defined
-if os.environ.get("WITH_CUDA", "0") == "1":
+# If ENABLE_CUDA is defined
+if os.environ.get("ENABLE_CUDA", "0") == "1":
     use_cuda = True
-elif os.environ.get("WITH_CUDA", "0") == "0":
+elif os.environ.get("ENABLE_CUDA", "0") == "0":
     use_cuda = False
 else:
     use_cuda = torch.cuda._is_compiled()
@@ -58,6 +58,7 @@ extensions = ExtensionType(
     name="NNPOps.libNNPOpsPyTorch",
     sources=sources,
     include_dirs=[
+        "NNPOps",
         opj("NNPOps", "ani"),
         opj("NNPOps", "common"),
         opj("NNPOps", "neighbors"),
