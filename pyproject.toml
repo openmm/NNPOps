@@ -1,0 +1,28 @@
+[project]
+name = "NNPOps"
+description = "Highly optimized, open source implementations of bottleneck operations in NNPs"
+authors = [{ name = "OpenMM", email = "info@openmm.org" }]
+readme = "README.md"
+requires-python = ">=3.8"
+dynamic = ["version"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: POSIX :: Linux",
+]
+dependencies = []
+
+
+[project.urls]
+"Homepage" = "https://github.com/openmm/nnpops"
+"Bug Tracker" = "https://github.com/openmm/nnpops/issues"
+
+[tool.setuptools_scm]
+
+[tool.setuptools.packages.find]
+where = [""]
+include = ["NNPops*"]
+namespaces = false
+
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm>=8", "torch==2.5.1.*"]
+build-backend = "setuptools.build_meta"
