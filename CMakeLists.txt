@@ -16,16 +16,16 @@ enable_testing()
 # Source files of the library
 set(SRC_FILES src/ani/CpuANISymmetryFunctions.cpp
               src/ani/CudaANISymmetryFunctions.cu
-              src/NNPOps/BatchedNN.cpp
-              src/NNPOps/CFConv.cpp
-              src/NNPOps/CFConvNeighbors.cpp
-              src/NNPOps/SymmetryFunctions.cpp
-              src/NNPOps/neighbors/getNeighborPairsCPU.cpp
-              src/NNPOps/neighbors/getNeighborPairsCUDA.cu
-              src/NNPOps/neighbors/neighbors.cpp
-              src/NNPOps/pme/pmeCPU.cpp
-              src/NNPOps/pme/pmeCUDA.cu
-              src/NNPOps/pme/pme.cpp
+              src/pytorch/BatchedNN.cpp
+              src/pytorch/CFConv.cpp
+              src/pytorch/CFConvNeighbors.cpp
+              src/pytorch/SymmetryFunctions.cpp
+              src/pytorch/neighbors/getNeighborPairsCPU.cpp
+              src/pytorch/neighbors/getNeighborPairsCUDA.cu
+              src/pytorch/neighbors/neighbors.cpp
+              src/pytorch/pme/pmeCPU.cpp
+              src/pytorch/pme/pmeCUDA.cu
+              src/pytorch/pme/pme.cpp
               src/schnet/CpuCFConv.cpp
               src/schnet/CudaCFConv.cu)
 
@@ -34,7 +34,7 @@ set(LIBRARY ${NAME}PyTorch)
 add_library(${LIBRARY} SHARED ${SRC_FILES})
 set_property(TARGET ${LIBRARY} PROPERTY CXX_STANDARD 17)
 target_include_directories(${LIBRARY} PRIVATE ${Python3_INCLUDE_DIRS}
-                                              src/ani src/NNPOps src/schnet)
+                                              src/ani src/pytorch src/schnet)
 target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${Python3_LIBRARIES})
 if(ENABLE_CUDA)
     set_property(TARGET ${LIBRARY} PROPERTY CUDA_STANDARD 17)
@@ -61,9 +61,9 @@ endforeach()
 
 # List of directories containing  test scripts
 set(PYTHON_TEST_DIRS
-  ${CMAKE_SOURCE_DIR}/src/NNPOps/
-  ${CMAKE_SOURCE_DIR}/src/NNPOps/neighbors
-  ${CMAKE_SOURCE_DIR}/src/NNPOps/pme
+  ${CMAKE_SOURCE_DIR}/src/pytorch/
+  ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors
+  ${CMAKE_SOURCE_DIR}/src/pytorch/pme
 )
 
 # Move test scripts to a test folder in the build directory, create test folder if necessary
@@ -75,7 +75,7 @@ add_custom_target(copy_test ALL
 add_custom_command(
   TARGET copy_test POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
-  ${CMAKE_SOURCE_DIR}/src/NNPOps/molecules
+  ${CMAKE_SOURCE_DIR}/src/pytorch/molecules
   ${CMAKE_BINARY_DIR}/test/molecules
 )
 
@@ -84,7 +84,7 @@ foreach(TEST_DIR ${PYTHON_TEST_DIRS})
   file(GLOB TEST_SCRIPTS ${TEST_DIR}/Test*.py)
   foreach(TEST_SCRIPT ${TEST_SCRIPTS})
     get_filename_component(TEST_NAME ${TEST_SCRIPT} NAME_WE)
-    file(RELATIVE_PATH RELATIVE_TEST_PATH ${CMAKE_SOURCE_DIR}/src/NNPOps ${TEST_SCRIPT})
+    file(RELATIVE_PATH RELATIVE_TEST_PATH ${CMAKE_SOURCE_DIR}/src/pytorch ${TEST_SCRIPT})
     add_custom_command(
       TARGET copy_test POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy ${TEST_SCRIPT} ${CMAKE_BINARY_DIR}/test/${RELATIVE_TEST_PATH}
@@ -95,25 +95,25 @@ endforeach()
 
 add_custom_command(
   TARGET copy_test POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/NNPOps/neighbors/getNeighborPairs.py ${CMAKE_BINARY_DIR}/test/getNeighborPairs.py
+  COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/pytorch/neighbors/getNeighborPairs.py ${CMAKE_BINARY_DIR}/test/getNeighborPairs.py
 )
 
 add_test(TestGetNeighborPairs  pytest -v --doctest-modules ${CMAKE_BINARY_DIR}/test/getNeighborPairs.py)
 
 # Installation
 install(TARGETS ${LIBRARY} DESTINATION ${Python3_SITEARCH}/${NAME})
-install(FILES src/NNPOps/__init__.py
-              src/NNPOps/BatchedNN.py
-              src/NNPOps/CFConv.py
-              src/NNPOps/CFConvNeighbors.py
-              src/NNPOps/EnergyShifter.py
-              src/NNPOps/OptimizedTorchANI.py
-              src/NNPOps/SpeciesConverter.py
-              src/NNPOps/SymmetryFunctions.py
+install(FILES src/pytorch/__init__.py
+              src/pytorch/BatchedNN.py
+              src/pytorch/CFConv.py
+              src/pytorch/CFConvNeighbors.py
+              src/pytorch/EnergyShifter.py
+              src/pytorch/OptimizedTorchANI.py
+              src/pytorch/SpeciesConverter.py
+              src/pytorch/SymmetryFunctions.py
         DESTINATION ${Python3_SITEARCH}/${NAME})
-install(FILES src/NNPOps/neighbors/__init__.py
-              src/NNPOps/neighbors/getNeighborPairs.py
+install(FILES src/pytorch/neighbors/__init__.py
+              src/pytorch/neighbors/getNeighborPairs.py
         DESTINATION ${Python3_SITEARCH}/${NAME}/neighbors)
-install(FILES src/NNPOps/pme/__init__.py
-              src/NNPOps/pme/pme.py
+install(FILES src/pytorch/pme/__init__.py
+              src/pytorch/pme/pme.py
         DESTINATION ${Python3_SITEARCH}/${NAME}/pme)
