@@ -28,9 +28,3 @@ NNPOps = "pytorch"
 [build-system]
 requires = ["setuptools>=64", "setuptools-scm>=8", "torch==2.5.1.*"]
 build-backend = "setuptools.build_meta"
-
-[tool.pytest.ini_options]
-python_files = "*.py"
-python_classes = "_Test"
-python_functions = "test*"
-norecursedirs = "test-data"
