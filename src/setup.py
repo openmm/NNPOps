@@ -34,23 +34,23 @@ def set_torch_cuda_arch_list():
 set_torch_cuda_arch_list()
 
 sources = [
-    opj("src", "ani", "CpuANISymmetryFunctions.cpp"),
-    opj("src", "NNPOps", "BatchedNN.cpp"),
-    opj("src", "NNPOps", "CFConv.cpp"),
-    opj("src", "NNPOps", "CFConvNeighbors.cpp"),
-    opj("src", "NNPOps", "SymmetryFunctions.cpp"),
-    opj("src", "NNPOps", "neighbors", "getNeighborPairsCPU.cpp"),
-    opj("src", "NNPOps", "neighbors", "neighbors.cpp"),
-    opj("src", "NNPOps", "pme", "pmeCPU.cpp"),
-    opj("src", "NNPOps", "pme", "pme.cpp"),
-    opj("src", "schnet", "CpuCFConv.cpp"),
+    opj("ani", "CpuANISymmetryFunctions.cpp"),
+    opj("pytorch", "BatchedNN.cpp"),
+    opj("pytorch", "CFConv.cpp"),
+    opj("pytorch", "CFConvNeighbors.cpp"),
+    opj("pytorch", "SymmetryFunctions.cpp"),
+    opj("pytorch", "neighbors", "getNeighborPairsCPU.cpp"),
+    opj("pytorch", "neighbors", "neighbors.cpp"),
+    opj("pytorch", "pme", "pmeCPU.cpp"),
+    opj("pytorch", "pme", "pme.cpp"),
+    opj("schnet", "CpuCFConv.cpp"),
 ]
 if use_cuda:
     sources += [
-        opj("src", "ani", "CudaANISymmetryFunctions.cu"),
-        opj("src", "NNPOps", "neighbors", "getNeighborPairsCUDA.cu"),
-        opj("src", "NNPOps", "pme", "pmeCUDA.cu"),
-        opj("src", "schnet", "CudaCFConv.cu"),
+        opj("ani", "CudaANISymmetryFunctions.cu"),
+        opj("pytorch", "neighbors", "getNeighborPairsCUDA.cu"),
+        opj("pytorch", "pme", "pmeCUDA.cu"),
+        opj("schnet", "CudaCFConv.cu"),
     ]
 
 
@@ -59,12 +59,12 @@ extensions = ExtensionType(
     name="NNPOps.libNNPOpsPyTorch",
     sources=sources,
     include_dirs=[
-        opj("src", "ani"),
-        opj("src", "NNPOps"),
-        opj("src", "NNPOps", "common"),
-        opj("src", "NNPOps", "neighbors"),
-        opj("src", "NNPOps", "pme"),
-        opj("src", "schnet"),
+        opj("ani"),
+        opj("pytorch"),
+        opj("pytorch", "common"),
+        opj("pytorch", "neighbors"),
+        opj("pytorch", "pme"),
+        opj("schnet"),
     ],
     define_macros=[("ENABLE_CUDA", 1)] if use_cuda else [],
 )
