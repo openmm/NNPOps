@@ -1,7 +1,7 @@
 [project]
 name = "NNPOps"
 description = "Highly optimized, open source implementations of bottleneck operations in NNPs"
-authors = [{ name = "OpenMM", email = "info@openmm.org" }]
+authors = [{ name = "OpenMM" }]
 readme = "README.md"
 requires-python = ">=3.8"
 dynamic = ["version"]
