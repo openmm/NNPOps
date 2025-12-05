@@ -32,9 +32,7 @@ from NNPOps.SymmetryFunctions import TorchANISymmetryFunctions
 
 class OptimizedTorchANI(torch.nn.Module):
 
-    from torchani.models import BuiltinModel # https://github.com/openmm/NNPOps/issues/44
-
-    def __init__(self, model: BuiltinModel, atomicNumbers: Tensor) -> None:
+    def __init__(self, model, atomicNumbers: Tensor) -> None:
 
         super().__init__()
 
