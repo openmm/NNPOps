@@ -36,9 +36,7 @@ class SpeciesEnergies(NamedTuple):
 
 class _BatchedNN(torch.nn.Module):
 
-    from torchani.nn import ANIModel, Ensemble, SpeciesConverter # https://github.com/openmm/NNPOps/issues/44
-
-    def __init__(self, converter: SpeciesConverter, ensemble: Union[ANIModel, Ensemble], atomicNumbers: Tensor):
+    def __init__(self, converter, ensemble, atomicNumbers: Tensor):
 
         super().__init__()
 
@@ -113,9 +111,7 @@ class _BatchedNN(torch.nn.Module):
 
 class TorchANIBatchedNN(torch.nn.ModuleList):
 
-    from torchani.nn import ANIModel, Ensemble, SpeciesConverter # https://github.com/openmm/NNPOps/issues/44
-
-    def __init__(self, converter: SpeciesConverter, ensemble: Union[ANIModel, Ensemble], atomicNumbers: Tensor):
+    def __init__(self, converter, ensemble, atomicNumbers: Tensor):
         super().__init__([_BatchedNN(converter, ensemble, atomicNumbers)])
 
     def forward(self, species_aev: Tuple[Tensor, Tensor]) -> SpeciesEnergies:

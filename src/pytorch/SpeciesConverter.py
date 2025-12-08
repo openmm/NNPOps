@@ -23,9 +23,7 @@ class SpeciesCoordinates(NamedTuple):
 
 class TorchANISpeciesConverter(torch.nn.Module):
 
-    from torchani.nn import SpeciesConverter
-
-    def __init__(self, converter: SpeciesConverter, atomicNumbers: Tensor) -> None:
+    def __init__(self, converter, atomicNumbers: Tensor) -> None:
 
         super().__init__()
 
