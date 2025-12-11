@@ -45,7 +45,7 @@ jobs:
             enable_cuda: true
             cuda: "12.9.0"
             gcc: "10.3.*"
-            nvcc: "12.*"
+            nvcc: "12.9"
             python: "3.*"
             torchani: "2.2.*"
             pytorch: "2.9.*"
