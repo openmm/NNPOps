@@ -60,10 +60,7 @@ class TorchANISymmetryFunctions(torch.nn.Module):
         >>> print(energy, forces)
     """
 
-    from torchani import AEVComputer # https://github.com/openmm/NNPOps/pull/38
-    from torchani import SpeciesConverter # https://github.com/openmm/NNPOps/pull/38
-
-    def __init__(self, converter: SpeciesConverter, symmFunc: AEVComputer, atomicNumbers: Tensor) -> None:
+    def __init__(self, converter, symmFunc, atomicNumbers: Tensor) -> None:
         """
         Arguments:
             converter: an instance of torchani.nn.SpeciesConverter (https://aiqm.github.io/torchani/api.html#torchani.SpeciesConverter)

@@ -31,10 +31,7 @@ class SpeciesEnergies(NamedTuple):
 
 class TorchANIEnergyShifter(torch.nn.Module):
 
-    from torchani.nn import SpeciesConverter # https://github.com/openmm/NNPOps/issues/44
-    from torchani.utils import EnergyShifter # https://github.com/openmm/NNPOps/issues/44
-
-    def __init__(self, converter: SpeciesConverter, shifter: EnergyShifter, atomicNumbers: Tensor) -> None:
+    def __init__(self, converter, shifter, atomicNumbers: Tensor) -> None:
 
         super().__init__()
 
